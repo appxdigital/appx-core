@@ -1,6 +1,6 @@
 {
   "name": "appx_core",
-  "version": "0.1.20",
+  "version": "0.1.10",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
