@@ -48,28 +48,30 @@ export class AuthService {
 
   async login(req: Request): Promise<{ message: string; user: any }> {
     return new Promise<{ message: string; user: any }>((resolve, reject) => {
-      req.login(req?.user, (err) => {
-        if (err) {
-          return reject(
-            new HttpException('Login failed', HttpStatus.INTERNAL_SERVER_ERROR),
-          );
-        }
-        req.session.save((err) => {
+      if (req?.user) {
+        req.login(req.user, (err) => {
           if (err) {
-            console.error('Session save error:', err);
             return reject(
-              new HttpException(
-                'Failed to save session',
-                HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+                new HttpException('Login failed', HttpStatus.INTERNAL_SERVER_ERROR),
             );
           }
-          resolve({
-            message: 'Login successful',
-            user: req.user,
+          req.session.save((err) => {
+            if (err) {
+              console.error('Session save error:', err);
+              return reject(
+                  new HttpException(
+                      'Failed to save session',
+                      HttpStatus.INTERNAL_SERVER_ERROR,
+                  ),
+              );
+            }
+            resolve({
+              message: 'Login successful',
+              user: req.user,
+            });
           });
         });
-      });
+      }
     });
   }
 
@@ -142,5 +144,18 @@ export class AuthService {
       console.error('Error closing sessions:', error);
       res.status(500).send({ message: 'Failed to close sessions.' });
     }
+  }
+
+  async getSessionsByUserId(userId: number) {
+    return this.prisma.session.findMany({
+      where: { userId, expiresAt: { gte: new Date() } },
+    });
+  }
+
+  async closeSpecificSession(sessionId: string) {
+    const deleted = await this.prisma.session.delete({
+      where: { id: sessionId },
+    }).catch(() => null);
+    return !!deleted;
   }
 }

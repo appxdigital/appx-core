@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { PERMISSIONS_CONFIG_TOKEN } from './permissions.config.provider';
-import { PermissionsConfigType } from './PermissionsConfigTypes';
+import { PermissionsConfigType } from './permissionsConfigTypes';
 
 @Injectable()
 export class PermissionsService {

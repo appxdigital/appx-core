@@ -493,17 +493,17 @@ export class PrismaService {
      * @throws ConflictException, NotFoundException, BadRequestException, or InternalServerErrorException.
      */
     handleError(error: any) {
-        if (error instanceof PrismaClientKnownRequestError) {
-            switch (error.code) {
-                case 'P2002':
-                    throw new ConflictException('Duplicate entry detected.');
-                case 'P2025':
-                    throw new NotFoundException('The requested record was not found.');
-                default:
-                    throw new BadRequestException('A Prisma database error occurred.');
-            }
+        if (!(error instanceof PrismaClientKnownRequestError)) {
+            throw error;
         }
 
-        throw new InternalServerErrorException('An unknown error occurred.');
+        switch (error.code) {
+            case 'P2002':
+                throw new ConflictException('Duplicate entry detected.');
+            case 'P2025':
+                throw new NotFoundException('The requested record was not found.');
+            default:
+                throw new BadRequestException('A Prisma database error occurred.');
+        }
     }
 }

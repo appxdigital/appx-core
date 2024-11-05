@@ -8,12 +8,7 @@ export interface Clause {
 }
 
 export interface RolePermissions {
-    findUnique?: 'ALL' | { clauses: Clause[] };
-    findMany?: 'ALL' | { clauses: Clause[] };
-    update?: 'ALL' | { clauses: Clause[] };
-    delete?: 'ALL' | { clauses: Clause[] };
-    create?: 'ALL' | { setUserIdField: string };
-    findOne?: 'ALL' | { field: string; condition: FieldConditions };
+    [action: string]: 'ALL' | { clauses: Clause[] } | { setUserIdField: string };
 }
 
 export interface ModelPermissions {

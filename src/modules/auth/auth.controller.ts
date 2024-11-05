@@ -7,7 +7,7 @@ import {
   Get,
   Res,
   HttpException,
-  HttpStatus,
+  HttpStatus, Param, ForbiddenException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -66,5 +66,33 @@ export class AuthController {
   @Post('sessions/close-my-sessions')
   async closeAllSessions(@Req() req: Request, @Res() res: Response) {
     return this.authService.closeAllUserSessions(req, res);
+  }
+
+  @Get('sessions/:userId')
+  async getAllSessions(@Param('userId') userId: string, @Req() req: Request) {
+    //TODO - Implement a more dynamic way to handle role access
+    if (req.user?.role !== 'ADMIN') {
+      throw new ForbiddenException('Access denied.');
+    }
+    const sessions = await this.authService.getSessionsByUserId(parseInt(userId, 10));
+    return { sessions };
+  }
+
+  @Post('sessions/:sessionId/close')
+  async closeSpecificSession(
+      @Param('sessionId') sessionId: string,
+      @Req() req: Request,
+      @Res() res: Response,
+  ) {
+    //TODO - Implement a more dynamic way to handle role access
+    if (req.user?.role !== 'ADMIN') {
+      throw new ForbiddenException('Access denied.');
+    }
+    const result = await this.authService.closeSpecificSession(sessionId);
+    if (result) {
+      res.status(HttpStatus.OK).send({ message: 'Session closed successfully.' });
+    } else {
+      res.status(HttpStatus.NOT_FOUND).send({ message: 'Session not found.' });
+    }
   }
 }

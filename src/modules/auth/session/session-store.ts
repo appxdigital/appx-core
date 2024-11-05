@@ -1,7 +1,8 @@
 import { Store } from 'express-session';
 import { PrismaClient } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import {PrismaService} from "../../../prisma/prisma.service";
+import { PrismaService } from '../../../prisma/prisma.service';
+import cuid from 'cuid';
 
 export class CorePrismaSessionStore extends Store {
   private prisma: PrismaClient;
@@ -12,8 +13,8 @@ export class CorePrismaSessionStore extends Store {
   }
 
   public get = async (
-    sid: string,
-    callback: (err: any, session?: any | null) => void,
+      sid: string,
+      callback: (err: any, session?: any | null) => void,
   ) => {
     try {
       const record = await this.prisma.session.findUnique({ where: { sid } });
@@ -32,9 +33,9 @@ export class CorePrismaSessionStore extends Store {
   };
 
   public set = async (
-    sid: string,
-    session: any,
-    callback?: (err?: any) => void,
+      sid: string,
+      session: any,
+      callback?: (err?: any) => void,
   ) => {
     try {
       let userId = null;
@@ -43,13 +44,14 @@ export class CorePrismaSessionStore extends Store {
       }
       const data = JSON.stringify(session);
       const expiresAt =
-        session.cookie && session.cookie.expires
-          ? new Date(session.cookie.expires)
-          : null;
+          session.cookie && session.cookie.expires
+              ? new Date(session.cookie.expires)
+              : null;
 
       await this.prisma.session.upsert({
         where: { sid },
         create: {
+          id: cuid(),
           sid,
           data,
           expiresAt,
@@ -74,8 +76,8 @@ export class CorePrismaSessionStore extends Store {
       callback?.();
     } catch (err) {
       if (
-        err instanceof PrismaClientKnownRequestError &&
-        err.code === 'P2025'
+          err instanceof PrismaClientKnownRequestError &&
+          err.code === 'P2025'
       ) {
         callback?.();
       } else {
@@ -85,9 +87,9 @@ export class CorePrismaSessionStore extends Store {
   };
 
   public touch = async (
-    sid: string,
-    session: any,
-    callback?: (err?: any) => void,
+      sid: string,
+      session: any,
+      callback?: (err?: any) => void,
   ) => {
     try {
       let expiresAt = null;

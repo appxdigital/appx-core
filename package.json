@@ -1,6 +1,6 @@
 {
   "name": "appx_core",
-  "version": "0.1.14",
+  "version": "0.1.20",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,6 +20,7 @@
     "@types/express-session": "^1.18.0",
     "bcrypt": "^5.1.1",
     "class-validator": "^0.14.1",
+    "cuid": "^3.0.0",
     "express-session": "^1.18.1",
     "nestjs-request-context": "^3.0.0",
     "passport-local": "^1.0.0",
@@ -40,5 +41,10 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.1.1",
     "@prisma/client": "^5.20.0"
-  }
+  },
+  "files": [
+    "dist",
+    "src",
+    "assets"
+  ]
 }
