@@ -1,7 +1,6 @@
 import {BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, InternalServerErrorException, NotFoundException,} from '@nestjs/common';
 import {Prisma, PrismaClient} from '@prisma/client';
 import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
-import {PrismaClientKnownRequestError} from "@prisma/client/runtime/react-native.js"
 import * as path from "path";
 import * as fs from "fs";
 
@@ -65,7 +64,7 @@ export class PrismaService {
      * including custom annotations (e.g., @Role(CLIENT)) and enums.
      */
     parseSchema() {
-        this.schemaPath = path.join(process.cwd(), 'prisma/schema/schema.prisma');
+        this.schemaPath = path.join(process.cwd(), 'prisma/schema.prisma');
         const schema = fs.readFileSync(this.schemaPath, 'utf-8');
 
         const enums = this.extractEnumsFromSchema(schema);
@@ -492,18 +491,18 @@ export class PrismaService {
      * @param error - The error thrown by Prisma.
      * @throws ConflictException, NotFoundException, BadRequestException, or InternalServerErrorException.
      */
-    handleError(error: any) {
-        if (!(error instanceof PrismaClientKnownRequestError)) {
+    handleError(error: any): never {
+        if (error && typeof error === 'object' && 'code' in error) {
+            switch (error.code) {
+                case 'P2002':
+                    throw new ConflictException('Duplicate entry detected.');
+                case 'P2025':
+                    throw new NotFoundException('The requested record was not found.');
+                default:
+                    throw new BadRequestException('A Prisma database error occurred.');
+            }
+        } else {
             throw error;
-        }
-
-        switch (error.code) {
-            case 'P2002':
-                throw new ConflictException('Duplicate entry detected.');
-            case 'P2025':
-                throw new NotFoundException('The requested record was not found.');
-            default:
-                throw new BadRequestException('A Prisma database error occurred.');
         }
     }
 }

@@ -8,7 +8,13 @@ export interface Clause {
 }
 
 export interface RolePermissions {
-    [action: string]: 'ALL' | { clauses: Clause[] } | { setUserIdField: string };
+    [action: string]: 'ALL' | ActionPermission;
+}
+
+export interface ActionPermission {
+    clauses?: Clause[];
+    setUserIdField?: string;
+    restrictedFields?: string[];
 }
 
 export interface ModelPermissions {

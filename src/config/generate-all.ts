@@ -23,9 +23,9 @@ execSync(`node ${path.join(scriptsDir, 'generate-controllers.js')}`, {
   stdio: 'inherit',
 });
 
-console.log('Generating Session Schema...');
-execSync(`node ${path.join(scriptsDir, 'generate-session-schema.js')}`, {
-  stdio: 'inherit',
-});
+// console.log('Generating Session Schema...');
+// execSync(`node ${path.join(scriptsDir, 'generate-session-schema.js')}`, {
+//   stdio: 'inherit',
+// });
 
 console.log('All generators ran successfully.');

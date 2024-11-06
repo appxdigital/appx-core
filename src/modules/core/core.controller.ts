@@ -45,22 +45,36 @@ export abstract class CoreController<T> {
         const user = RequestContext.currentContext.req.user;
         const model = (this.constructor as typeof CoreController).entityName;
         const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[user.role];
+        const actionPermission = rolePermissions?.['create'];
 
         if (
-            rolePermissions?.create &&
-            rolePermissions.create !== 'ALL' &&
-            'setUserIdField' in rolePermissions.create
+            typeof actionPermission !== 'string' &&
+            actionPermission?.setUserIdField
         ) {
-            const userIdField = rolePermissions.create.setUserIdField;
+            const userIdField = actionPermission.setUserIdField;
             data[userIdField] = user.id;
         }
         return this.service.create(data);
     }
 
+
     @Put(':id')
     @Permission('update')
     async update(@Param('id') id: string, @Body() data: any) {
-        return this.service.update({id: Number(id)}, data);
+        const user = RequestContext.currentContext.req.user;
+        const model = (this.constructor as typeof CoreController).entityName;
+        const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[user.role];
+        const actionPermission = rolePermissions?.['update'];
+        let restrictedFields: string[] = [];
+
+        if (typeof actionPermission !== 'string' && actionPermission?.restrictedFields) {
+            restrictedFields = actionPermission.restrictedFields;
+        }
+
+        for (const field of restrictedFields) {
+            delete data[field];
+        }
+        return this.service.update({ id: Number(id) }, data);
     }
 
     @Delete(':id')

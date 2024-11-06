@@ -70,7 +70,6 @@ export class CoreService<T> {
             });
         } catch (error) {
             this.prisma.handleError(error);
-            throw error;
         }
     }
 
