@@ -2,7 +2,8 @@ import { Store } from 'express-session';
 import { PrismaClient } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../../prisma/prisma.service';
-import cuid from 'cuid';
+import { createId } from '@paralleldrive/cuid2';
+
 
 export class CorePrismaSessionStore extends Store {
   private prisma: PrismaClient;
@@ -51,7 +52,7 @@ export class CorePrismaSessionStore extends Store {
       await this.prisma.session.upsert({
         where: { sid },
         create: {
-          id: cuid(),
+          id: createId(),
           sid,
           data,
           expiresAt,

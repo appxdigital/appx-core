@@ -1,6 +1,6 @@
 {
   "name": "appx_core",
-  "version": "0.1.11",
+  "version": "0.1.13",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,22 +8,29 @@
     "generate-all": "dist/config/generate-all.js"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "db-pull": "npx prisma db pull && prisma-case-format --table-case pascal --field-case camel --enum-case pascal --file prisma/schema.prisma"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@paljs/plugins": "^7.0.2",
+    "@paralleldrive/cuid2": "^2.2.2",
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^5.0.0",
     "@types/express-session": "^1.18.0",
-    "bcrypt": "^5.1.1",
+    "argon2": "^0.41.1",
+    "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
-    "cuid": "^3.0.0",
+    "express": "^4.21.1",
     "express-session": "^1.18.1",
     "nestjs-request-context": "^3.0.0",
+    "passport": "^0.7.0",
     "passport-local": "^1.0.0",
+    "prisma-case-format": "^2.2.1",
+    "prisma-nestjs-graphql": "^20.0.3",
+    "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
@@ -40,7 +47,11 @@
     "@nestjs/passport": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.1.1",
-    "@prisma/client": "^5.20.0"
+    "@prisma/client": "^5.22.0"
+  },
+  "overrides": {
+    "rimraf": "^4.0.0",
+    "glob": "^9.0.0"
   },
   "files": [
     "dist",

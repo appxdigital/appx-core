@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { UserService } from '../user/user.service';
 import { RegisterDto } from './dto/register.dto';
-import * as bcrypt from 'bcrypt';
+import * as argon2 from 'argon2';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
@@ -16,9 +16,9 @@ export class AuthService {
   private readonly sessionCookieName: string;
 
   constructor(
-    private readonly userService: UserService,
-    private prisma: PrismaService,
-    private configService: ConfigService,
+      private readonly userService: UserService,
+      private prisma: PrismaService,
+      private configService: ConfigService,
   ) {
     this.sessionCookieName = this.configService.get<string>('SESSION_COOKIE_NAME', 'defaultCookieName');
   }
@@ -29,7 +29,7 @@ export class AuthService {
       throw new HttpException('Email already in use', HttpStatus.CONFLICT);
     }
     const newUserData = { ...registerDto };
-    newUserData.password = await bcrypt.hash(registerDto.password, 10);
+    newUserData.password = await argon2.hash(registerDto.password);
 
     try {
       const newUser = await this.userService.createUser(newUserData);
@@ -40,8 +40,8 @@ export class AuthService {
       };
     } catch (error) {
       throw new HttpException(
-        'There was an error while creating your account. Please try again later.',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+          'There was an error while creating your account. Please try again later.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -91,18 +91,18 @@ export class AuthService {
   }
 
   async validateUser(
-    username: string,
-    password: string,
-    usernameField: string,
+      username: string,
+      password: string,
+      usernameField: string,
   ): Promise<any> {
     const user = await this.userService.findByField(usernameField, username);
     if (!user) {
       throw new UnauthorizedException(
-        `No user found with this ${usernameField}`,
+          `No user found with this ${usernameField}`,
       );
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await argon2.verify(user.password, password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -138,8 +138,8 @@ export class AuthService {
         },
       });
       res
-        .status(200)
-        .send({ message: 'All your sessions were closed successfully.' });
+          .status(200)
+          .send({ message: 'All your sessions were closed successfully.' });
     } catch (error) {
       console.error('Error closing sessions:', error);
       res.status(500).send({ message: 'Failed to close sessions.' });
