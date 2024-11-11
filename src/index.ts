@@ -13,3 +13,10 @@ export * from './common/interceptors/prisma.interceptor';
 export * from './common/config/permissionsConfigTypes';
 export * from './common/config/permissions.config.provider';
 export * from './appx-core.module';
+export * from './modules/file/file-upload.module';
+export * from './common/interfaces/file-upload.interface';
+export * from './common/providers/aws-storage.service';
+export * from './common/interfaces/storage-service.interface';
+export * from './modules/file/file-upload.controller';
+export * from './modules/file/file-upload.service';
+

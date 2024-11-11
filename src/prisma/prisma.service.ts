@@ -1,6 +1,7 @@
-import {BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, InternalServerErrorException, NotFoundException,} from '@nestjs/common';
+import {BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException,} from '@nestjs/common';
 import {Prisma, PrismaClient} from '@prisma/client';
 import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
+import { handleError } from '../common/utils/error-handler';
 import * as path from "path";
 import * as fs from "fs";
 
@@ -492,17 +493,6 @@ export class PrismaService {
      * @throws ConflictException, NotFoundException, BadRequestException, or InternalServerErrorException.
      */
     handleError(error: any): never {
-        if (error && typeof error === 'object' && 'code' in error) {
-            switch (error.code) {
-                case 'P2002':
-                    throw new ConflictException('Duplicate entry detected.');
-                case 'P2025':
-                    throw new NotFoundException('The requested record was not found.');
-                default:
-                    throw new BadRequestException('A Prisma database error occurred.');
-            }
-        } else {
-            throw error;
-        }
+        return handleError(error);
     }
 }
