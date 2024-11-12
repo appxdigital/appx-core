@@ -1,7 +1,14 @@
+#!/usr/bin/env node
+
 import { execSync } from 'child_process';
 import * as path from 'path';
 
 const scriptsDir = path.join(__dirname);
+
+console.log('Running Prisma Generate...');
+execSync(`npx prisma generate`, {
+  stdio: 'inherit',
+});
 
 console.log('Generating Modules...');
 execSync(`node ${path.join(scriptsDir, 'generate-modules.js')}`, {

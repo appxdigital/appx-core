@@ -10,9 +10,9 @@ export class GcpStorageService implements StorageService {
     private readonly bucketName: string;
 
     constructor(@Inject(ConfigService) private configService: ConfigService) {
-        const keyFilePath = this.configService.get<string>('KEYFILEPATH');
-        const projectId = this.configService.get<string>('PROJECTID');
-        this.bucketName = this.configService.get<string>('BUCKET') || '';
+        const keyFilePath = this.configService.get<string>('GCP_KEY_FILE_PATH');
+        const projectId = this.configService.get<string>('GCP_PROJECT_ID');
+        this.bucketName = this.configService.get<string>('GCP_BUCKET_NAME') || '';
 
         if (!keyFilePath || !projectId || !this.bucketName) {
             throw new Error('Missing GCP configuration values.');

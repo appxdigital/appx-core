@@ -1,11 +1,11 @@
 {
   "name": "appx_core",
-  "version": "0.1.29",
-  "description": "",
+  "version": "0.1.16",
+  "description": "Appx Core is a library that provides a set of tools to help you build your application faster.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "generate-all": "dist/config/generate-all.js",
+    "generate": "dist/config/generate-all.js",
     "fileupload": "dist/config/setup-fileupload.js"
   },
   "scripts": {

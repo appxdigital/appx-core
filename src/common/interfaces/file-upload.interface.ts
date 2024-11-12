@@ -9,5 +9,4 @@ export interface EndpointConfig {
 export interface FileUploadModuleOptions {
     endpoints: EndpointConfig[];
     cloudProvider: 'aws' | 'gcp' | 'local';
-    cloudProviderOptions: any;
 }

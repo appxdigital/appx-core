@@ -1,17 +1,21 @@
 import { Inject, Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { FileUploadModuleOptions, EndpointConfig } from '../../common/interfaces/file-upload.interface';
 import { StorageService } from '../../common/interfaces/storage-service.interface';
-import { STORAGE_SERVICE } from "../../common/contants";
+import { STORAGE_SERVICE, FILE_UPLOAD_OPTIONS } from "../../common/contants";
 
 @Injectable()
 export class FileUploadService {
     constructor(
-        @Inject('FILE_UPLOAD_OPTIONS') private options: FileUploadModuleOptions,
+        @Inject(FILE_UPLOAD_OPTIONS) private options: FileUploadModuleOptions,
         @Inject(STORAGE_SERVICE) private storageService: StorageService,
     ) {}
 
-    getEndpointConfig(endpointSuffix: string): EndpointConfig | undefined {
-        return this.options.endpoints.find(config => config.endpoint === endpointSuffix);
+    /**
+     * Retrieves the configuration for the specified endpoint.
+     * @param endpoint - The endpoint to get the configuration for.
+     */
+    getEndpointConfig(endpoint: string): EndpointConfig | undefined {
+        return this.options.endpoints.find(config => config.endpoint === endpoint);
     }
 
     /**
@@ -35,6 +39,10 @@ export class FileUploadService {
         }
     }
 
+    /**
+     * Uploads a file to the storage service.
+     * @param file - The file to upload.
+     */
     async uploadFile(file: Express.Multer.File) {
         return this.storageService.uploadFile(file);
     }
