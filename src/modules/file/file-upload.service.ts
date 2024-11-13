@@ -1,21 +1,24 @@
-import { Inject, Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { FileUploadModuleOptions, EndpointConfig } from '../../common/interfaces/file-upload.interface';
-import { StorageService } from '../../common/interfaces/storage-service.interface';
-import { STORAGE_SERVICE, FILE_UPLOAD_OPTIONS } from "../../common/contants";
+import {Inject, Injectable, BadRequestException, ForbiddenException} from '@nestjs/common';
+import {FileUploadModuleOptions, EndpointConfig} from '../../common/interfaces/file-upload.interface';
+import {StorageService} from '../../common/interfaces/storage-service.interface';
+import {STORAGE_SERVICE, FILE_UPLOAD_OPTIONS} from "../../common/contants";
 
 @Injectable()
 export class FileUploadService {
     constructor(
         @Inject(FILE_UPLOAD_OPTIONS) private options: FileUploadModuleOptions,
         @Inject(STORAGE_SERVICE) private storageService: StorageService,
-    ) {}
-
+    ) {
+    }
+    
     /**
-     * Retrieves the configuration for the specified endpoint.
+     * Retrieves the configuration for the specified endpoint or its aliases.
      * @param endpoint - The endpoint to get the configuration for.
      */
     getEndpointConfig(endpoint: string): EndpointConfig | undefined {
-        return this.options.endpoints.find(config => config.endpoint === endpoint);
+        return this.options.endpoints.find(
+            config => config.endpoint === endpoint || config.aliases?.includes(endpoint)
+        );
     }
 
     /**
@@ -40,10 +43,15 @@ export class FileUploadService {
     }
 
     /**
-     * Uploads a file to the storage service.
-     * @param file - The file to upload.
+     * Uploads one or multiple files to the storage service.
+     * @param file - A single file or an array of files to upload.
+     * @returns The result of the upload operation(s).
      */
-    async uploadFile(file: Express.Multer.File) {
-        return this.storageService.uploadFile(file);
+    async uploadFile(file: Express.Multer.File | Express.Multer.File[]): Promise<any> {
+        if (Array.isArray(file)) {
+            return Promise.all(file.map((f) => this.storageService.uploadFile(f)));
+        } else {
+            return this.storageService.uploadFile(file);
+        }
     }
 }

@@ -1,5 +1,6 @@
 export interface EndpointConfig {
     endpoint: string;
+    aliases: string[];
     maxSize: number;
     allowedTypes: string[];
     multiple: boolean;

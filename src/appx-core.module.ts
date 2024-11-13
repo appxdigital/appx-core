@@ -28,7 +28,7 @@ export class AppxCoreModule {
             module: AppxCoreModule,
             imports,
             providers: modules,
-            exports: [...modules, PERMISSIONS_CONFIG_TOKEN],
+            exports: [...modules, PERMISSIONS_CONFIG_TOKEN, ...(fileUploadConfig ? [FileUploadModule] : [])],
         };
     }
 }

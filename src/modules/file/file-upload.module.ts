@@ -48,7 +48,7 @@ export class FileUploadModule {
             module: FileUploadModule,
             controllers: [FileUploadController],
             providers: providers,
-            exports: [FileUploadService],
+            exports: [FileUploadService, FILE_UPLOAD_OPTIONS, STORAGE_SERVICE],
         };
     }
 }
