@@ -24,11 +24,17 @@ export class AppxCoreModule {
             ? [FileUploadModule.register(fileUploadConfig)]
             : [];
 
+        const exports = [
+            ...modules,
+            PERMISSIONS_CONFIG_TOKEN,
+            ...(fileUploadConfig ? [FileUploadModule] : []),
+        ];
+
         return {
             module: AppxCoreModule,
             imports,
             providers: modules,
-            exports: [...modules, PERMISSIONS_CONFIG_TOKEN, ...(fileUploadConfig ? [FileUploadModule] : [])],
+            exports,
         };
     }
 }

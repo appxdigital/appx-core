@@ -25,6 +25,7 @@ const MimeTypes = {
 type FileType = keyof typeof MimeTypes;
 type EndpointConfig = {
     endpoint: string;
+    aliases: string[];
     maxSize: number;
     allowedTypes: string[];
     multiple: boolean;
@@ -169,6 +170,7 @@ async function configureEndpoint(): Promise<EndpointConfig> {
 
     return {
         endpoint: `/upload/${endpoint}`,
+        aliases: [],
         maxSize,
         allowedTypes,
         multiple,
@@ -189,7 +191,7 @@ function findMatchingBracketIndex(content: string, startIndex: number): number {
             }
         }
     }
-    return -1; // No matching bracket found
+    return -1;
 }
 
 function appendEndpointToFile(configPath: string, newEndpointConfig: EndpointConfig) {
@@ -216,13 +218,9 @@ function appendEndpointToFile(configPath: string, newEndpointConfig: EndpointCon
     let updatedEndpointsContent: string;
 
     if (existingEndpointsContent.length === 0) {
-        // If there are no existing endpoints, just add the new endpoint
         updatedEndpointsContent = `\n${newEndpointString}\n`;
     } else {
-        // Remove any trailing commas from the existing endpoints content
         existingEndpointsContent = existingEndpointsContent.replace(/,\s*$/, '');
-
-        // Add a comma and the new endpoint
         updatedEndpointsContent = `${existingEndpointsContent},\n${newEndpointString}`;
     }
 
@@ -234,6 +232,7 @@ function appendEndpointToFile(configPath: string, newEndpointConfig: EndpointCon
 
 async function main() {
     const configPath = path.resolve(process.cwd(), 'src/config/file-upload.config.ts');
+    const appModulePath = path.resolve(process.cwd(), 'src/app.module.ts');
     const isEndpointMode = process.argv.includes('endpoint');
 
     if (isEndpointMode) {
@@ -245,9 +244,8 @@ async function main() {
         const newEndpointConfig = await configureEndpoint();
         appendEndpointToFile(configPath, newEndpointConfig);
     } else {
-        const {provider} = await configureProvider();
+        const { provider } = await configureProvider();
         const newEndpointConfig = await configureEndpoint();
-
         const configContent = `import { FileUploadModuleOptions } from 'appx_core';
 
 export const fileUploadConfig: FileUploadModuleOptions = {
@@ -257,8 +255,17 @@ ${objectToTypeScript(newEndpointConfig, 2)}
     ],
 };`;
 
+        fs.mkdirSync(path.dirname(configPath), { recursive: true });
         fs.writeFileSync(configPath, configContent);
-        console.log('Configuration saved to .env and src/config/file-upload.config.ts');
+        let appModuleContent = fs.readFileSync(appModulePath, 'utf-8');
+        if (!appModuleContent.includes(`import { fileUploadConfig } from './config/file-upload.config';`)) {
+            appModuleContent = `import { fileUploadConfig } from './config/file-upload.config';\n` + appModuleContent;
+        }
+        appModuleContent = appModuleContent.replace(
+            /AppxCoreModule\.forRoot\(([^)]+)\)/,
+            'AppxCoreModule.forRoot(PermissionsConfig, fileUploadConfig)'
+        );
+        fs.writeFileSync(appModulePath, appModuleContent);
     }
 }
 

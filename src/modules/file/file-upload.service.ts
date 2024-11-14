@@ -16,7 +16,7 @@ export class FileUploadService {
      * @param endpoint - The endpoint to get the configuration for.
      */
     getEndpointConfig(endpoint: string): EndpointConfig | undefined {
-        return this.options.endpoints.find(
+        return (this.options.endpoints || []).find(
             config => config.endpoint === endpoint || config.aliases?.includes(endpoint)
         );
     }
