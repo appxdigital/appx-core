@@ -48,7 +48,7 @@ export function GenericResolverFactory<
             @Info() info: GraphQLResolveInfo,
         ): Promise<ModelType[]> {
             const select = new PrismaSelect(info).value;
-            const modelDelegate = this.prisma.getModelDelegate(model);  // Use the utility function
+            const modelDelegate = this.prisma.getModelDelegate(model);
             return await modelDelegate.findMany({
                 ...args,
                 ...select,
@@ -64,7 +64,7 @@ export function GenericResolverFactory<
             @Info() info: GraphQLResolveInfo,
         ): Promise<ModelType> {
             const select = new PrismaSelect(info).value;
-            const modelDelegate = this.prisma.getModelDelegate(model);  // Use the utility function
+            const modelDelegate = this.prisma.getModelDelegate(model);
             return modelDelegate.findUnique({
                 where,
                 ...select,
@@ -80,7 +80,7 @@ export function GenericResolverFactory<
             @Info() info: GraphQLResolveInfo,
         ): Promise<ModelType> {
             const select = new PrismaSelect(info).value;
-            const modelDelegate = this.prisma.getModelDelegate(model);  // Use the utility function
+            const modelDelegate = this.prisma.getModelDelegate(model);
             return modelDelegate.findFirst({
                 ...args,
                 ...select,

@@ -102,7 +102,7 @@ async function configureProvider() {
     const envContent = Object.entries(envVariables)
         .map(([key, value]) => `${key}=${value}`)
         .join('\n');
-    fs.appendFileSync(path.resolve(process.cwd(), '.env.development'), `\n${envContent}\n`);
+    fs.appendFileSync(path.resolve(process.cwd(), '.env'), `\n${envContent}\n`);
 
     return {provider};
 }

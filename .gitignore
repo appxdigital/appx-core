@@ -1,0 +1,6 @@
+.idea
+dist
+appx_core-*.tgz
+.gitignore
+node_modules
+package-lock.json
