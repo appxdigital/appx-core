@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { capitalizeFirstLetter, createFileIfNotExists } from './utils';
+import { createFileIfNotExists, kebabToPascalCase } from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const outputPath = path.join(process.cwd(), 'src/modules');
@@ -51,7 +51,7 @@ export class ${model}Resolver extends ${model}GenericResolver {
 fs.readdirSync(modelsPath).forEach((folder) => {
   if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
 
-  const modelName = capitalizeFirstLetter(folder);
+  const modelName = kebabToPascalCase(folder);
   const modelOutputPath = path.join(outputPath, folder);
 
   if (!fs.existsSync(modelOutputPath)) {

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { capitalizeFirstLetter, createFileIfNotExists } from './utils';
+import { createFileIfNotExists, kebabToPascalCase } from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const servicesOutputPath = path.join(process.cwd(), 'src/modules');
@@ -30,7 +30,7 @@ export class ${model}Service extends CoreService<${model}> {
 fs.readdirSync(modelsPath).forEach((folder) => {
   if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
 
-  const modelName = capitalizeFirstLetter(folder);
+  const modelName = kebabToPascalCase(folder);
   const modelOutputPath = path.join(servicesOutputPath, folder);
   if (!fs.existsSync(modelOutputPath)) {
     fs.mkdirSync(modelOutputPath, { recursive: true });

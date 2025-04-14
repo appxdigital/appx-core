@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { capitalizeFirstLetter, createFileIfNotExists } from './utils';
+import { createFileIfNotExists, kebabToPascalCase } from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const modulesOutputPath = path.join(process.cwd(), 'src/modules');
@@ -33,7 +33,7 @@ export class ${model}Controller extends CoreController<${model}> {
 fs.readdirSync(modelsPath).forEach((folder) => {
   if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
 
-  const modelName = capitalizeFirstLetter(folder);  // Capitalize model name e.g., 'Comment', 'Post'
+  const modelName = kebabToPascalCase(folder);  // Capitalize model name e.g., 'Comment', 'Post'
   const modelOutputPath = path.join(modulesOutputPath, folder);
 
   if (!fs.existsSync(modelOutputPath)) {

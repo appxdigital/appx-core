@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { capitalizeFirstLetter } from './utils';
+import { kebabToPascalCase } from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const modulesOutputPath = path.join(process.cwd(), 'src/modules');
@@ -78,7 +78,7 @@ const updateAppModule = () => {
     fs.readdirSync(modulesOutputPath).forEach((folder) => {
         if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
 
-        const modelName = capitalizeFirstLetter(folder);
+        const modelName = kebabToPascalCase(folder);
         const moduleName = `${modelName}Module`;
 
         // Ensure no duplicate imports and no duplicate entries in the imports array
@@ -121,7 +121,7 @@ const updateAppModule = () => {
 fs.readdirSync(modelsPath).forEach((folder) => {
     if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
 
-    const modelName = capitalizeFirstLetter(folder);
+    const modelName = kebabToPascalCase(folder);
     const modelOutputPath = path.join(modulesOutputPath, folder);
 
     if (!fs.existsSync(modelOutputPath)) {
