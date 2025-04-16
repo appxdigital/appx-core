@@ -9,13 +9,14 @@ const appModulePath = path.join(process.cwd(), 'src/app.module.ts');
 /**
  * Generic module template for a given model
  * @param model
+ * @param folder
  */
-const moduleTemplate = (model: string) => `
+const moduleTemplate = (model: string, folder: string) => `
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
-import { ${model}Controller } from './${model.toLowerCase()}.controller';
-import { ${model}Service } from './${model.toLowerCase()}.service';
-import { ${model}Resolver } from './${model.toLowerCase()}.resolver';
+import { ${model}Controller } from './${folder}.controller';
+import { ${model}Service } from './${folder}.service';
+import { ${model}Resolver } from './${folder}.resolver';
 
 @Module({
   imports: [PrismaModule],
@@ -29,9 +30,10 @@ export class ${model}Module {}
  * Create or update the module file for a given model
  * @param model
  * @param modulePath
+ * @param folder
  */
-const createModuleFile = (model: string, modulePath: string) => {
-    const moduleContent = moduleTemplate(model);
+const createModuleFile = (model: string, modulePath: string, folder: string) => {
+    const moduleContent = moduleTemplate(model, folder);
     fs.writeFileSync(modulePath, moduleContent);
     console.log(`Module for ${model} created or updated.`);
 };
@@ -99,8 +101,8 @@ const updateAppModule = () => {
         (_, prefix, currentImports, suffix) => {
             const currentModules = currentImports
                 .split(',')
-                .map((m:string) => m.trim())
-                .filter((m:string) => m);
+                .map((m: string) => m.trim())
+                .filter((m: string) => m);
             newModules.forEach((newModule) => {
                 if (!currentModules.includes(newModule)) {
                     currentModules.push(newModule);
@@ -132,7 +134,7 @@ fs.readdirSync(modelsPath).forEach((folder) => {
     const modulePath = path.join(modelOutputPath, `${folder}.module.ts`);
 
     if (!fs.existsSync(modulePath)) {
-        createModuleFile(modelName, modulePath);
+        createModuleFile(modelName, modulePath, folder);
     } else {
         console.log(`Module for ${modelName} already exists, skipping.`);
     }

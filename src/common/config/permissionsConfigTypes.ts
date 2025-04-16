@@ -2,17 +2,12 @@ export interface FieldConditions {
     [key: string]: any;
 }
 
-export interface Clause {
-    type: 'OR' | 'field';
-    conditions: FieldConditions | FieldConditions[];
-}
-
 export interface RolePermissions {
     [action: string]: 'ALL' | ActionPermission;
 }
 
 export interface ActionPermission {
-    clauses?: Clause[];
+    conditions: FieldConditions | FieldConditions[];
     setUserIdField?: string;
     restrictedFields?: string[];
 }

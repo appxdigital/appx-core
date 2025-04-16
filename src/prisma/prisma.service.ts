@@ -1,6 +1,6 @@
-import {BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException,} from '@nestjs/common';
-import {Prisma, PrismaClient} from '@prisma/client';
-import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, } from '@nestjs/common';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { PermissionsConfigType } from '../common/config/permissionsConfigTypes';
 import { handleError } from '../common/utils/error-handler';
 import * as path from "path";
 import * as fs from "fs";
@@ -34,14 +34,17 @@ export class PrismaService {
     getModelDelegate(model: string): any {
         const modelName = model.toLowerCase();
 
-        if (modelName in this.prismaClient) {
-            return (this.prismaClient as any)[modelName];
+        const client = RequestContext.currentContext.req.prisma || this.prismaClient;
+
+        if (modelName in client) {
+            return (client as any)[modelName];
         }
+
         throw new Error(`Model ${model} not found in PrismaClient.`);
     }
 
     get model() {
-        return new Proxy(this.prismaClient, {
+        return new Proxy(RequestContext.currentContext.req.prisma || this.prismaClient, {
             get: (target, prop) => {
                 if (prop in target) {
                     return target[prop as keyof PrismaClient];
@@ -295,8 +298,7 @@ export class PrismaService {
         const permissions = this.permissionsConfig[normalizedModelName]?.[userRole] as any;
 
         if (!permissions) {
-            console.warn(`No permissions found for model ${normalizedModelName} and role ${userRole}`);
-            return args;
+            throw new HttpException(`No permissions found for model ${normalizedModelName} and role ${userRole}`, HttpStatus.FORBIDDEN);
         }
 
         const actionPermissions = permissions[action];
@@ -305,7 +307,7 @@ export class PrismaService {
             return args;
         }
 
-        const whereClause = this.buildConditions(actionPermissions.clauses, user);
+        const whereClause = this.buildConditions(actionPermissions.conditions, user);
 
         if (!args.where) {
             args.where = {};
@@ -324,29 +326,22 @@ export class PrismaService {
      * Builds dynamic conditions based on the type of clause (OR, AND, or field conditions).
      * Each condition is processed, and placeholders (like `$USER_ID`) are replaced with actual values.
      *
-     * @param clauses - An array of clauses that define the conditions for the query.
+     * @param conditions - An array of clauses that define the conditions for the query.
      * @param user - The user object used to replace placeholders.
      * @returns The constructed `where` clause object.
      */
-    private buildConditions(clauses: any[], user: any): any {
+    private buildConditions(conditions: any[], user: any): any {
         const whereClause: Record<string, any> = {};
 
-        if (!clauses) {
+        if (!conditions) {
             return whereClause;
         }
-        clauses.forEach((clause) => {
-            if (clause.type === 'OR') {
-                whereClause['OR'] = clause.conditions.map((condition: any) =>
-                    this.replacePlaceholders(condition, user),
-                );
-            } else if (clause.type === 'field') {
-                const field = Object.keys(clause.conditions)[0];
-                whereClause[field] = this.replacePlaceholders(
-                    clause.conditions[field],
-                    user,
-                );
-            }
-        });
+        for (let field in conditions) {
+            whereClause[field] = this.replacePlaceholders(
+                conditions[field],
+                user,
+            );
+        }
 
         return whereClause;
     }

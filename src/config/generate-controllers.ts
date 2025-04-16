@@ -8,10 +8,11 @@ const modulesOutputPath = path.join(process.cwd(), 'src/modules');
 /**
  * Generic controller template for a given model
  * @param model
+ * @param folder
  */
-const genericControllerTemplate = (model: string) => `
+const genericControllerTemplate = (model: string, folder: string) => `
 import { Controller } from '@nestjs/common';
-import { ${model}Service } from './${model.toLowerCase()}.service';
+import { ${model}Service } from './${folder}.service';
 import { ${model} } from '@prisma/client';
 import { CoreController } from 'appx_core';
 
@@ -31,20 +32,20 @@ export class ${model}Controller extends CoreController<${model}> {
  * Generate controllers for each model
  */
 fs.readdirSync(modelsPath).forEach((folder) => {
-  if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
+    if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
 
-  const modelName = kebabToPascalCase(folder);  // Capitalize model name e.g., 'Comment', 'Post'
-  const modelOutputPath = path.join(modulesOutputPath, folder);
+    const modelName = kebabToPascalCase(folder);  // Capitalize model name e.g., 'Comment', 'Post'
+    const modelOutputPath = path.join(modulesOutputPath, folder);
 
-  if (!fs.existsSync(modelOutputPath)) {
-    fs.mkdirSync(modelOutputPath, { recursive: true });
-    console.log(`Folder for model ${modelName} created.`);
-  } else {
-    console.log(`Folder for model ${modelName} already exists, skipping creation.`);
-  }
-  /**
-   * Create the controller file
-   */
-  const controllerPath = path.join(modelOutputPath, `${folder}.controller.ts`);
-  createFileIfNotExists(controllerPath, genericControllerTemplate(modelName));
+    if (!fs.existsSync(modelOutputPath)) {
+        fs.mkdirSync(modelOutputPath, { recursive: true });
+        console.log(`Folder for model ${modelName} created.`);
+    } else {
+        console.log(`Folder for model ${modelName} already exists, skipping creation.`);
+    }
+    /**
+     * Create the controller file
+     */
+    const controllerPath = path.join(modelOutputPath, `${folder}.controller.ts`);
+    createFileIfNotExists(controllerPath, genericControllerTemplate(modelName, folder));
 });

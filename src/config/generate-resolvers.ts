@@ -8,23 +8,24 @@ const outputPath = path.join(process.cwd(), 'src/modules');
 /**
  * Generic resolver template for a given model
  * @param model
+ * @param folder
  */
-const genericResolverTemplate = (model: string) =>
-  `import { Resolver } from '@nestjs/graphql';
+const genericResolverTemplate = (model: string, folder: string) =>
+    `import { Resolver } from '@nestjs/graphql';
 import { GenericResolverFactory, PrismaService } from 'appx_core';
-import { ${model} } from '../../generated/${model.toLowerCase()}/${model.toLowerCase()}.model';
-import { ${model}CreateInput } from '../../generated/${model.toLowerCase()}/${model.toLowerCase()}-create.input';
-import { ${model}UpdateInput } from '../../generated/${model.toLowerCase()}/${model.toLowerCase()}-update.input';
-import { ${model}WhereInput } from '../../generated/${model.toLowerCase()}/${model.toLowerCase()}-where.input';
-import { ${model}WhereUniqueInput } from '../../generated/${model.toLowerCase()}/${model.toLowerCase()}-where-unique.input';
-import { FindMany${model}Args } from '../../generated/${model.toLowerCase()}/find-many-${model.toLowerCase()}.args';
-import { ${model}AggregateArgs } from '../../generated/${model.toLowerCase()}/${model.toLowerCase()}-aggregate.args';
-import { Aggregate${model} } from '../../generated/${model.toLowerCase()}/aggregate-${model.toLowerCase()}.output';
-import { CreateMany${model}Args } from '../../generated/${model.toLowerCase()}/create-many-${model.toLowerCase()}.args';
-import { ${model}CreateManyInput } from '../../generated/${model.toLowerCase()}/${model.toLowerCase()}-create-many.input';
+import { ${model} } from '../../generated/${folder}/${folder}.model';
+import { ${model}CreateInput } from '../../generated/${folder}/${folder}-create.input';
+import { ${model}UpdateInput } from '../../generated/${folder}/${folder}-update.input';
+import { ${model}WhereInput } from '../../generated/${folder}/${folder}-where.input';
+import { ${model}WhereUniqueInput } from '../../generated/${folder}/${folder}-where-unique.input';
+import { FindMany${model}Args } from '../../generated/${folder}/find-many-${folder}.args';
+import { ${model}AggregateArgs } from '../../generated/${folder}/${folder}-aggregate.args';
+import { Aggregate${model} } from '../../generated/${folder}/aggregate-${folder}.output';
+import { CreateMany${model}Args } from '../../generated/${folder}/create-many-${folder}.args';
+import { ${model}CreateManyInput } from '../../generated/${folder}/${folder}-create-many.input';
 
 const ${model}GenericResolver = GenericResolverFactory(
-  '${model.toLowerCase()}',
+  '${model}',
   ${model},
   ${model}CreateInput,
   ${model}UpdateInput,
@@ -49,18 +50,18 @@ export class ${model}Resolver extends ${model}GenericResolver {
  * Generate resolvers for each model
  */
 fs.readdirSync(modelsPath).forEach((folder) => {
-  if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
+    if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
 
-  const modelName = kebabToPascalCase(folder);
-  const modelOutputPath = path.join(outputPath, folder);
+    const modelName = kebabToPascalCase(folder);
+    const modelOutputPath = path.join(outputPath, folder);
 
-  if (!fs.existsSync(modelOutputPath)) {
-    fs.mkdirSync(modelOutputPath, { recursive: true });
-    console.log(`Folder for model ${modelName} created.`);
-  } else {
-    console.log(`Folder for model ${modelName} already exists, skipping creation.`);
-  }
+    if (!fs.existsSync(modelOutputPath)) {
+        fs.mkdirSync(modelOutputPath, { recursive: true });
+        console.log(`Folder for model ${modelName} created.`);
+    } else {
+        console.log(`Folder for model ${modelName} already exists, skipping creation.`);
+    }
 
-  const resolverPath = path.join(modelOutputPath, `${folder}.resolver.ts`);
-  createFileIfNotExists(resolverPath, genericResolverTemplate(modelName));
+    const resolverPath = path.join(modelOutputPath, `${folder}.resolver.ts`);
+    createFileIfNotExists(resolverPath, genericResolverTemplate(modelName, folder));
 });

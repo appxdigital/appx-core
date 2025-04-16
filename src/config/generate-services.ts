@@ -28,15 +28,15 @@ export class ${model}Service extends CoreService<${model}> {
  * Generate services for each model
  */
 fs.readdirSync(modelsPath).forEach((folder) => {
-  if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
+    if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
 
-  const modelName = kebabToPascalCase(folder);
-  const modelOutputPath = path.join(servicesOutputPath, folder);
-  if (!fs.existsSync(modelOutputPath)) {
-    fs.mkdirSync(modelOutputPath, { recursive: true });
-    console.log(`Folder for model ${modelName} created.`);
-  }
+    const modelName = kebabToPascalCase(folder);
+    const modelOutputPath = path.join(servicesOutputPath, folder);
+    if (!fs.existsSync(modelOutputPath)) {
+        fs.mkdirSync(modelOutputPath, { recursive: true });
+        console.log(`Folder for model ${modelName} created.`);
+    }
 
-  const servicePath = path.join(modelOutputPath, `${folder}.service.ts`);
-  createFileIfNotExists(servicePath, genericServiceTemplate(modelName));
+    const servicePath = path.join(modelOutputPath, `${folder}.service.ts`);
+    createFileIfNotExists(servicePath, genericServiceTemplate(modelName));
 });
