@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { createFileIfNotExists, kebabToPascalCase } from './utils';
+import {createFileIfNotExists, kebabToPascalCase} from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const modulesOutputPath = path.join(process.cwd(), 'src/modules');
@@ -38,7 +38,7 @@ fs.readdirSync(modelsPath).forEach((folder) => {
     const modelOutputPath = path.join(modulesOutputPath, folder);
 
     if (!fs.existsSync(modelOutputPath)) {
-        fs.mkdirSync(modelOutputPath, { recursive: true });
+        fs.mkdirSync(modelOutputPath, {recursive: true});
         console.log(`Folder for model ${modelName} created.`);
     } else {
         console.log(`Folder for model ${modelName} already exists, skipping creation.`);

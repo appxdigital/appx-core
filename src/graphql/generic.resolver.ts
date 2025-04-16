@@ -6,8 +6,7 @@ import {applyMethodGuards} from '../common/decorators/guard.decorator';
 import {PrismaService} from '../prisma/prisma.service';
 import {BatchPayload} from "./batch.payload";
 
-export function GenericResolverFactory<
-    ModelType,
+export function GenericResolverFactory<ModelType,
     CreateInput,
     UpdateInput,
     WhereInput,
@@ -17,7 +16,7 @@ export function GenericResolverFactory<
     AggregateOutputType,
     CreateManyArgsType,
     CreateManyInput,
->(
+    >(
     model: string,
     returnType: Type<ModelType>,
     createInputType: Type<CreateInput>,
@@ -29,7 +28,7 @@ export function GenericResolverFactory<
     aggregateOutputType: Type<AggregateOutputType>,
     createManyArgsType: Type<CreateManyArgsType>,
     createManyInputType: Type<CreateManyInput>,
-    guardedMethods?: { [key: string]: string[] },
+    guardedMethods?: {[key: string]: string[]},
 ) {
     @Resolver({isAbstract: true})
     class GenericResolverClass {

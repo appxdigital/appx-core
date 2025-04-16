@@ -1,7 +1,7 @@
 import {Controller, Post, UseInterceptors, Req, BadRequestException, ForbiddenException, ExecutionContext} from '@nestjs/common';
-import { FileUploadInterceptor } from '../../common/interceptors/file.interceptor';
-import { FileUploadService } from './file-upload.service';
-import { Request as ExpressRequest } from 'express';
+import {FileUploadInterceptor} from '../../common/interceptors/file.interceptor';
+import {FileUploadService} from './file-upload.service';
+import {Request as ExpressRequest} from 'express';
 
 @Controller('upload')
 export class FileUploadController {
@@ -25,6 +25,6 @@ export class FileUploadController {
             })
         );
 
-        return { message: 'File uploaded successfully', data: result };
+        return {message: 'File uploaded successfully', data: result};
     }
 }

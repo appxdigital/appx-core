@@ -1,7 +1,7 @@
-import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
-import { PermissionsConfigType } from '../common/config/permissionsConfigTypes';
-import { handleError } from '../common/utils/error-handler';
+import {BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, NotFoundException,} from '@nestjs/common';
+import {Prisma, PrismaClient} from '@prisma/client';
+import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
+import {handleError} from '../common/utils/error-handler';
 import * as path from "path";
 import * as fs from "fs";
 
@@ -241,7 +241,7 @@ export class PrismaService {
     private applyFieldOmission(
         modelName: string,
         userRole: string,
-        args: Record<string, any> & { [BYPASS_OMISSION]?: boolean },
+        args: Record<string, any> & {[BYPASS_OMISSION]?: boolean},
     ): any {
         if (args && args[BYPASS_OMISSION]) {
             delete args[BYPASS_OMISSION];

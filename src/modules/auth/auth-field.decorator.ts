@@ -8,10 +8,10 @@ import 'reflect-metadata';
  * @returns A decorator function that stores metadata about the field in the class constructor.
  */
 export function AuthField(type: 'username' | 'password') {
-  return (target: any, propertyKey: string | symbol) => {
-    const existingFields =
-      Reflect.getMetadata('authFields', target.constructor) || {};
-    existingFields[type] = propertyKey;
-    Reflect.defineMetadata('authFields', existingFields, target.constructor);
-  };
+    return (target: any, propertyKey: string | symbol) => {
+        const existingFields =
+            Reflect.getMetadata('authFields', target.constructor) || {};
+        existingFields[type] = propertyKey;
+        Reflect.defineMetadata('authFields', existingFields, target.constructor);
+    };
 }

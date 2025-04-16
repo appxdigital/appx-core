@@ -1,9 +1,9 @@
-import { Module, DynamicModule, Provider } from '@nestjs/common';
-import { FileUploadService } from './file-upload.service';
-import { FileUploadController } from './file-upload.controller';
-import { FileUploadModuleOptions } from '../../common/interfaces/file-upload.interface';
-import { AwsStorageService } from '../../common/providers/aws-storage.service';
-import { LocalStorageService } from '../../common/providers/local-storage.service';
+import {Module, DynamicModule, Provider} from '@nestjs/common';
+import {FileUploadService} from './file-upload.service';
+import {FileUploadController} from './file-upload.controller';
+import {FileUploadModuleOptions} from '../../common/interfaces/file-upload.interface';
+import {AwsStorageService} from '../../common/providers/aws-storage.service';
+import {LocalStorageService} from '../../common/providers/local-storage.service';
 import {STORAGE_SERVICE, FILE_UPLOAD_OPTIONS} from "../../common/contants";
 import {GcpStorageService} from "../../common/providers/gcp-storage.service";
 

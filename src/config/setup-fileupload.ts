@@ -74,7 +74,7 @@ function getEnvVariables(provider: string, providerConfig: Record<string, string
 }
 
 async function configureProvider() {
-    const {provider} = await inquirer.prompt<{ provider: string }>({
+    const {provider} = await inquirer.prompt<{provider: string}>({
         type: 'list',
         name: 'provider',
         message: 'Select the storage provider:',
@@ -83,14 +83,14 @@ async function configureProvider() {
 
     let providerConfig: Record<string, string> = {};
     if (provider === 'aws') {
-        providerConfig = await inquirer.prompt<{ [key: string]: string }>([
+        providerConfig = await inquirer.prompt<{[key: string]: string}>([
             {type: 'input', name: 'bucket', message: 'Enter AWS S3 bucket name:'},
             {type: 'input', name: 'region', message: 'Enter AWS region:'},
             {type: 'input', name: 'accessKeyId', message: 'Enter AWS access key ID:'},
             {type: 'input', name: 'secretAccessKey', message: 'Enter AWS secret access key:'},
         ]);
     } else if (provider === 'gcp') {
-        providerConfig = await inquirer.prompt<{ [key: string]: string }>([
+        providerConfig = await inquirer.prompt<{[key: string]: string}>([
             {type: 'input', name: 'bucket', message: 'Enter GCP bucket name:'},
             {type: 'input', name: 'projectId', message: 'Enter GCP project ID:'},
             {type: 'input', name: 'keyFilePath', message: 'Enter the path to the GCP service account key file:'},
@@ -161,7 +161,7 @@ async function configureEndpoint(): Promise<EndpointConfig> {
         allowedTypes = result.selectedMimeTypes;
     }
 
-    const {roles} = await inquirer.prompt<{ roles: string[] }>({
+    const {roles} = await inquirer.prompt<{roles: string[]}>({
         type: 'input',
         name: 'roles',
         message: 'Enter allowed roles (comma-separated, or "ALL" for unrestricted access):',
@@ -244,7 +244,7 @@ async function main() {
         const newEndpointConfig = await configureEndpoint();
         appendEndpointToFile(configPath, newEndpointConfig);
     } else {
-        const { provider } = await configureProvider();
+        const {provider} = await configureProvider();
         const newEndpointConfig = await configureEndpoint();
         const configContent = `import { FileUploadModuleOptions } from 'appx_core';
 
@@ -255,7 +255,7 @@ ${objectToTypeScript(newEndpointConfig, 2)}
     ],
 };`;
 
-        fs.mkdirSync(path.dirname(configPath), { recursive: true });
+        fs.mkdirSync(path.dirname(configPath), {recursive: true});
         fs.writeFileSync(configPath, configContent);
         let appModuleContent = fs.readFileSync(appModulePath, 'utf-8');
         if (!appModuleContent.includes(`import { fileUploadConfig } from './config/file-upload.config';`)) {

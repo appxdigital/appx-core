@@ -1,4 +1,4 @@
-import { SetMetadata } from '@nestjs/common';
+import {SetMetadata} from '@nestjs/common';
 
 /**
  * A custom decorator to indicate whether a transaction should be used for a specific method or class.
@@ -7,4 +7,4 @@ import { SetMetadata } from '@nestjs/common';
  *
  */
 export const UseTransaction = (useTransaction: boolean = true) =>
-  SetMetadata('useTransaction', useTransaction);
+    SetMetadata('useTransaction', useTransaction);

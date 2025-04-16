@@ -1,5 +1,6 @@
-import { DefaultPermissionsConfig } from './default-permissions.config';
-import { PermissionsConfigType } from './permissionsConfigTypes';
+import {DefaultPermissionsConfig} from './default-permissions.config';
+import {PermissionsConfigType} from './permissionsConfigTypes';
+
 export const PERMISSIONS_CONFIG_TOKEN = 'PERMISSIONS_CONFIG';
 
 export const PermissionsConfigProvider = {

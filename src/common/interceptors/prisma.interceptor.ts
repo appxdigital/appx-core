@@ -4,13 +4,13 @@ import {
     Injectable,
     NestInterceptor,
 } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { Reflector } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
-import { RequestContext } from 'nestjs-request-context';
-import { catchError, tap } from 'rxjs/operators';
-import { Observable, throwError } from 'rxjs';
-import { PrismaClient } from '@prisma/client';
+import {PrismaService} from '../../prisma/prisma.service';
+import {Reflector} from '@nestjs/core';
+import {ConfigService} from '@nestjs/config';
+import {RequestContext} from 'nestjs-request-context';
+import {catchError, tap} from 'rxjs/operators';
+import {Observable, throwError} from 'rxjs';
+import {PrismaClient} from '@prisma/client';
 
 @Injectable()
 export class PrismaInterceptor implements NestInterceptor {

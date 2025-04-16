@@ -1,7 +1,7 @@
-import { ObjectType, Field, Int } from '@nestjs/graphql';
+import {ObjectType, Field, Int} from '@nestjs/graphql';
 
 @ObjectType()
 export class BatchPayload {
-  @Field(() => Int)
-  count!: number;
+    @Field(() => Int)
+    count!: number;
 }

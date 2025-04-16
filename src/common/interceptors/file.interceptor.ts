@@ -6,10 +6,10 @@ import {
     BadRequestException,
     ForbiddenException,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { FileUploadService } from '../../modules/file/file-upload.service';
+import {Observable} from 'rxjs';
+import {FileUploadService} from '../../modules/file/file-upload.service';
 import multer from 'multer';
-import { RequestContext } from 'nestjs-request-context';
+import {RequestContext} from 'nestjs-request-context';
 
 @Injectable()
 export class FileUploadInterceptor implements NestInterceptor {
@@ -33,7 +33,7 @@ export class FileUploadInterceptor implements NestInterceptor {
 
         const multerOptions: multer.Options = {
             storage: multer.memoryStorage(),
-            limits: { fileSize: config.maxSize },
+            limits: {fileSize: config.maxSize},
             fileFilter: (req, file, cb) => {
                 const normalizedMimeType =
                     file.mimetype === 'image/jpg' ? 'image/jpeg' : file.mimetype;

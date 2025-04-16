@@ -10,7 +10,7 @@ export class FileUploadService {
         @Inject(STORAGE_SERVICE) private storageService: StorageService,
     ) {
     }
-    
+
     /**
      * Retrieves the configuration for the specified endpoint or its aliases.
      * @param endpoint - The endpoint to get the configuration for.

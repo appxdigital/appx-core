@@ -9,7 +9,7 @@ const scriptsDir = path.join(__dirname, "/templates");
 
 function ensureDirSync(dirPath: string) {
     if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
+        fs.mkdirSync(dirPath, {recursive: true});
     }
 }
 

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { createFileIfNotExists, kebabToPascalCase } from './utils';
+import {createFileIfNotExists, kebabToPascalCase} from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const servicesOutputPath = path.join(process.cwd(), 'src/modules');
@@ -33,7 +33,7 @@ fs.readdirSync(modelsPath).forEach((folder) => {
     const modelName = kebabToPascalCase(folder);
     const modelOutputPath = path.join(servicesOutputPath, folder);
     if (!fs.existsSync(modelOutputPath)) {
-        fs.mkdirSync(modelOutputPath, { recursive: true });
+        fs.mkdirSync(modelOutputPath, {recursive: true});
         console.log(`Folder for model ${modelName} created.`);
     }
 

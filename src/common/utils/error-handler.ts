@@ -1,5 +1,5 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
-import { MulterError } from 'multer';
+import {BadRequestException, ConflictException, ForbiddenException, NotFoundException, InternalServerErrorException} from '@nestjs/common';
+import {MulterError} from 'multer';
 
 export function handleError(error: any): never {
     console.error('Error:', error);

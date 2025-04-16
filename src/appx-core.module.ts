@@ -1,9 +1,9 @@
-import { DynamicModule, Global, Module, Provider } from '@nestjs/common';
-import { PermissionsConfigProvider, PERMISSIONS_CONFIG_TOKEN } from './common/config/permissions.config.provider';
-import { PermissionsConfigType } from './common/config/permissionsConfigTypes';
-import { PermissionsService } from './common/config/permissions.service';
-import { FileUploadModule } from './modules/file/file-upload.module';
-import { FileUploadModuleOptions } from './common/interfaces/file-upload.interface';
+import {DynamicModule, Global, Module, Provider} from '@nestjs/common';
+import {PermissionsConfigProvider, PERMISSIONS_CONFIG_TOKEN} from './common/config/permissions.config.provider';
+import {PermissionsConfigType} from './common/config/permissionsConfigTypes';
+import {PermissionsService} from './common/config/permissions.service';
+import {FileUploadModule} from './modules/file/file-upload.module';
+import {FileUploadModuleOptions} from './common/interfaces/file-upload.interface';
 
 @Global()
 @Module({})

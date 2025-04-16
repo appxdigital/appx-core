@@ -74,7 +74,7 @@ export abstract class CoreController<T> {
         for (const field of restrictedFields) {
             delete data[field];
         }
-        return this.service.update({ id: Number(id) }, data);
+        return this.service.update({id: Number(id)}, data);
     }
 
     @Delete(':id')

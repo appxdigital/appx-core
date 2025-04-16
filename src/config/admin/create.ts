@@ -23,6 +23,6 @@ try {
     });
 
     console.log('Admin generated successfully!');
-} catch (error : any) {
+} catch (error: any) {
     console.error('Error installing dependencies:', error.message);
 }

@@ -1,5 +1,5 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { StorageService } from '../interfaces/storage-service.interface';
+import {Injectable, BadRequestException} from '@nestjs/common';
+import {StorageService} from '../interfaces/storage-service.interface';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -9,7 +9,7 @@ export class LocalStorageService implements StorageService {
 
     constructor() {
         if (!fs.existsSync(this.uploadDir)) {
-            fs.mkdirSync(this.uploadDir, { recursive: true });
+            fs.mkdirSync(this.uploadDir, {recursive: true});
         }
     }
 

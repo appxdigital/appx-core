@@ -1,7 +1,7 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { Storage } from '@google-cloud/storage';
-import { StorageService } from '../interfaces/storage-service.interface';
-import { ConfigService } from '@nestjs/config';
+import {Injectable, Inject} from '@nestjs/common';
+import {Storage} from '@google-cloud/storage';
+import {StorageService} from '../interfaces/storage-service.interface';
+import {ConfigService} from '@nestjs/config';
 import * as path from 'path';
 
 @Injectable()
