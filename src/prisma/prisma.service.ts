@@ -35,7 +35,7 @@ export class PrismaService {
     getModelDelegate(model: string): any {
         const modelName = model.toLowerCase();
 
-        const client = RequestContext.currentContext.req.prisma || this.prismaClient;
+        const client = RequestContext.currentContext?.req.prisma || this.prismaClient;
 
         if (modelName in client) {
             return (client as any)[modelName];
@@ -45,7 +45,7 @@ export class PrismaService {
     }
 
     get model() {
-        return new Proxy(RequestContext.currentContext.req.prisma || this.prismaClient, {
+        return new Proxy(RequestContext.currentContext?.req.prisma || this.prismaClient, {
             get: (target, prop) => {
                 if (prop in target) {
                     return target[prop as keyof PrismaClient];
