@@ -4,6 +4,7 @@ import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
 import {handleError} from '../common/utils/error-handler';
 import * as path from "path";
 import * as fs from "fs";
+import {RequestContext} from "nestjs-request-context";
 
 
 export const BYPASS_OMISSION = Symbol('BYPASS_OMISSION');
