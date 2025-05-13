@@ -216,7 +216,9 @@ export class PrismaService {
                                 return async (params: any) => {
                                     params = this.applyFieldOmission(String(propKey), userRole, params);
                                     params = this.applyWhereConditions(String(propKey), userRole, params, req.user, methodKey);
-
+                                    if (methodKey === 'count' && !!params.select) {
+                                        delete params.select;
+                                    }
                                     return model[methodKey](params);
                                 };
                             }
@@ -276,6 +278,14 @@ export class PrismaService {
         return args;
     }
 
+    get normalizedPermissionsConfig() {
+        const normalizedConfig : any = {};
+        for (const model in this.permissionsConfig) {
+            normalizedConfig[model.toLowerCase()] = this.permissionsConfig[model];
+        }
+        return normalizedConfig;
+    }
+
     /**
      * Applies `where` conditions to the query based on the user's role and the action being performed.
      * The conditions are pulled from the `PermissionsConfig`.
@@ -296,7 +306,7 @@ export class PrismaService {
         action: string | symbol,
     ): any {
         const belongsToQueue = [];
-        
+
         const permissionsConfig = this.normalizedPermissionsConfig;
         const normalizedName = modelName.toLowerCase().trim();
         const permissions = permissionsConfig[normalizedName]?.[userRole];
@@ -306,7 +316,7 @@ export class PrismaService {
                 continue;
             }
 
-            const relation = this.getRelationType(this.fieldConfigs, modelName, model);
+            const relation = this.getRelationType(modelName, model);
 
             if (relation.relation === 'belongsTo') {
                 const relatedPermissions = permissionsConfig[model.toLowerCase()]?.[userRole]?.[action];
@@ -360,8 +370,6 @@ export class PrismaService {
                 }
             };
 
-            continue;
-
             //TODO This may no longer be of use, since we are defaulting to not returning the parent if it includes a model the user has no access to.
 
             // if (relatedPermissions?.conditions) {
@@ -384,22 +392,21 @@ export class PrismaService {
         return args;
     }
 
-    getRelationType(schema, parentModel, relatedField) {
-
+    getRelationType(parentModel : string, relatedField : string) {
         //TODO Remove what is now unnecessary since this is no longer used to determine the foreign key and it was very strict due to relying on the assumption that said fk would be [model name]_id
 
         parentModel = parentModel.toLowerCase();
         relatedField = relatedField.toLowerCase();
 
-        const parentKey = Object.keys(schema).find(
+        const parentKey = Object.keys(this.fieldConfigs).find(
             key => key.toLowerCase() === parentModel
         );
         if (!parentKey) return { relation: null, identifier: null };
 
-        const parent = schema[parentKey];
+        const parent = this.fieldConfigs[parentKey];
 
         const relationKey = parent.relationFields.find(
-            key => key.toLowerCase() === relatedField
+            (key : string) => key.toLowerCase() === relatedField
         );
         if (!relationKey) return { relation: null, identifier: null };
 
@@ -411,7 +418,7 @@ export class PrismaService {
 
         const foreignKeyName = `${relatedField}_id`;
         const foreignKey = parent.scalarFields.find(
-            key => key.toLowerCase() === foreignKeyName
+            (key : string) => key.toLowerCase() === foreignKeyName
         );
 
         if (foreignKey) {
