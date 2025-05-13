@@ -295,16 +295,43 @@ export class PrismaService {
         user: any,
         action: string | symbol,
     ): any {
-        const normalizedModelName = modelName.charAt(0).toUpperCase() + modelName.slice(1);
-        const permissions = this.permissionsConfig[normalizedModelName]?.[userRole] as any;
+        const belongsToQueue = [];
+        
+        const permissionsConfig = this.normalizedPermissionsConfig;
+        const normalizedName = modelName.toLowerCase().trim();
+        const permissions = permissionsConfig[normalizedName]?.[userRole];
+
+        for (const model of Object.keys(args.select)) {
+            if (!this.fieldConfigs[model.toLowerCase()]) {
+                continue;
+            }
+
+            const relation = this.getRelationType(this.fieldConfigs, modelName, model);
+
+            if (relation.relation === 'belongsTo') {
+                const relatedPermissions = permissionsConfig[model.toLowerCase()]?.[userRole]?.[action];
+                belongsToQueue.push({
+                    modelName: model,
+                    relation,
+                    relatedPermissions,
+                });
+                continue;
+            }
+
+            if (permissionsConfig[model.toLowerCase()]) {
+                this.applyWhereConditions(model, userRole, args.select[model], user, action);
+            } else {
+                throw new ForbiddenException(`No permissions found for model ${model} and role ${userRole}`);
+            }
+        }
 
         if (!permissions) {
-            throw new HttpException(`No permissions found for model ${normalizedModelName} and role ${userRole}`, HttpStatus.FORBIDDEN);
+            throw new HttpException(`No permissions found for model ${modelName} and role ${userRole}`, HttpStatus.FORBIDDEN);
         }
 
         const actionPermissions = permissions[action];
 
-        if (!actionPermissions || actionPermissions === 'ALL' || action === 'create') {
+        if (!actionPermissions || (actionPermissions === 'ALL' && !belongsToQueue?.length) || action === 'create') {
             return args;
         }
 
@@ -316,11 +343,82 @@ export class PrismaService {
 
         args.where = {...args.where, ...whereClause};
 
-        if (Object.keys(args.where).length === 0) {
+        //TODO Test this in more scenarios, it may need to be more robust, it's a quick fix but I must make sure it wont be abused by adding a model with this type of relation to bypass something it shouldn't
+
+        if (Object.keys(args.where).length === 0 && !belongsToQueue?.length) {
             throw new ForbiddenException(`You are not authorized to access this record`);
         }
 
+        for (const entry of belongsToQueue) {
+            const { modelName: relatedModel, relation, relatedPermissions } = entry;
+
+            args.where = {
+                ...args.where,
+                [relatedModel] : {
+                    ...args?.where?.relatedModel ?? {},
+                    ...relatedPermissions?.conditions ?? {}
+                }
+            };
+
+            continue;
+
+            //TODO This may no longer be of use, since we are defaulting to not returning the parent if it includes a model the user has no access to.
+
+            // if (relatedPermissions?.conditions) {
+            //     const relatedWhere = this.buildConditions(relatedPermissions.conditions, user);
+            //     const foreignKey = relation.identifier;
+            //     const foreignKeyValue = args.where?.[foreignKey];
+            //     const requiredValue = relatedWhere[foreignKey] || relatedWhere.id;
+            //
+            //
+            //     if (requiredValue !== undefined && foreignKeyValue !== requiredValue) {
+            // throw new common_1.ForbiddenException(
+            //     `Access denied: You are requesting ${modelName.toUpperCase()} with an associated ${relatedModel.toUpperCase()}, ` +
+            //     `but your permissions only allow access to ${relatedModel.toUpperCase()} where ${foreignKey} is ${requiredValue}. ` +
+            //     `The requested record has ${foreignKey} = ${foreignKeyValue}.`
+            // );
+            //     }
+            // }
+        }
+
         return args;
+    }
+
+    getRelationType(schema, parentModel, relatedField) {
+
+        //TODO Remove what is now unnecessary since this is no longer used to determine the foreign key and it was very strict due to relying on the assumption that said fk would be [model name]_id
+
+        parentModel = parentModel.toLowerCase();
+        relatedField = relatedField.toLowerCase();
+
+        const parentKey = Object.keys(schema).find(
+            key => key.toLowerCase() === parentModel
+        );
+        if (!parentKey) return { relation: null, identifier: null };
+
+        const parent = schema[parentKey];
+
+        const relationKey = parent.relationFields.find(
+            key => key.toLowerCase() === relatedField
+        );
+        if (!relationKey) return { relation: null, identifier: null };
+
+        const fieldType = parent.fieldTypes[relationKey];
+
+        if (fieldType.endsWith('[]')) {
+            return { relation: 'hasMany', identifier: null };
+        }
+
+        const foreignKeyName = `${relatedField}_id`;
+        const foreignKey = parent.scalarFields.find(
+            key => key.toLowerCase() === foreignKeyName
+        );
+
+        if (foreignKey) {
+            return { relation: 'belongsTo', identifier: foreignKey };
+        }
+
+        return { relation: null, identifier: null };
     }
 
     /**
