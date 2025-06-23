@@ -246,7 +246,7 @@ async function main() {
     } else {
         const {provider} = await configureProvider();
         const newEndpointConfig = await configureEndpoint();
-        const configContent = `import { FileUploadModuleOptions } from 'appx_core';
+        const configContent = `import { FileUploadModuleOptions } from 'appx-core';
 
 export const fileUploadConfig: FileUploadModuleOptions = {
     cloudProvider: '${provider}',

@@ -11,7 +11,7 @@ const servicesOutputPath = path.join(process.cwd(), 'src/modules');
  */
 const genericServiceTemplate = (model: string) =>
     `import { Injectable } from '@nestjs/common';
-import { CoreService, PrismaService } from 'appx_core';
+import { CoreService, PrismaService } from 'appx-core';
 import { ${model} } from '@prisma/client';
 
 @Injectable()
