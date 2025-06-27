@@ -57,9 +57,9 @@ export class AuthController {
 
     @UseGuards(AuthenticatedGuard)
     @Get('me')
-    async me(@Req() req: Request, @Res() res: Response) {
+    async me(@Req() req: Request) {
         return {
-            user: this.authService.getCurrentUser(req)
+            user: await this.authService.getCurrentUser(req)
         }
     }
 
