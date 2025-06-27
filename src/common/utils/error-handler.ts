@@ -1,8 +1,10 @@
-import {BadRequestException, ConflictException, ForbiddenException, NotFoundException, InternalServerErrorException} from '@nestjs/common';
+import {BadRequestException, ConflictException, ForbiddenException, NotFoundException, InternalServerErrorException, HttpException} from '@nestjs/common';
 import {MulterError} from 'multer';
 
 export function handleError(error: any): never {
-    console.error('Error:', error);
+    // If it's already an HttpException, just rethrow it
+    if (error instanceof HttpException)
+        throw error;
 
     // Multer errors
     if (error instanceof MulterError) {
@@ -32,5 +34,6 @@ export function handleError(error: any): never {
         }
     }
 
+    console.error('Error:', error);
     throw new InternalServerErrorException(error.message || 'An unknown error occurred.');
 }
