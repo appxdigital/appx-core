@@ -56,6 +56,14 @@ export class AuthController {
     }
 
     @UseGuards(AuthenticatedGuard)
+    @Get('me')
+    async me(@Req() req: Request, @Res() res: Response) {
+        return {
+            user: this.authService.getCurrentUser(req)
+        }
+    }
+
+    @UseGuards(AuthenticatedGuard)
     @Get('sessions')
     async getActiveSessions(@Req() req: Request) {
         const sessions = await this.authService.getActiveSessions(req);

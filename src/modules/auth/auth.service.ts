@@ -110,6 +110,17 @@ export class AuthService {
         return userData;
     }
 
+    async getCurrentUser(req: Request) {
+        if (!req?.user?.id) {
+            throw new UnauthorizedException('Please log-in');
+        }
+        return this.prisma.user.findUnique({
+            where: {
+                id: req?.user?.id,
+            },
+        });
+    }
+
     async getActiveSessions(req: Request) {
         return this.prisma.session.findMany({
             where: {
