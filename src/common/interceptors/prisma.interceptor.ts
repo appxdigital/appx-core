@@ -11,6 +11,7 @@ import {RequestContext} from 'nestjs-request-context';
 import {catchError, tap} from 'rxjs/operators';
 import {Observable, throwError} from 'rxjs';
 import {PrismaClient} from '@prisma/client';
+import {handleError} from "../utils/error-handler";
 
 @Injectable()
 export class PrismaInterceptor implements NestInterceptor {
@@ -49,7 +50,7 @@ export class PrismaInterceptor implements NestInterceptor {
                                 .pipe(
                                     tap(() => {}),
                                     catchError((err) => {
-                                        const handledError = this.prismaService.handleError(err);
+                                        const handledError = handleError(err);
                                         reject(handledError);
                                         return throwError(() => handledError);
                                     }),
@@ -79,8 +80,7 @@ export class PrismaInterceptor implements NestInterceptor {
                 tap(() => {}),
                 catchError((error) => {
                     console.error('Transaction error caught:', error);
-                    const transformedError = this.prismaService.handleError(error);
-                    return throwError(() => transformedError);
+                    return throwError(() => handleError(error));
                 }),
             );
         }
