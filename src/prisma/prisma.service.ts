@@ -5,7 +5,9 @@ import {handleError} from '../common/utils/error-handler';
 import * as path from "path";
 import * as fs from "fs";
 import {RequestContext} from "nestjs-request-context";
+import type {PrismaClient as RuntimeClient} from '.prisma/client';
 
+type ModelKey = keyof RuntimeClient;
 
 export const BYPASS_OMISSION = Symbol('BYPASS_OMISSION');
 
@@ -32,23 +34,23 @@ export class PrismaService {
      * Used in the graphql generic resolver
      * @param model
      */
-    getModelDelegate(model: string): any {
-        const modelName = model.toLowerCase();
+    getModelDelegate<M extends ModelKey>(model: M): RuntimeClient[M] {
+        const modelName = (model as string).toLowerCase();
 
         const client = RequestContext.currentContext?.req.prisma || this.prismaClient;
 
         if (modelName in client) {
-            return (client as any)[modelName];
+            return client[modelName];
         }
 
-        throw new Error(`Model ${model} not found in PrismaClient.`);
+        throw new Error(`Model ${model.toString()} not found in PrismaClient.`);
     }
 
-    get model() {
+    get model(): RuntimeClient {
         return new Proxy(RequestContext.currentContext?.req.prisma || this.prismaClient, {
-            get: (target, prop) => {
+            get: (target: RuntimeClient, prop: ModelKey): RuntimeClient[ModelKey] => {
                 if (prop in target) {
-                    return target[prop as keyof PrismaClient];
+                    return target[prop];
                 } else {
                     throw new Error(`Model ${String(prop)} does not exist on PrismaClient`);
                 }
@@ -57,11 +59,11 @@ export class PrismaService {
     }
 
     get user() {
-        return this.prismaClient.user;
+        return this.model.user;
     }
 
     get session() {
-        return this.prismaClient.session;
+        return this.model.session;
     }
 
     /**
@@ -213,8 +215,9 @@ export class PrismaService {
                     return new Proxy(modelDelegate, {
                         get: (model, methodKey) => {
                             if (typeof model[methodKey] === 'function') {
-                                return async (params: any) => {
-                                    params = this.applyFieldOmission(String(propKey), userRole, params);
+                                return async (params: any, options: any) => {
+                                    if (!options?.[BYPASS_OMISSION])
+                                        params = this.applyFieldOmission(String(propKey), userRole, params);
                                     params = this.applyWhereConditions(String(propKey), userRole, params, req.user, methodKey);
                                     if (methodKey === 'count' && !!params.select) {
                                         delete params.select;
@@ -244,12 +247,8 @@ export class PrismaService {
     private applyFieldOmission(
         modelName: string,
         userRole: string,
-        args: Record<string, any> & {[BYPASS_OMISSION]?: boolean},
+        args: Record<string, any>,
     ): any {
-        if (args && args[BYPASS_OMISSION]) {
-            delete args[BYPASS_OMISSION];
-            return args;
-        }
         const omitFields = this.getFieldsToOmit(modelName, userRole);
         if (!args) {
             args = {};
@@ -279,7 +278,7 @@ export class PrismaService {
     }
 
     get normalizedPermissionsConfig() {
-        const normalizedConfig : any = {};
+        const normalizedConfig: any = {};
         for (const model in this.permissionsConfig) {
             normalizedConfig[model.toLowerCase()] = this.permissionsConfig[model];
         }
@@ -360,11 +359,11 @@ export class PrismaService {
         }
 
         for (const entry of belongsToQueue) {
-            const { modelName: relatedModel, relation, relatedPermissions } = entry;
+            const {modelName: relatedModel, relation, relatedPermissions} = entry;
 
             args.where = {
                 ...args.where,
-                [relatedModel] : {
+                [relatedModel]: {
                     ...args?.where?.relatedModel ?? {},
                     ...relatedPermissions?.conditions ?? {}
                 }
@@ -392,7 +391,7 @@ export class PrismaService {
         return args;
     }
 
-    getRelationType(parentModel : string, relatedField : string) {
+    getRelationType(parentModel: string, relatedField: string) {
         //TODO Remove what is now unnecessary since this is no longer used to determine the foreign key and it was very strict due to relying on the assumption that said fk would be [model name]_id
 
         parentModel = parentModel.toLowerCase();
@@ -401,31 +400,31 @@ export class PrismaService {
         const parentKey = Object.keys(this.fieldConfigs).find(
             key => key.toLowerCase() === parentModel
         );
-        if (!parentKey) return { relation: null, identifier: null };
+        if (!parentKey) return {relation: null, identifier: null};
 
         const parent = this.fieldConfigs[parentKey];
 
         const relationKey = parent.relationFields.find(
-            (key : string) => key.toLowerCase() === relatedField
+            (key: string) => key.toLowerCase() === relatedField
         );
-        if (!relationKey) return { relation: null, identifier: null };
+        if (!relationKey) return {relation: null, identifier: null};
 
         const fieldType = parent.fieldTypes[relationKey];
 
         if (fieldType.endsWith('[]')) {
-            return { relation: 'hasMany', identifier: null };
+            return {relation: 'hasMany', identifier: null};
         }
 
         const foreignKeyName = `${relatedField}_id`;
         const foreignKey = parent.scalarFields.find(
-            (key : string) => key.toLowerCase() === foreignKeyName
+            (key: string) => key.toLowerCase() === foreignKeyName
         );
 
         if (foreignKey) {
-            return { relation: 'belongsTo', identifier: foreignKey };
+            return {relation: 'belongsTo', identifier: foreignKey};
         }
 
-        return { relation: null, identifier: null };
+        return {relation: null, identifier: null};
     }
 
     /**

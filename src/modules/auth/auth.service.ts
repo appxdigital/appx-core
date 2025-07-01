@@ -95,7 +95,13 @@ export class AuthService {
         password: string,
         usernameField: string,
     ): Promise<any> {
-        const user = await this.userService.findByField(usernameField, username);
+        const user = await this.prisma.user.findFirst({
+            where: {
+                [usernameField]: username,
+            }
+        }, {
+            BYPASS_OMISSION: true
+        });
         if (!user) {
             throw new UnauthorizedException(
                 `No user found with this ${usernameField}`,
