@@ -36,7 +36,7 @@ export abstract class CoreController<T> {
     @Get(':id')
     @Permission('findUnique')
     async findOne(@Param('id') id: string) {
-        return this.service.findOne({id: Number(id)});
+        return this.service.findById(id);
     }
 
     @Post()
@@ -74,12 +74,12 @@ export abstract class CoreController<T> {
         for (const field of restrictedFields) {
             delete data[field];
         }
-        return this.service.update({id: Number(id)}, data);
+        return this.service.updateById(id, data);
     }
 
     @Delete(':id')
     @Permission('delete')
     async delete(@Param('id') id: string) {
-        return this.service.delete({id: Number(id)});
+        return this.service.deleteById(id);
     }
 }

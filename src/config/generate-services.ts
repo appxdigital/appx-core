@@ -17,7 +17,7 @@ import { ${model} } from '@prisma/client';
 @Injectable()
 export class ${model}Service extends CoreService<${model}> {
   constructor(prisma: PrismaService) {
-    super(prisma, prisma.model.${model[0].toLowerCase() + model.slice(1)});
+    super(prisma.model.${model[0].toLowerCase() + model.slice(1)});
   }
 
   // Override methods or add custom logic as needed

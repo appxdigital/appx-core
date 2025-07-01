@@ -1,4 +1,4 @@
-import {Injectable, NotFoundException} from '@nestjs/common';
+import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
 import type {PrismaClient} from '.prisma/client';
 import {handleError} from "../../common/utils/error-handler";
 
@@ -35,6 +35,21 @@ export class CoreService<T> {
         return record;
     }
 
+    /**
+     * Find a single record by unique identifier.
+     * @param id - Unique identifier for the record (e.g., 1, 'abc123').
+     * @returns A promise of the record
+     */
+    async findById(id: string): Promise<T | null> {
+        const record = this.modelDelegate.findUnique({
+            where: this._generateWhereFromIdField(id)
+        });
+        if (!record) {
+            throw new NotFoundException(`Record with the given criteria not found`);
+        }
+        return record;
+    }
+
 
     /**
      * Create a new record.
@@ -51,14 +66,14 @@ export class CoreService<T> {
 
     /**
      * Update an existing record with permission conditions.
-     * @param where - Unique identifier.
+     * @param id - Unique identifier for the record (e.g., 1, 'abc123').
      * @param data - Data to update.
      * @returns A promise of the updated record.
      */
-    async update(where: any, data: any): Promise<T> {
+    async updateById(id: string, data: any): Promise<T> {
         try {
             return await this.modelDelegate.update({
-                where,
+                where: this._generateWhereFromIdField(id),
                 data,
             });
         } catch (error) {
@@ -67,15 +82,31 @@ export class CoreService<T> {
     }
 
     /**
-     * Delete a record.
-     * @param where - Unique identifier for the record (e.g., { id: 1 })
+     * Delete a record by identifier.
+     * @param id - Unique identifier for the record (e.g., 1, 'abc123').
      * @returns A promise of the deleted record
      */
-    async delete(where: any): Promise<T> {
+    async deleteById(id: string): Promise<T> {
         try {
-            return await this.modelDelegate.delete({where});
+            return await this.modelDelegate.delete({
+                where: this._generateWhereFromIdField(id)
+            });
         } catch (error) {
             handleError(error);
         }
+    }
+
+    /*
+      * Generates a 'where' clause based on the model's ID field. Depending on the type of the ID field, it may convert the ID to a number.
+     */
+    private _generateWhereFromIdField(id: string | number): any {
+        let idField = this.modelDelegate.fields.id;
+        if (!idField) {
+            throw new BadRequestException(`Model does not have an 'id' field`);
+        }
+        if (idField.typeName != "String") {
+            id = Number(id);
+        }
+        return {id: id};
     }
 }
