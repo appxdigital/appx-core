@@ -1,12 +1,11 @@
 import {Injectable, NotFoundException} from '@nestjs/common';
-import {PrismaService} from '../../prisma/prisma.service';
-import {RequestContext} from 'nestjs-request-context';
+import type {PrismaClient} from '.prisma/client';
+import {handleError} from "../../common/utils/error-handler";
 
 @Injectable()
 export class CoreService<T> {
     constructor(
-        protected readonly prisma: PrismaService,
-        protected readonly modelDelegate: any,
+        protected readonly modelDelegate: PrismaClient[keyof PrismaClient],
     ) {
     }
 
@@ -16,12 +15,10 @@ export class CoreService<T> {
      * @returns A promise of an array of records
      */
     async findAll(params: any = {}): Promise<T[]> {
-        const prisma = RequestContext.currentContext.req.prisma;
         try {
-            return await prisma[this.modelDelegate.name.toLowerCase()].findMany(params);
+            return await this.modelDelegate.findMany(params);
         } catch (error) {
-            this.prisma.handleError(error);
-            throw error;
+            handleError(error);
         }
     }
 
@@ -31,8 +28,7 @@ export class CoreService<T> {
      * @returns A promise of the record
      */
     async findOne(where: any): Promise<T | null> {
-        const prisma = RequestContext.currentContext.req.prisma;
-        const record = await prisma[this.modelDelegate.name.toLowerCase()].findUnique({where});
+        const record = this.modelDelegate.findUnique({where});
         if (!record) {
             throw new NotFoundException(`Record with the given criteria not found`);
         }
@@ -46,12 +42,10 @@ export class CoreService<T> {
      * @returns A promise of the created record.
      */
     async create(data: any): Promise<T> {
-        const prisma = RequestContext.currentContext.req.prisma;
         try {
-            return await prisma[this.modelDelegate.name].create({data});
+            return await this.modelDelegate.create({data});
         } catch (error) {
-            this.prisma.handleError(error);
-            throw error;
+            handleError(error);
         }
     }
 
@@ -62,14 +56,13 @@ export class CoreService<T> {
      * @returns A promise of the updated record.
      */
     async update(where: any, data: any): Promise<T> {
-        const prisma = RequestContext.currentContext.req.prisma;
         try {
-            return await prisma[this.modelDelegate.name].update({
+            return await this.modelDelegate.update({
                 where,
                 data,
             });
         } catch (error) {
-            this.prisma.handleError(error);
+            handleError(error);
         }
     }
 
@@ -79,12 +72,10 @@ export class CoreService<T> {
      * @returns A promise of the deleted record
      */
     async delete(where: any): Promise<T> {
-        const prisma = RequestContext.currentContext.req.prisma;
         try {
-            return await prisma[this.modelDelegate.name.toLowerCase()].delete({where});
+            return await this.modelDelegate.delete({where});
         } catch (error) {
-            this.prisma.handleError(error);
-            throw error;
+            handleError(error);
         }
     }
 }

@@ -1,7 +1,6 @@
-import {BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, NotFoundException,} from '@nestjs/common';
+import {ForbiddenException, HttpException, HttpStatus, Inject, Injectable} from '@nestjs/common';
 import {Prisma, PrismaClient} from '@prisma/client';
 import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
-import {handleError} from '../common/utils/error-handler';
 import * as path from "path";
 import * as fs from "fs";
 import {RequestContext} from "nestjs-request-context";
@@ -583,16 +582,5 @@ export class PrismaService {
         throw new Error(
             `Relation key ${relationKey} not found in model ${parentModelName}`,
         );
-    }
-
-    /**
-     * Handles errors thrown by Prisma queries and converts them into appropriate exceptions.
-     * This function interprets various Prisma error codes and throws NestJS exceptions.
-     *
-     * @param error - The error thrown by Prisma.
-     * @throws ConflictException, NotFoundException, BadRequestException, or InternalServerErrorException.
-     */
-    handleError(error: any): never {
-        return handleError(error);
     }
 }
