@@ -187,7 +187,7 @@ export class PrismaService {
 
     // Helper method to identify scalar types
     private isScalarType(fieldType: string): boolean {
-        const scalarTypes = ['Int', 'String', 'Boolean', 'DateTime', 'Float'];
+        const scalarTypes = ['Int', 'String', 'Boolean', 'DateTime', 'Float', 'BigInt', 'Decimal', 'Json', 'Bytes', 'Unsupported'];
         return scalarTypes.includes(fieldType);
     }
 
