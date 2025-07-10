@@ -18,12 +18,12 @@ export class CorePrismaSessionStore extends Store {
         callback: (err: any, session?: any | null) => void,
     ) => {
         try {
-            const record = await this.prisma.session.findUnique({where: {sid}});
+            const record = await this.prisma.session.findUnique({where: {sid}}, {BYPASS_FILTERING: true});
             if (!record) {
                 return callback(null, null);
             }
             if (record.expiresAt && record.expiresAt <= new Date()) {
-                await this.prisma.session.delete({where: {sid}});
+                await this.prisma.session.delete({where: {sid}}, {BYPASS_FILTERING: true});
                 return callback(null, null);
             }
             const session = JSON.parse(record.data);
@@ -63,6 +63,8 @@ export class CorePrismaSessionStore extends Store {
                     expiresAt,
                     userId,
                 },
+            }, {
+                BYPASS_FILTERING: true
             });
             callback?.();
         } catch (err) {
@@ -73,7 +75,7 @@ export class CorePrismaSessionStore extends Store {
 
     public destroy = async (sid: string, callback?: (err?: any) => void) => {
         try {
-            await this.prisma.session.delete({where: {sid}});
+            await this.prisma.session.delete({where: {sid}}, {BYPASS_FILTERING: true});
             callback?.();
         } catch (err) {
             if (
@@ -100,7 +102,7 @@ export class CorePrismaSessionStore extends Store {
             await this.prisma.session.update({
                 where: {sid},
                 data: {expiresAt},
-            });
+            }, {BYPASS_FILTERING: true});
             if (callback) callback();
         } catch (err) {
             if (callback) callback(err);

@@ -51,6 +51,7 @@ export class AuthService {
             if (req?.user) {
                 req.login(req.user, (err) => {
                     if (err) {
+                        console.error('Login error:', err);
                         return reject(
                             new HttpException('Login failed', HttpStatus.INTERNAL_SERVER_ERROR),
                         );
@@ -82,6 +83,7 @@ export class AuthService {
             }
             req.session.destroy((err) => {
                 if (err) {
+                    console.error('Failed to destroy session: ', err);
                     return reject(new Error('Failed to destroy session.'));
                 }
                 res.clearCookie(this.sessionCookieName);
@@ -100,7 +102,8 @@ export class AuthService {
                 [usernameField]: username,
             }
         }, {
-            BYPASS_OMISSION: true
+            BYPASS_OMISSION: true,
+            BYPASS_FILTERING: true
         });
         if (!user) {
             throw new UnauthorizedException(
@@ -143,6 +146,7 @@ export class AuthService {
             await new Promise<void>((resolve, reject) => {
                 req.session.destroy((err) => {
                     if (err) {
+                        console.error('Failed to destroy current session:', err);
                         return reject(new Error('Failed to destroy current session.'));
                     }
                     res.clearCookie(this.sessionCookieName);

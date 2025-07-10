@@ -41,7 +41,7 @@ export class CoreService<T> {
      * @returns A promise of the record
      */
     async findById(id: string): Promise<T | null> {
-        const record = this.modelDelegate.findUnique({
+        const record = await this.modelDelegate.findUnique({
             where: this._generateWhereFromIdField(id)
         });
         if (!record) {

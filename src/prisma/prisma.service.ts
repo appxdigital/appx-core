@@ -8,8 +8,6 @@ import type {PrismaClient as RuntimeClient} from '.prisma/client';
 
 type ModelKey = keyof RuntimeClient;
 
-export const BYPASS_OMISSION = Symbol('BYPASS_OMISSION');
-
 @Injectable()
 export class PrismaService {
     private fieldConfigs: Record<string, any> = {};
@@ -22,10 +20,48 @@ export class PrismaService {
     ) {
         this.prismaClient = prismaClient;
         this.parseSchema();
+        this.proxyModels();
     }
 
     $transaction<T>(fn: (prisma: Prisma.TransactionClient) => Promise<T>) {
         return this.prismaClient.$transaction(fn);
+    }
+
+    proxyModels() {
+        // Proxy client to intercept model calls
+        this.prismaClient = new Proxy(this.prismaClient, {
+            get: (target, propKey) => {
+                const modelDelegate = target[propKey];
+                if (typeof modelDelegate === 'object' && modelDelegate !== null && !['$connect', '$disconnect', '$use', '$on'].includes(propKey.toString()) && !propKey.toString().startsWith?.('_') && !propKey.toString().startsWith?.('$')) {
+                    // Proxy model methods to apply field omission and where conditions
+                    return new Proxy(modelDelegate, {
+                        get: (model, methodKey) => {
+                            const user = RequestContext.currentContext?.req.user || {};
+                            const userRole = user?.role || 'GUEST';
+                            if (typeof model[methodKey] === 'function' && !methodKey.toString().startsWith('_') && !methodKey.toString().startsWith('$')) {
+                                const contextModel = RequestContext.currentContext?.req.prisma?.[propKey] || model;
+                                return async (params: any, options: any) => {
+                                    if (!options?.BYPASS_OMISSION)
+                                        params = this.applyFieldOmission(String(propKey), userRole, params);
+                                    if (!options?.BYPASS_FILTERING) {
+                                        params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
+                                        // findUnique should be findFirst for where conditions to work properly
+                                        if (methodKey === 'findUnique')
+                                            methodKey = 'findFirst';
+                                    }
+                                    if (methodKey === 'count' && !!params.select) {
+                                        delete params.select;
+                                    }
+                                    return contextModel[methodKey](params);
+                                };
+                            }
+                            return model[methodKey];
+                        },
+                    });
+                }
+                return modelDelegate;
+            },
+        });
     }
 
     /**
@@ -36,7 +72,7 @@ export class PrismaService {
     getModelDelegate<M extends ModelKey>(model: M): RuntimeClient[M] {
         const modelName = (model as string).toLowerCase();
 
-        const client = RequestContext.currentContext?.req.prisma || this.prismaClient;
+        const client = this.prismaClient;
 
         if (modelName in client) {
             return client[modelName];
@@ -58,11 +94,11 @@ export class PrismaService {
     }
 
     get user() {
-        return this.model.user;
+        return this.prismaClient.user;
     }
 
     get session() {
-        return this.model.session;
+        return this.prismaClient.session;
     }
 
     /**
@@ -191,49 +227,6 @@ export class PrismaService {
         return scalarTypes.includes(fieldType);
     }
 
-
-    /**
-     * Creates a Prisma client that applies role-based field omission and where conditions.
-     * It uses Proxies to intercept Prisma queries and modify them based on the user's role.
-     *
-     * @param req - The current request object containing user information.
-     * @param transactionClient
-     * @returns A proxied Prisma client with role-based access control.
-     */
-
-    getPrismaClientWithRole(req: any, transactionClient?: Prisma.TransactionClient): PrismaClient | Prisma.TransactionClient {
-        const userRole = req.user?.role || 'GUEST';
-
-        const client = transactionClient || this.prismaClient;
-
-        return new Proxy(client, {
-            get: (target, propKey) => {
-                const modelDelegate = target[propKey];
-
-                if (typeof modelDelegate === 'object' && modelDelegate !== null && !['$connect', '$disconnect', '$use', '$on'].includes(propKey as string)) {
-                    return new Proxy(modelDelegate, {
-                        get: (model, methodKey) => {
-                            if (typeof model[methodKey] === 'function') {
-                                return async (params: any, options: any) => {
-                                    if (!options?.[BYPASS_OMISSION])
-                                        params = this.applyFieldOmission(String(propKey), userRole, params);
-                                    params = this.applyWhereConditions(String(propKey), userRole, params, req.user, methodKey);
-                                    if (methodKey === 'count' && !!params.select) {
-                                        delete params.select;
-                                    }
-                                    return model[methodKey](params);
-                                };
-                            }
-                            return model[methodKey];
-                        },
-                    });
-                }
-                return modelDelegate;
-            },
-        });
-    }
-
-
     /**
      * Applies field omission logic based on the user's role.
      * Fields that the user does not have permission to access are removed from the query.
@@ -349,7 +342,7 @@ export class PrismaService {
             args.where = {};
         }
 
-        args.where = {...args.where, ...whereClause};
+        args.where = {AND: [args.where, whereClause]};
 
         //TODO Test this in more scenarios, it may need to be more robust, it's a quick fix but I must make sure it wont be abused by adding a model with this type of relation to bypass something it shouldn't
 
@@ -358,13 +351,15 @@ export class PrismaService {
         }
 
         for (const entry of belongsToQueue) {
-            const {modelName: relatedModel, relation, relatedPermissions} = entry;
+            const {modelName: relatedModel, relatedPermissions} = entry;
 
             args.where = {
                 ...args.where,
                 [relatedModel]: {
-                    ...args?.where?.relatedModel ?? {},
-                    ...relatedPermissions?.conditions ?? {}
+                    AND: [
+                        args?.where?.[relatedModel] ?? {},
+                        this.buildConditions(relatedPermissions?.conditions, user)
+                    ]
                 }
             };
 

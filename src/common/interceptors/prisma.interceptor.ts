@@ -39,11 +39,7 @@ export class PrismaInterceptor implements NestInterceptor {
             return new Observable((observer) => {
                 this.prismaService
                     .$transaction(async (transactionClient: PrismaClient) => {
-                        RequestContext.currentContext.req.prisma =
-                            this.prismaService.getPrismaClientWithRole(
-                                req,
-                                transactionClient,
-                            );
+                        RequestContext.currentContext.req.prisma = transactionClient;
                         await new Promise((resolve, reject) => {
                             next
                                 .handle()
@@ -58,10 +54,12 @@ export class PrismaInterceptor implements NestInterceptor {
                                 .subscribe({
                                     next: (result) => observer.next(result),
                                     complete: () => {
+                                        delete RequestContext.currentContext.req.prisma;
                                         observer.complete();
                                         resolve(null);
                                     },
                                     error: (err) => {
+                                        delete RequestContext.currentContext.req.prisma;
                                         observer.error(err);
                                         reject(err);
                                     },
@@ -69,17 +67,14 @@ export class PrismaInterceptor implements NestInterceptor {
                         });
                     })
                     .catch((err: Error) => {
+                        delete RequestContext.currentContext.req.prisma;
                         observer.error(err);
                     });
             });
         } else {
-            RequestContext.currentContext.req.prisma =
-                this.prismaService.getPrismaClientWithRole(req);
-
             return next.handle().pipe(
                 tap(() => {}),
                 catchError((error) => {
-                    console.error('Transaction error caught:', error);
                     return throwError(() => handleError(error));
                 }),
             );
