@@ -1,7 +1,7 @@
 import {
     CanActivate,
     ExecutionContext,
-    ForbiddenException, Inject,
+    ForbiddenException, HttpException, Inject,
     Injectable,
     UnauthorizedException,
 } from '@nestjs/common';
@@ -31,9 +31,13 @@ export class RbacGuard implements CanActivate {
         const controller = context.getClass() as any;
         const model = controller?.entityName;
 
+        if (!model || model === '') {
+            throw new HttpException('Entity name is not set. Please override method `static get entityName()` in the controller with the permissions entity.', 500);
+        }
+
         const rolePermissions = this.permissionsConfig[model]?.[user.role];
         if (!rolePermissions) {
-            throw new UnauthorizedException(
+            throw new ForbiddenException(
                 `No permissions defined for role ${user.role} on model ${model}`,
             );
         }
