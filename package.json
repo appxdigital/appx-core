@@ -1,12 +1,12 @@
 {
-    "name": "appx-core",
-    "version": "0.1.66",
+    "name": "@appxdigital/appx-core",
+    "version": "0.1.68",
     "description": "Appx Core is a library that provides a set of tools to help you build your application faster.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
         "build": "tsc",
-        "npm:publish": "rimraf dist && npm run build && npm publish",
+        "npm:publish": "rimraf dist && npm run build && npm publish --access=public",
         "db-pull": "npx prisma db pull && prisma-case-format --table-case pascal --field-case camel --enum-case pascal --file prisma/schema.prisma"
     },
     "keywords": [],
@@ -61,8 +61,6 @@
         "glob": "^9.0.0"
     },
     "files": [
-        "dist",
-        "src",
-        "assets"
+        "dist"
     ]
 }

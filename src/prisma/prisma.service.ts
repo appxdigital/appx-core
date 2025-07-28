@@ -41,7 +41,8 @@ export class PrismaService {
                             if (typeof model[methodKey] === 'function' && !methodKey.toString().startsWith('_') && !methodKey.toString().startsWith('$')) {
                                 const contextModel = RequestContext.currentContext?.req.prisma?.[propKey] || model;
                                 return async (params: any, options: any) => {
-                                    if (!options?.BYPASS_OMISSION)
+                                    // delete, deleteMany, update and updateMany methods should not apply field omission because they are not selecting fields
+                                    if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany'].includes(methodKey.toString()))
                                         params = this.applyFieldOmission(String(propKey), userRole, params);
                                     if (!options?.BYPASS_FILTERING) {
                                         params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
@@ -49,9 +50,11 @@ export class PrismaService {
                                         if (methodKey === 'findUnique')
                                             methodKey = 'findFirst';
                                         // delete should become deleteMany for where conditions to work properly
-                                        if (methodKey === 'delete') {
+                                        if (methodKey === 'delete')
                                             methodKey = 'deleteMany';
-                                        }
+                                        // update should become updateMany for where conditions to work properly
+                                        if (methodKey === 'update')
+                                            methodKey = 'updateMany';
                                     }
                                     if (methodKey === 'count' && !!params.select) {
                                         delete params.select;
@@ -300,6 +303,9 @@ export class PrismaService {
         user: any,
         action: string | symbol,
     ): any {
+        if (!args) {
+            args = {};
+        }
         const belongsToQueue = [];
 
         const permissionsConfig = this.normalizedPermissionsConfig;
