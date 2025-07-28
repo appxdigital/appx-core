@@ -48,6 +48,10 @@ export class PrismaService {
                                         // findUnique should be findFirst for where conditions to work properly
                                         if (methodKey === 'findUnique')
                                             methodKey = 'findFirst';
+                                        // delete should become deleteMany for where conditions to work properly
+                                        if (methodKey === 'delete') {
+                                            methodKey = 'deleteMany';
+                                        }
                                     }
                                     if (methodKey === 'count' && !!params.select) {
                                         delete params.select;
