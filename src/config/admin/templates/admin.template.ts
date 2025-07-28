@@ -4,7 +4,7 @@ import {addBasicFilters, createActions, createPermissionHandler, dynamicImport, 
 import {initializeComponents} from './component-loader';
 import {readFileSync} from 'fs';
 import {getDMMF} from '@prisma/sdk';
-import {PrismaService} from 'appx-core';
+import {PrismaService} from '@appxdigital/appx-core';
 import {PrismaModule} from "../prisma/prisma.module";
 
 const DEFAULT_ADMIN = {

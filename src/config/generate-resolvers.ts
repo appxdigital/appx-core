@@ -12,7 +12,7 @@ const outputPath = path.join(process.cwd(), 'src/modules');
  */
 const genericResolverTemplate = (model: string, folder: string) =>
     `import { Resolver } from '@nestjs/graphql';
-import { GenericResolverFactory, PrismaService } from 'appx-core';
+import { GenericResolverFactory, PrismaService } from '@appxdigital/appx-core';
 import { ${model} } from '../../generated/${folder}/${folder}.model';
 import { ${model}CreateInput } from '../../generated/${folder}/${folder}-create.input';
 import { ${model}UpdateInput } from '../../generated/${folder}/${folder}-update.input';

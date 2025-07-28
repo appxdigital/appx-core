@@ -14,7 +14,7 @@ const genericControllerTemplate = (model: string, folder: string) => `
 import { Controller } from '@nestjs/common';
 import { ${model}Service } from './${folder}.service';
 import { ${model} } from '@prisma/client';
-import { CoreController } from 'appx-core';
+import { CoreController } from '@appxdigital/appx-core';
 
 @Controller('${model.toLowerCase()}s')
 export class ${model}Controller extends CoreController<${model}> {
