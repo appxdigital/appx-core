@@ -312,27 +312,29 @@ export class PrismaService {
         const normalizedName = modelName.toLowerCase().trim();
         const permissions = permissionsConfig[normalizedName]?.[userRole];
 
-        for (const model of Object.keys(args.select)) {
-            if (!this.fieldConfigs[model.toLowerCase()]) {
-                continue;
-            }
+        if (args.select) {
+            for (const model of Object.keys(args.select)) {
+                if (!this.fieldConfigs[model.toLowerCase()]) {
+                    continue;
+                }
 
-            const relation = this.getRelationType(modelName, model);
+                const relation = this.getRelationType(modelName, model);
 
-            if (relation.relation === 'belongsTo') {
-                const relatedPermissions = permissionsConfig[model.toLowerCase()]?.[userRole]?.[action];
-                belongsToQueue.push({
-                    modelName: model,
-                    relation,
-                    relatedPermissions,
-                });
-                continue;
-            }
+                if (relation.relation === 'belongsTo') {
+                    const relatedPermissions = permissionsConfig[model.toLowerCase()]?.[userRole]?.[action];
+                    belongsToQueue.push({
+                        modelName: model,
+                        relation,
+                        relatedPermissions,
+                    });
+                    continue;
+                }
 
-            if (permissionsConfig[model.toLowerCase()]) {
-                this.applyWhereConditions(model, userRole, args.select[model], user, action);
-            } else {
-                throw new ForbiddenException(`No permissions found for model ${model} and role ${userRole}`);
+                if (permissionsConfig[model.toLowerCase()]) {
+                    this.applyWhereConditions(model, userRole, args.select[model], user, action);
+                } else {
+                    throw new ForbiddenException(`No permissions found for model ${model} and role ${userRole}`);
+                }
             }
         }
 
