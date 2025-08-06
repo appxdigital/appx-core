@@ -64,6 +64,10 @@ export class PrismaService {
         return this.prismaClient.session;
     }
 
+    get userRefreshToken() {
+        return this.prismaClient.userRefreshToken;
+    }
+
     /**
      * Parses the Prisma schema to extract model information and field configurations
      * including custom annotations (e.g., @Role(CLIENT)) and enums.
@@ -112,7 +116,7 @@ export class PrismaService {
                 fieldTypes,
                 scalarFields,
                 relationFields,
-            } = this.extractFieldsFromModel(modelBody);
+            } = this.extractFieldsFromModel(modelBody, enums);
 
             models[modelName.toLowerCase()] = {
                 fieldConfig,
@@ -131,7 +135,7 @@ export class PrismaService {
      * @param modelBody - The body of the model in the schema.
      * @returns A parsed object with fields and their custom annotations.
      */
-    private extractFieldsFromModel(modelBody: string): Record<string, any> {
+    private extractFieldsFromModel(modelBody: string, enums: string[]): Record<string, any> {
         const allFields: string[] = [];
         const fieldConfig: Record<string, string[]> = {};
         const fieldTypes: Record<string, string> = {};
@@ -167,7 +171,7 @@ export class PrismaService {
             fieldTypes[fieldName] = fieldType;
 
             let baseType = fieldType.replace('?', '').replace('[]', '');
-            if (this.isScalarType(baseType)) {
+            if (this.isScalarType(baseType, enums)) {
                 scalarFields.push(fieldName);
             } else {
                 relationFields.push(fieldName);
@@ -185,9 +189,9 @@ export class PrismaService {
 
 
     // Helper method to identify scalar types
-    private isScalarType(fieldType: string): boolean {
-        const scalarTypes = ['Int', 'String', 'Boolean', 'DateTime', 'Float'];
-        return scalarTypes.includes(fieldType);
+    private isScalarType(fieldType: string, enums: string[]): boolean {
+        const scalarTypes = ['Int', 'String', 'Boolean', 'DateTime', 'Float', 'BigInt', 'Decimal', 'Json', 'Bytes', 'Unsupported'];
+        return scalarTypes.includes(fieldType) || enums.includes(fieldType);
     }
 
 
@@ -202,7 +206,6 @@ export class PrismaService {
 
     getPrismaClientWithRole(req: any, transactionClient?: Prisma.TransactionClient): PrismaClient | Prisma.TransactionClient {
         const userRole = req.user?.role || 'GUEST';
-
         const client = transactionClient || this.prismaClient;
 
         return new Proxy(client, {
@@ -213,6 +216,7 @@ export class PrismaService {
                     return new Proxy(modelDelegate, {
                         get: (model, methodKey) => {
                             if (typeof model[methodKey] === 'function') {
+
                                 return async (params: any) => {
                                     params = this.applyFieldOmission(String(propKey), userRole, params);
                                     params = this.applyWhereConditions(String(propKey), userRole, params, req.user, methodKey);
