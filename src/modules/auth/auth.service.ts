@@ -39,6 +39,7 @@ export class AuthService {
                 user: userWithoutPassword,
             };
         } catch (error) {
+            console.error(error);
             throw new HttpException(
                 'There was an error while creating your account. Please try again later.',
                 HttpStatus.INTERNAL_SERVER_ERROR,
