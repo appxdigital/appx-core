@@ -25,10 +25,15 @@ export class CoreService<T> {
     /**
      * Find a single record by unique identifier.
      * @param where - Unique identifier for the record (e.g., { id: 1 })
+     * @param options - Additional query options (e.g., include, select)
      * @returns A promise of the record
      */
-    async findOne(where: any): Promise<T | null> {
-        const record = this.modelDelegate.findUnique({where});
+    async findOne(where: any, options: any = {}): Promise<T | null> {
+        const record = this.modelDelegate.findUnique({
+            where,
+            ...options
+        });
+
         if (!record) {
             throw new NotFoundException(`Record with the given criteria not found`);
         }
@@ -49,7 +54,6 @@ export class CoreService<T> {
         }
         return record;
     }
-
 
     /**
      * Create a new record.

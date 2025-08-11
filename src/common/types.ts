@@ -12,7 +12,7 @@ declare global {
 
             logout(callback: (err: any) => void): void;
 
-            user?: any;
+            user?: User | undefined;
         }
 
         interface User extends Record<string, any> {

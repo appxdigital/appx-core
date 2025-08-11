@@ -1,19 +1,11 @@
-import {
-    Controller,
-    Post,
-    Body,
-    UseGuards,
-    Req,
-    Get,
-    Res,
-    HttpException,
-    HttpStatus, Param, ForbiddenException,
-} from '@nestjs/common';
+import {Body, Controller, ForbiddenException, Get, HttpException, HttpStatus, Param, Post, Req, Res, UseGuards,} from '@nestjs/common';
 import {AuthService} from './auth.service';
 import {RegisterDto} from './dto/register.dto';
 import {LocalAuthGuard} from './local-auth.guard';
 import {AuthenticatedGuard} from './authenticated.guard';
 import {Request, Response} from 'express';
+import {RefreshTokenGuard} from "./refresh-token.guard";
+
 
 @Controller('auth')
 export class AuthController {
@@ -102,5 +94,29 @@ export class AuthController {
         } else {
             res.status(HttpStatus.NOT_FOUND).send({message: 'Session not found.'});
         }
+    }
+
+    @UseGuards(LocalAuthGuard)
+    @Post('login/jwt')
+    async loginJwt(@Req() req: Request) {
+        return await this.authService.loginJwt(req.user);
+    }
+
+    @UseGuards(RefreshTokenGuard)
+    @Post('refresh')
+    async refreshTokens(@Req() req: Request) {
+        const userFromGuard = req.user as any;
+        return this.authService.refreshTokens(userFromGuard);
+    }
+
+    @UseGuards(LocalAuthGuard)
+    @Post('logout/jwt')
+    async logoutJwt(@Req() req: Request) {
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+        }
+        await this.authService.revokeRefreshTokensForUser(userId);
+        return {message: 'Logout successful'};
     }
 }
