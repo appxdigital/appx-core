@@ -4,12 +4,23 @@ import {PrismaClientKnownRequestError} from '@prisma/client/runtime/library';
 import {PrismaService} from '../../../prisma/prisma.service';
 import {createId} from '@paralleldrive/cuid2';
 
+export type Options = {
+    ttl: number;
+}
 
 export class CorePrismaSessionStore extends Store {
     private prisma: PrismaClient;
+    private options: Options;
 
-    constructor(prismaService: PrismaService) {
+    constructor(prismaService: PrismaService, options?: Options) {
         super();
+
+        // Merge default options with provided options
+        const defaultOptions: Options = {
+            ttl: 3600 * 24, // Default to 1 day
+        };
+        this.options = {...defaultOptions, ...(options || {})};
+
         this.prisma = prismaService.prismaClient;
     }
 
@@ -47,7 +58,7 @@ export class CorePrismaSessionStore extends Store {
             const expiresAt =
                 session.cookie && session.cookie.expires
                     ? new Date(session.cookie.expires)
-                    : null;
+                    : new Date(Date.now() + this.options.ttl * 1000);
 
             await this.prisma.session.upsert({
                 where: {sid},
@@ -98,6 +109,8 @@ export class CorePrismaSessionStore extends Store {
             let expiresAt = null;
             if (session.cookie && session.cookie.maxAge) {
                 expiresAt = new Date(Date.now() + session.cookie.maxAge);
+            } else {
+                expiresAt = new Date(Date.now() + this.options.ttl * 1000);
             }
             await this.prisma.session.update({
                 where: {sid},

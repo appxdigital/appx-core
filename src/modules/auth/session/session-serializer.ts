@@ -13,6 +13,9 @@ export class SessionSerializer extends PassportSerializer {
     }
 
     async deserializeUser(userId: string, done: Function) {
+        if (!userId) {
+            return done(new Error('No userId provided'), null);
+        }
         try {
             const user = await this.prisma.user.findUniqueOrThrow({
                 where: {id: Number(userId)},
@@ -20,9 +23,13 @@ export class SessionSerializer extends PassportSerializer {
                     id: true,
                     role: true,
                 },
+            }, {
+                BYPASS_FILTERING: true,
+                BYPASS_OMISSION: true,
             });
             done(null, user);
         } catch (error) {
+            console.debug('Error deserializing user:', error);
             done(new Error('User not found'), null);
         }
     }

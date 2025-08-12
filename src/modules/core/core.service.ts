@@ -74,7 +74,7 @@ export class CoreService<T> {
      * @param data - Data to update.
      * @returns A promise of the updated record.
      */
-    async updateById(id: string, data: any): Promise<T> {
+    async updateById(id: string | number, data: any): Promise<T> {
         try {
             return await this.modelDelegate.update({
                 where: this._generateWhereFromIdField(id),
@@ -90,7 +90,7 @@ export class CoreService<T> {
      * @param id - Unique identifier for the record (e.g., 1, 'abc123').
      * @returns A promise of the deleted record
      */
-    async deleteById(id: string): Promise<T> {
+    async deleteById(id: string | number): Promise<T> {
         try {
             return await this.modelDelegate.delete({
                 where: this._generateWhereFromIdField(id)

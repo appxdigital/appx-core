@@ -12,8 +12,9 @@ import {PrismaService} from '../../prisma/prisma.service';
 import {ConfigService} from '@nestjs/config';
 import {Request, Response} from 'express';
 import {JwtService} from "@nestjs/jwt";
-import {User} from "../../common/interfaces/user.interface";
 import {createId} from "@paralleldrive/cuid2";
+// @ts-ignore
+import {User} from "@prisma/client";
 
 @Injectable()
 export class AuthService {
@@ -41,7 +42,7 @@ export class AuthService {
             const {password, ...userWithoutPassword} = newUser;
             return {
                 message: 'Registration successful',
-                user: userWithoutPassword,
+                user: userWithoutPassword as Omit<User, 'password'>,
             };
         } catch (error) {
             console.error(error);
@@ -219,6 +220,10 @@ export class AuthService {
                 userId: user.id,
                 expiresAt: expiresAt,
             },
+            },
+            // @ts-ignore
+            {
+                BYPASS_FILTERING: true,
         });
 
         return {access_token: accessToken, refresh_token: refreshTokenString};
@@ -233,6 +238,10 @@ export class AuthService {
         await this.prisma.userRefreshToken.update({
             where: {id: currentTokenId},
             data: {revokedAt: new Date()},
+            },
+            // @ts-ignore
+            {
+                BYPASS_FILTERING: true,
         });
 
         const user = await this.userService.findByField("id", userId);
@@ -267,6 +276,10 @@ export class AuthService {
         await this.prisma.userRefreshToken.updateMany({
             where: {userId: userId, revokedAt: null},
             data: {revokedAt: new Date()},
+            },
+            // @ts-ignore
+            {
+                BYPASS_FILTERING: true,
         });
     }
 }
