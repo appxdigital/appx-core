@@ -28,7 +28,7 @@ export function handleError(error: any): never {
             case 'P2025':
                 throw new NotFoundException('The requested record was not found.');
             case 'P2003':
-                throw new ForbiddenException('You are not authorized to perform this action.');
+                throw new ForbiddenException('Foreign key constraint failed:', error.message);
             default:
                 throw new BadRequestException('A Prisma database error occurred.');
         }

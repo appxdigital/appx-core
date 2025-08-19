@@ -89,7 +89,7 @@ export class PrismaService {
     }
 
     get model(): RuntimeClient {
-        return new Proxy(RequestContext.currentContext?.req.prisma || this.prismaClient, {
+        return new Proxy(this.prismaClient, {
             get: (target: RuntimeClient, prop: ModelKey): RuntimeClient[ModelKey] => {
                 if (prop in target) {
                     return target[prop];
@@ -471,6 +471,9 @@ export class PrismaService {
      * @returns The condition with placeholders replaced by actual values.
      */
     private replacePlaceholders(condition: any, user: any): any {
+        if (condition === null) {
+            return null;
+        }
 
         if (typeof condition === 'string') {
             if (condition === '$USER_ID') {
@@ -588,7 +591,8 @@ export class PrismaService {
             throw new Error(`Model information not found for ${parentModelName}`);
         }
         if (modelInfo.relationFields.includes(relationKey)) {
-            return modelInfo.fieldTypes[relationKey].toLowerCase();
+            // Remove [] and ? from the field type to get the related model name TODO assumes that there are no other relation qualifiers
+            return modelInfo.fieldTypes[relationKey].toLowerCase().replace('[]', '').replace('?', '');
         }
 
         throw new Error(
