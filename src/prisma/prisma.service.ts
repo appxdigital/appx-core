@@ -42,7 +42,7 @@ export class PrismaService {
                                 const contextModel = RequestContext.currentContext?.req.prisma?.[propKey] || model;
                                 return async (params: any, options: any) => {
                                     // delete, deleteMany, update and updateMany methods should not apply field omission because they are not selecting fields
-                                    if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'create'].includes(methodKey.toString()))
+                                    if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'create', 'createMany'].includes(methodKey.toString()))
                                         params = this.applyFieldOmission(String(propKey), userRole, params);
                                     if (!options?.BYPASS_FILTERING) {
                                         params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
