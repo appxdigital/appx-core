@@ -46,6 +46,8 @@ export class PrismaService {
                                         params = this.applyFieldOmission(String(propKey), userRole, params);
                                     if (!options?.BYPASS_FILTERING) {
                                         params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
+                                        // Extract where conditions from inside select
+                                        params = this.extractWhereFromSelect(params);
                                         // findUnique should be findFirst for where conditions to work properly
                                         if (methodKey === 'findUnique')
                                             methodKey = 'findFirst';
@@ -336,7 +338,22 @@ export class PrismaService {
                 }
 
                 if (permissionsConfig[model.toLowerCase()]) {
-                    this.applyWhereConditions(model, userRole, args.select[model], user, action);
+                    /* Where conditions are applied outside of the select. Example as per documentation:
+                    const result = await prisma.user.findFirst({
+                      select: {
+                        posts: {
+                          where: {
+                            published: false,
+                          },
+                          select: {
+                            title: true,
+                          },
+                        },
+                      },
+                    })
+                     */
+                    args.select[model].where = this.applyWhereConditions(model, userRole, args.select[model], user, action).where;
+                    delete args.select[model].select.where;
                 } else {
                     throw new ForbiddenException(`No permissions found for model ${model} and role ${userRole}`);
                 }
@@ -356,10 +373,10 @@ export class PrismaService {
         const whereClause = this.buildConditions(actionPermissions.conditions, user);
 
         if (!args.where) {
-            args.where = {};
+            args.where = whereClause;
+        } else {
+            args.where = {AND: [args.where, whereClause]};
         }
-
-        args.where = {AND: [args.where, whereClause]};
 
         //TODO Test this in more scenarios, it may need to be more robust, it's a quick fix but I must make sure it wont be abused by adding a model with this type of relation to bypass something it shouldn't
 
@@ -379,24 +396,62 @@ export class PrismaService {
                     ]
                 }
             };
+        }
 
-            //TODO This may no longer be of use, since we are defaulting to not returning the parent if it includes a model the user has no access to.
+        return args;
+    }
 
-            // if (relatedPermissions?.conditions) {
-            //     const relatedWhere = this.buildConditions(relatedPermissions.conditions, user);
-            //     const foreignKey = relation.identifier;
-            //     const foreignKeyValue = args.where?.[foreignKey];
-            //     const requiredValue = relatedWhere[foreignKey] || relatedWhere.id;
-            //
-            //
-            //     if (requiredValue !== undefined && foreignKeyValue !== requiredValue) {
-            // throw new common_1.ForbiddenException(
-            //     `Access denied: You are requesting ${modelName.toUpperCase()} with an associated ${relatedModel.toUpperCase()}, ` +
-            //     `but your permissions only allow access to ${relatedModel.toUpperCase()} where ${foreignKey} is ${requiredValue}. ` +
-            //     `The requested record has ${foreignKey} = ${foreignKeyValue}.`
-            // );
-            //     }
-            // }
+    /**
+     * Extracts the `where` conditions from a `select` object.
+     * Documentation specifies this structure, however depending on the relation it might not be possible.
+     const result = await prisma.user.findFirst({
+     select: {
+     posts: {
+     where: {
+     published: false,
+     },
+     select: {
+     title: true,
+     },
+     },
+     },
+     })
+
+     * Instead, do it this way:
+     const result = await prisma.user.findFirst({
+     where: {
+     posts: {
+     published: false,
+     },
+     },
+     select: {
+     posts: {
+     select: {
+     title: true,
+     },
+     },
+     },
+     })
+
+     */
+    private extractWhereFromSelect(args: any): any {
+        if (!args || !args.select) {
+            return args;
+        }
+
+        const whereConditions: Record<string, any> = {};
+
+        for (const key in args.select) {
+            if (args.select[key] && typeof args.select[key] === 'object') {
+                if (args.select[key].where) {
+                    whereConditions[key] = args.select[key].where;
+                    delete args.select[key].where;
+                }
+            }
+        }
+
+        if (Object.keys(whereConditions).length > 0) {
+            args.where = {...args.where, ...whereConditions};
         }
 
         return args;
