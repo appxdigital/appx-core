@@ -30,7 +30,8 @@ export function handleError(error: any): never {
             case 'P2003':
                 throw new ForbiddenException('Foreign key constraint failed:', error.message);
             default:
-                throw new BadRequestException('A Prisma database error occurred.');
+                console.error(error);
+                throw new InternalServerErrorException('A Prisma database error occurred.', error.message);
         }
     }
 
