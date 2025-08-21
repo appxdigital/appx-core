@@ -28,7 +28,7 @@ export class CoreService<T> {
      * @param options - Additional query options (e.g., include, select)
      * @returns A promise of the record
      */
-    async findOne(where: any, options: any = {}): Promise<T | null> {
+    async findOne(where: any, options: any = {}): Promise<T> {
         const record = this.modelDelegate.findUnique({
             where,
             ...options
@@ -45,7 +45,7 @@ export class CoreService<T> {
      * @param id - Unique identifier for the record (e.g., 1, 'abc123').
      * @returns A promise of the record
      */
-    async findById(id: string): Promise<T | null> {
+    async findById(id: string): Promise<T> {
         const record = await this.modelDelegate.findUnique({
             where: this._generateWhereFromIdField(id)
         });
