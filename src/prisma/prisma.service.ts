@@ -1,10 +1,9 @@
 import {ForbiddenException, HttpException, HttpStatus, Inject, Injectable} from '@nestjs/common';
 import {Prisma, PrismaClient} from '@prisma/client';
 import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
-import * as path from "path";
-import * as fs from "fs";
 import {RequestContext} from "nestjs-request-context";
 import type {PrismaClient as RuntimeClient} from '.prisma/client';
+import {RuntimeDataModel} from "@prisma/client/runtime/edge";
 
 type ModelKey = keyof RuntimeClient;
 
@@ -12,7 +11,6 @@ type ModelKey = keyof RuntimeClient;
 export class PrismaService {
     private fieldConfigs: Record<string, any> = {};
     prismaClient: PrismaClient;
-    private schemaPath: string = '';
 
     constructor(
         prismaClient: PrismaClient,
@@ -46,8 +44,7 @@ export class PrismaService {
                                         params = this.applyFieldOmission(String(propKey), userRole, params);
                                     if (!options?.BYPASS_FILTERING) {
                                         params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
-                                        // Extract where conditions from inside select
-                                        params = this.extractWhereFromSelect(params);
+
                                         // findUnique should be findFirst for where conditions to work properly
                                         if (methodKey === 'findUnique')
                                             methodKey = 'findFirst';
@@ -119,52 +116,48 @@ export class PrismaService {
      * including custom annotations (e.g., @Role(CLIENT)) and enums.
      */
     parseSchema() {
-        this.schemaPath = path.join(process.cwd(), 'prisma/schema.prisma');
-        const schema = fs.readFileSync(this.schemaPath, 'utf-8');
+        let data_model = this.prismaClient._runtimeDataModel as RuntimeDataModel;
 
-        const enums = this.extractEnumsFromSchema(schema);
+        for (const model_name in data_model.models) {
+            let fields = data_model.models[model_name].fields;
 
-        this.fieldConfigs = this.extractModelsFromSchema(schema, enums);
-    }
+            const allFields: string[] = [];
+            const fieldConfig: Record<string, string[]> = {};
+            const fieldTypes: Record<string, string> = {};
+            const scalarFields: string[] = [];
+            const relationFields: Record<string, any> = {};
 
-    /**
-     * Extracts enums from the Prisma schema.
-     * @param schema - The raw schema content as a string.
-     * @returns An array of enum names.
-     */
-    private extractEnumsFromSchema(schema: string): string[] {
-        const enumRegex = /enum\s+(\w+)\s+\{/g;
-        const enums: string[] = [];
-        let match;
-        while ((match = enumRegex.exec(schema)) !== null) {
-            enums.push(match[1]);
-        }
-        return enums;
-    }
+            for (const field of fields) {
+                let field_name = field.name;
 
-    /**
-     * Extracts models and custom annotations from the Prisma schema.
-     * @param schema - The raw schema content as a string.
-     * @param enums - An array of enum names for determining scalar fields.
-     * @returns A parsed object with models and their custom annotations.
-     */
-    private extractModelsFromSchema(schema: string, enums: string[]): Record<string, any> {
-        const models: Record<string, any> = {};
-        const modelRegex = /model\s+(\w+)\s+\{([\s\S]+?)\}/g;
-        let match;
+                const fieldType = field.type;
+                const commentPart = field.documentation || '';
 
-        while ((match = modelRegex.exec(schema)) !== null) {
-            const modelName = match[1];
-            const modelBody = match[2];
-            const {
-                allFields,
-                fieldConfig,
-                fieldTypes,
-                scalarFields,
-                relationFields,
-            } = this.extractFieldsFromModel(modelBody, enums);
+                if (commentPart) {
+                    const roleMatch = commentPart.match(/@Role\((.*?)\)/);
+                    if (roleMatch) {
+                        fieldConfig[field_name] = roleMatch[1].split(',').map(role => role.trim());
+                    }
+                }
 
-            models[modelName.toLowerCase()] = {
+                allFields.push(field_name);
+                fieldTypes[field_name] = fieldType;
+
+                if (field.kind === 'scalar' || field.kind === 'enum') {
+                    scalarFields.push(field_name);
+                } else {
+                    relationFields[field_name] = {
+                        model: field.type,
+                        relation: field.isList ? 'hasMany' : 'belongsTo',
+                    }
+                    if (!field.isList && field.relationToFields && field.relationFromFields) {
+                        relationFields[field_name].foreignKey = field.relationToFields[0];
+                        relationFields[field_name].referencingColumn = field.relationFromFields[0];
+                    }
+                }
+            }
+
+            this.fieldConfigs[model_name.toLowerCase()] = {
                 fieldConfig,
                 allFields,
                 fieldTypes,
@@ -172,74 +165,7 @@ export class PrismaService {
                 relationFields,
             };
         }
-
-        return models;
     }
-
-    /**
-     * Extracts fields from the model and looks for custom annotations like @Role.
-     * @param modelBody - The body of the model in the schema.
-     * @returns A parsed object with fields and their custom annotations.
-     */
-    private extractFieldsFromModel(modelBody: string, enums: string[]): Record<string, any> {
-        const allFields: string[] = [];
-        const fieldConfig: Record<string, string[]> = {};
-        const fieldTypes: Record<string, string> = {};
-        const scalarFields: string[] = [];
-        const relationFields: string[] = [];
-
-        const lines = modelBody.split('\n');
-        for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (!trimmedLine || trimmedLine.startsWith('//')) {
-                continue;
-            }
-            const [codePart, commentPart] = trimmedLine.split('///');
-
-            const codeTokens = codePart.trim().split(/\s+/);
-            if (codeTokens.length < 2) {
-                continue;
-            }
-
-            const fieldName = codeTokens[0];
-            const fieldType = codeTokens[1];
-            const attributes = codeTokens.slice(2);
-
-            if (commentPart && commentPart.includes('@Role(')) {
-                const roleMatch = commentPart.match(/@Role\((.*?)\)/);
-                if (roleMatch) {
-                    const roles = roleMatch[1].split(',').map(role => role.trim());
-                    fieldConfig[fieldName] = roles;
-                }
-            }
-
-            allFields.push(fieldName);
-            fieldTypes[fieldName] = fieldType;
-
-            let baseType = fieldType.replace('?', '').replace('[]', '');
-            if (this.isScalarType(baseType, enums)) {
-                scalarFields.push(fieldName);
-            } else {
-                relationFields.push(fieldName);
-            }
-        }
-
-        return {
-            allFields,
-            fieldConfig,
-            fieldTypes,
-            scalarFields,
-            relationFields,
-        };
-    }
-
-
-    // Helper method to identify scalar types
-    private isScalarType(fieldType: string, enums: string[]): boolean {
-        const scalarTypes = ['Int', 'String', 'Boolean', 'DateTime', 'Float', 'BigInt', 'Decimal', 'Json', 'Bytes', 'Unsupported'];
-        return scalarTypes.includes(fieldType) || enums.includes(fieldType);
-    }
-
 
     /**
      * Applies field omission logic based on the user's role.
@@ -320,24 +246,23 @@ export class PrismaService {
         const permissions = permissionsConfig[normalizedName]?.[userRole];
 
         if (args.select) {
-            for (const model of Object.keys(args.select)) {
-                if (!this.fieldConfigs[model.toLowerCase()]) {
+            for (const field of Object.keys(args.select)) {
+                let relation = this.getRelationType(modelName, field);
+                if (!relation) {
                     continue;
                 }
 
-                const relation = this.getRelationType(modelName, model);
-
                 if (relation.relation === 'belongsTo') {
-                    const relatedPermissions = permissionsConfig[model.toLowerCase()]?.[userRole]?.[action];
+                    const relatedPermissions = permissionsConfig[relation.model.toLowerCase()]?.[userRole]?.[action];
                     belongsToQueue.push({
-                        modelName: model,
+                        field,
                         relation,
                         relatedPermissions,
                     });
                     continue;
                 }
 
-                if (permissionsConfig[model.toLowerCase()]) {
+                if (permissionsConfig[relation.model.toLowerCase()]) {
                     /* Where conditions are applied outside of the select. Example as per documentation:
                     const result = await prisma.user.findFirst({
                       select: {
@@ -352,10 +277,10 @@ export class PrismaService {
                       },
                     })
                      */
-                    args.select[model].where = this.applyWhereConditions(model, userRole, args.select[model], user, action).where;
-                    delete args.select[model].select.where;
+                    args.select[field].where = this.applyWhereConditions(relation.model, userRole, args.select[field], user, action).where;
+                    delete args.select[field].select.where;
                 } else {
-                    throw new ForbiddenException(`No permissions found for model ${model} and role ${userRole}`);
+                    throw new ForbiddenException(`No permissions found for model ${relation.model} and role ${userRole}`);
                 }
             }
         }
@@ -385,13 +310,13 @@ export class PrismaService {
         }
 
         for (const entry of belongsToQueue) {
-            const {modelName: relatedModel, relatedPermissions} = entry;
+            const {relatedPermissions, field} = entry;
 
             args.where = {
                 ...args.where,
-                [relatedModel]: {
+                [field]: {
                     AND: [
-                        args?.where?.[relatedModel] ?? {},
+                        args?.where?.[field] ?? {},
                         this.buildConditions(relatedPermissions?.conditions, user)
                     ]
                 }
@@ -401,96 +326,16 @@ export class PrismaService {
         return args;
     }
 
-    /**
-     * Extracts the `where` conditions from a `select` object.
-     * Documentation specifies this structure, however depending on the relation it might not be possible.
-     const result = await prisma.user.findFirst({
-     select: {
-     posts: {
-     where: {
-     published: false,
-     },
-     select: {
-     title: true,
-     },
-     },
-     },
-     })
-
-     * Instead, do it this way:
-     const result = await prisma.user.findFirst({
-     where: {
-     posts: {
-     published: false,
-     },
-     },
-     select: {
-     posts: {
-     select: {
-     title: true,
-     },
-     },
-     },
-     })
-
-     */
-    private extractWhereFromSelect(args: any): any {
-        if (!args || !args.select) {
-            return args;
-        }
-
-        const whereConditions: Record<string, any> = {};
-
-        for (const key in args.select) {
-            if (args.select[key] && typeof args.select[key] === 'object') {
-                if (args.select[key].where) {
-                    whereConditions[key] = args.select[key].where;
-                    delete args.select[key].where;
-                }
-            }
-        }
-
-        if (Object.keys(whereConditions).length > 0) {
-            args.where = {...args.where, ...whereConditions};
-        }
-
-        return args;
-    }
-
     getRelationType(parentModel: string, relatedField: string) {
-        //TODO Remove what is now unnecessary since this is no longer used to determine the foreign key and it was very strict due to relying on the assumption that said fk would be [model name]_id
-
         parentModel = parentModel.toLowerCase();
         relatedField = relatedField.toLowerCase();
 
-        const parentKey = Object.keys(this.fieldConfigs).find(
-            key => key.toLowerCase() === parentModel
-        );
-        if (!parentKey) return {relation: null, identifier: null};
+        const parent = this.fieldConfigs[parentModel];
 
-        const parent = this.fieldConfigs[parentKey];
+        const relation = parent.relationFields[relatedField];
+        if (!relation) return null;
 
-        const relationKey = parent.relationFields.find(
-            (key: string) => key.toLowerCase() === relatedField
-        );
-        if (!relationKey) return {relation: null, identifier: null};
-
-        const fieldType = parent.fieldTypes[relationKey];
-
-        if (fieldType.endsWith('[]')) {
-            return {relation: 'hasMany', identifier: null};
-        }
-
-        const foreignKeyName = `${relatedField}_id`;
-        const foreignKey = parent.scalarFields.find(
-            (key: string) => key.toLowerCase() === foreignKeyName
-        );
-
-        if (foreignKey) {
-            return {relation: 'belongsTo', identifier: foreignKey};
-        }
-
-        return {relation: null, identifier: null};
+        return relation;
     }
 
     /**
@@ -599,7 +444,7 @@ export class PrismaService {
         }
         if (includeRelations) {
             for (const relationKey in includeRelations) {
-                if (!relationFields.includes(relationKey)) continue;
+                if (!relationFields[relationKey]) continue;
                 let includedArgs = includeRelations[relationKey];
                 if (includedArgs === true) {
                     includedArgs = {};
@@ -645,9 +490,8 @@ export class PrismaService {
         if (!modelInfo) {
             throw new Error(`Model information not found for ${parentModelName}`);
         }
-        if (modelInfo.relationFields.includes(relationKey)) {
-            // Remove [] and ? from the field type to get the related model name TODO assumes that there are no other relation qualifiers
-            return modelInfo.fieldTypes[relationKey].toLowerCase().replace('[]', '').replace('?', '');
+        if (modelInfo.relationFields[relationKey]) {
+            return modelInfo.relationFields[relationKey].model;
         }
 
         throw new Error(

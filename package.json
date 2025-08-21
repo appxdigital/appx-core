@@ -1,6 +1,6 @@
 {
     "name": "@appxdigital/appx-core",
-    "version": "0.1.81",
+    "version": "0.1.83",
     "description": "Appx Core is a library that provides a set of tools to help you build your application faster.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -20,6 +20,7 @@
         "@nestjs/jwt": "^11.0.0",
         "@paljs/plugins": "^8.1.0",
         "@paralleldrive/cuid2": "^2.2.2",
+        "@prisma/sdk": "^4.0.0",
         "@types/bcrypt": "^5.0.2",
         "@types/express": "^5.0.0",
         "@types/express-session": "^1.18.0",
