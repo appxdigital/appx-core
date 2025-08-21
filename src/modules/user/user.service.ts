@@ -1,12 +1,15 @@
 import {Injectable} from '@nestjs/common';
 import {PrismaService} from '../../prisma/prisma.service';
 import {UserCreateInput} from '../../common/interfaces/user.interface';
+import {CoreService} from "../core/core.service";
 // @ts-ignore
 import {User} from '@prisma/client';
 
 @Injectable()
-export class UserService {
-    constructor(private prisma: PrismaService) {}
+export class UserService extends CoreService<User> {
+    constructor(protected prisma: PrismaService) {
+        super(prisma.model.user);
+    }
 
     async createUser(createUserInput: UserCreateInput): Promise<User> {
         return this.prisma.user.create({

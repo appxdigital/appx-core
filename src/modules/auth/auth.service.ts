@@ -21,10 +21,10 @@ export class AuthService {
     private readonly sessionCookieName: string;
 
     constructor(
-        private readonly userService: UserService,
-        private prisma: PrismaService,
-        private readonly jwtService: JwtService,
-        private configService: ConfigService,
+        protected readonly userService: UserService,
+        protected readonly prisma: PrismaService,
+        protected readonly jwtService: JwtService,
+        protected readonly configService: ConfigService,
     ) {
         this.sessionCookieName = this.configService.get<string>('SESSION_COOKIE_NAME', 'defaultCookieName');
     }
