@@ -43,8 +43,9 @@ export abstract class CoreController<T> {
     @Permission('create')
     async create(@Body() data: any) {
         const user = RequestContext.currentContext.req.user;
+        const role = user?.role || 'GUEST';
         const model = (this.constructor as typeof CoreController).entityName;
-        const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[user.role];
+        const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[role];
         const actionPermission = rolePermissions?.['create'];
 
         if (
@@ -62,8 +63,9 @@ export abstract class CoreController<T> {
     @Permission('update')
     async update(@Param('id') id: string, @Body() data: any) {
         const user = RequestContext.currentContext.req.user;
+        const role = user?.role || 'GUEST';
         const model = (this.constructor as typeof CoreController).entityName;
-        const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[user.role];
+        const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[role];
         const actionPermission = rolePermissions?.['update'];
         let restrictedFields: string[] = [];
 
