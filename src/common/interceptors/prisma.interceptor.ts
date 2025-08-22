@@ -32,9 +32,7 @@ export class PrismaInterceptor implements NestInterceptor {
                 ? context.getArgByIndex(2)  // GraphQL context
                 : context.switchToHttp().getRequest();  // HTTP context
 
-        const useTransaction =
-            this.reflector.get<boolean>('useTransaction', context.getHandler()) ||
-            this.defaultUseTransaction === 'true';
+        const useTransaction = this.reflector.get<boolean>('useTransaction', context.getHandler()) ?? this.defaultUseTransaction === 'true';
         if (useTransaction) {
             return new Observable((observer) => {
                 this.prismaService
