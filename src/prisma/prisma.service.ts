@@ -42,7 +42,7 @@ export class PrismaService {
                                     // delete, deleteMany, update and updateMany methods should not apply field omission because they are not selecting fields
                                     if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'create', 'createMany'].includes(methodKey.toString()))
                                         params = this.applyFieldOmission(String(propKey), userRole, params);
-                                    if (!options?.BYPASS_FILTERING) {
+                                    if (!options?.BYPASS_FILTERING && !['create', 'createMany'].includes(methodKey.toString())) {
                                         params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
 
                                         // findUnique should be findFirst for where conditions to work properly
