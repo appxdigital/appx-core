@@ -1,17 +1,15 @@
-import {
-    Get,
-    Post,
-    Put,
-    Delete,
-    Param,
-    Body,
-    UseGuards, Inject,
-} from '@nestjs/common';
+import {Body, Delete, Get, Inject, Param, Post, Put, UseGuards,} from '@nestjs/common';
 import {CoreService} from './core.service';
 import {Permission} from '../../common/decorators/permission.decorator';
 import {RbacGuard} from '../../common/guards/rbac.guard';
 import {RequestContext} from "nestjs-request-context";
 import {PermissionsService} from "../../common/config/permissions.service";
+
+interface CreatePermission<T> {
+    [key: string]: any;
+
+    setUserIdField?: keyof T;
+}
 
 @UseGuards(RbacGuard)
 export abstract class CoreController<T> {
@@ -41,12 +39,12 @@ export abstract class CoreController<T> {
 
     @Post()
     @Permission('create')
-    async create(@Body() data: any) {
+    async create(@Body() data: Partial<T> & {[key: string]: any}) {
         const user = RequestContext.currentContext.req.user;
         const role = user?.role || 'GUEST';
         const model = (this.constructor as typeof CoreController).entityName;
         const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[role];
-        const actionPermission = rolePermissions?.['create'];
+        const actionPermission = rolePermissions?.['create'] as CreatePermission<T> | string;
 
         if (
             typeof actionPermission !== 'string' &&
@@ -61,7 +59,7 @@ export abstract class CoreController<T> {
 
     @Put(':id')
     @Permission('update')
-    async update(@Param('id') id: string, @Body() data: any) {
+    async update(@Param('id') id: string, @Body() data: Partial<T>) {
         const user = RequestContext.currentContext.req.user;
         const role = user?.role || 'GUEST';
         const model = (this.constructor as typeof CoreController).entityName;
@@ -73,7 +71,7 @@ export abstract class CoreController<T> {
             restrictedFields = actionPermission.restrictedFields;
         }
 
-        for (const field of restrictedFields) {
+        for (const field of restrictedFields as (keyof T)[]) {
             delete data[field];
         }
         return this.service.updateById(id, data);
