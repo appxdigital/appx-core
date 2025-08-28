@@ -1,11 +1,11 @@
 import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
 import {handleError} from "../../common/utils/error-handler";
-import {CorePrismaModelByModel} from "../../prisma/prisma.service";
+import type {PrismaClient} from '.prisma/client';
 
 @Injectable()
 export class CoreService<T> {
     constructor(
-        protected readonly modelDelegate: CorePrismaModelByModel<T>,
+        protected readonly modelDelegate: PrismaClient[T],
     ) {
     }
 

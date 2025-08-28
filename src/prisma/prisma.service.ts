@@ -4,7 +4,6 @@ import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
 import {RequestContext} from "nestjs-request-context";
 import type {PrismaClient as RuntimeClient} from '.prisma/client';
 import {RuntimeDataModel} from "@prisma/client/runtime/edge";
-import {Operation} from "@prisma/client/runtime/client";
 
 type ModelKey = keyof RuntimeClient;
 
@@ -13,65 +12,6 @@ export type CorePrismaOptions = {
     BYPASS_OMISSION?: boolean;
     BYPASS_FILTERING?: boolean;
 };
-
-/** Ops that this particular delegate actually exposes */
-type AvailableOps<M extends ModelKey> = Extract<keyof RuntimeClient[M], Operation>;
-
-/** Map "public" method names to the *underlying* method whose args we want */
-type AliasMethodName<K extends PropertyKey> =
-    K extends 'findUnique' ? 'findFirst'
-        : K extends 'findUniqueOrThrow' ? 'findFirstOrThrow'
-            : K extends 'delete' ? 'deleteMany'
-                : K extends 'update' ? 'updateMany'
-                    : K;
-
-/** Narrow the aliased name to ops that exist on this delegate */
-type AliasedKey<
-    M extends ModelKey,
-    K extends keyof RuntimeClient[M]
-> = Extract<AliasMethodName<K>, AvailableOps<M>>;
-
-/** The Prisma args type of the *aliased* method (Op defaults to the aliased op) */
-type CorePrismaArguments<
-    M extends ModelKey,
-    K extends keyof RuntimeClient[M],
-    Op extends Operation = AliasedKey<M, K>
-> = Prisma.Args<RuntimeClient[M], Op>;
-
-/** The return type of the *aliased* method as a Prisma Promise */
-type AliasedReturn<
-    M extends ModelKey,
-    K extends keyof RuntimeClient[M],
-    A extends CorePrismaArguments<M, K, Op>,
-    Op extends Operation = AliasedKey<M, K>
-> = Prisma.PrismaPromise<Prisma.Result<RuntimeClient[M], A, Op>>;
-
-/**
- * Proxied per-model delegate:
- * - For each function key, accept (aliasedArgs, options?)
- * - Return the aliased method’s return type (specialized by the args)
- * - Non-function properties pass through as-is
- */
-export type CorePrismaModel<M extends ModelKey> = {
-    [K in keyof RuntimeClient[M]]: RuntimeClient[M][K] extends (...a: any[]) => any
-        ? <A extends CorePrismaArguments<M, K>>(args?: A, options?: CorePrismaOptions) => AliasedReturn<M, K, A>
-        : RuntimeClient[M][K];
-};
-
-/** Proxied Prisma client (every model becomes a ProxiedDelegate) */
-export type CorePrismaClient = {
-    [M in ModelKey]: CorePrismaModel<M>;
-};
-
-// If findUniqueOrThrow exists, then it is a Model and can be mapped back to its key
-type DelegateKeyForModel<M> = {
-    [K in keyof RuntimeClient]:
-    RuntimeClient[K] extends {findUniqueOrThrow: (...a: any[]) => Promise<infer R>}
-        ? (R extends M ? K : never)        // match by the “plain” return type
-        : never
-}[Extract<keyof RuntimeClient, string>];
-
-export type CorePrismaModelByModel<M> = CorePrismaModel<Extract<DelegateKeyForModel<M>, keyof RuntimeClient>>;
 
 @Injectable()
 export class PrismaService {
@@ -105,16 +45,18 @@ export class PrismaService {
                             if (typeof model[methodKey] === 'function' && !methodKey.toString().startsWith('_') && !methodKey.toString().startsWith('$')) {
                                 const contextModel = RequestContext.currentContext?.req.prisma?.[propKey] || model;
                                 return async (params: any = {}, options?: CorePrismaOptions) => {
-                                    /*
-                                        Alias methods, to allow for where conditions to be applied properly
-                                     */
-                                    const aliases: {[key: string]: string} = {
+
+                                    // Blacklisted methods, should not be used to ensure permission filtering is applied
+                                    let blacklist: {[key: string]: string} = {
                                         findUnique: 'findFirst',
                                         findUniqueOrThrow: 'findFirstOrThrow',
                                         delete: 'deleteMany',
                                         update: 'updateMany',
+                                    };
+
+                                    if (blacklist[methodKey.toString()]) {
+                                        throw new Error(`The method ${methodKey.toString()} is not compatible with permission filtering and is not allowed. Please use ${blacklist[methodKey.toString()]}} instead.`);
                                     }
-                                    methodKey = aliases[methodKey.toString()] || methodKey;
 
                                     // delete, deleteMany, update and updateMany methods should not apply field omission because they are not selecting fields
                                     if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'create', 'createMany'].includes(methodKey.toString()))
@@ -142,41 +84,36 @@ export class PrismaService {
      * Used in the graphql generic resolver
      * @param model
      */
-    getModelDelegate<M extends ModelKey>(model: M): CorePrismaModel<M> {
+    getModelDelegate<M extends ModelKey>(model: M): RuntimeClient[M] {
         const modelName = (model as string).toLowerCase();
 
-        const client = this.prismaClient as unknown as CorePrismaClient;
+        const client = this.prismaClient;
 
         if (modelName in client) {
-            return client[modelName as keyof CorePrismaClient] as CorePrismaModel<M>;
+            return client[modelName];
         }
 
         throw new Error(`Model ${model.toString()} not found in PrismaClient.`);
     }
 
-    get model(): CorePrismaClient {
-        // Cast once so callers see the ProxiedClient surface
-        const target = this.prismaClient as unknown as CorePrismaClient & RuntimeClient;
-
-        return new Proxy(target, {
-            get: (t, prop: string | symbol) => {
-                // let symbols (e.g., util.inspect.custom) pass through untouched
-                if (typeof prop === 'symbol') return (t as any)[prop];
-
-                // runtime validation that the model exists
-                if (prop in t) return (t as any)[prop];
-
-                throw new Error(`Model ${String(prop)} does not exist on PrismaClient`);
+    get model(): RuntimeClient {
+        return new Proxy(this.prismaClient, {
+            get: (target: RuntimeClient, prop: ModelKey): RuntimeClient[ModelKey] => {
+                if (prop in target) {
+                    return target[prop];
+                } else {
+                    throw new Error(`Model ${String(prop)} does not exist on PrismaClient`);
+                }
             },
         });
     }
 
     get user(): RuntimeClient['user'] {
-        return (this.prismaClient as unknown as CorePrismaClient).user;
+        return this.prismaClient.user;
     }
 
     get session(): RuntimeClient['session'] {
-        return (this.prismaClient as unknown as CorePrismaClient).session;
+        return this.prismaClient.session;
     }
 
     get userRefreshToken() {
@@ -363,7 +300,11 @@ export class PrismaService {
 
         const actionPermissions = permissions[action];
 
-        if (!actionPermissions || (actionPermissions === 'ALL' && !belongsToQueue?.length) || action === 'create') {
+        if (!actionPermissions) {
+            throw new HttpException(`No permissions found for action ${String(action)} on model ${modelName} and role ${userRole}`, HttpStatus.FORBIDDEN);
+        }
+
+        if (actionPermissions === 'ALL' && belongsToQueue.length === 0 || action.toString().startsWith('create')) {
             return args;
         }
 
