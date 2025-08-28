@@ -1,10 +1,9 @@
-import {Args, Context, Info, Mutation, Query, Resolver} from '@nestjs/graphql';
+import {Args, Info, Query, Resolver} from '@nestjs/graphql';
 import {Type} from '../common/types';
 import {PrismaSelect} from '@paljs/plugins';
 import {GraphQLResolveInfo} from 'graphql';
 import {applyMethodGuards} from '../common/decorators/guard.decorator';
 import {PrismaService} from '../prisma/prisma.service';
-import {BatchPayload} from "./batch.payload";
 
 export function GenericResolverFactory<ModelType,
     CreateInput,
@@ -64,7 +63,7 @@ export function GenericResolverFactory<ModelType,
         ): Promise<ModelType> {
             const select = new PrismaSelect(info).value;
             const modelDelegate = this.prisma.getModelDelegate(model);
-            return modelDelegate.findUnique({
+            return modelDelegate.findFirst({
                 where,
                 ...select,
             });

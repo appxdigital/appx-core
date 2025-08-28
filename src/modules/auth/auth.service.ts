@@ -1,10 +1,4 @@
-import {
-    ForbiddenException,
-    HttpException,
-    HttpStatus,
-    Injectable,
-    UnauthorizedException,
-} from '@nestjs/common';
+import {ForbiddenException, HttpException, HttpStatus, Injectable, UnauthorizedException,} from '@nestjs/common';
 import {UserService} from '../user/user.service';
 import {RegisterDto} from './dto/register.dto';
 import * as argon2 from 'argon2';
@@ -130,7 +124,7 @@ export class AuthService {
         if (!req?.user?.id) {
             throw new UnauthorizedException('Please log-in');
         }
-        return this.prisma.user.findUnique({
+        return this.prisma.user.findFirst({
             where: {
                 id: req?.user?.id,
             },
@@ -181,7 +175,7 @@ export class AuthService {
     }
 
     async closeSpecificSession(sessionId: string) {
-        const deleted = await this.prisma.session.delete({
+        const deleted = await this.prisma.session.deleteMany({
             where: {id: sessionId},
         }).catch(() => null);
         return !!deleted;
@@ -235,7 +229,7 @@ export class AuthService {
         const providedTokenString = userFromRefreshTokenGuard.currentRefreshToken;
 
         // Invalidate the used refresh token
-        await this.prisma.userRefreshToken.update({
+        await this.prisma.userRefreshToken.updateMany({
             where: {id: currentTokenId},
             data: {revokedAt: new Date()},
             },

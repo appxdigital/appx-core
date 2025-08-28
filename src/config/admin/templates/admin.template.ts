@@ -63,7 +63,7 @@ export async function createAdminJsModule(): Promise<DynamicModule> {
         inject: [PrismaService],
         useFactory: async (prisma: PrismaService) => {
             const authenticate = async (email: string, password: string) => {
-                const user = await prisma.user.findUnique({
+                const user = await prisma.user.findFirst({
                     where: {
                         email
                     }

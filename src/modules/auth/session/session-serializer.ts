@@ -17,7 +17,7 @@ export class SessionSerializer extends PassportSerializer {
             return done(new Error('No userId provided'), null);
         }
         try {
-            const user = await this.prisma.user.findUniqueOrThrow({
+            const user = await this.prisma.user.findFirstOrThrow({
                 where: {id: Number(userId)},
                 select: {
                     id: true,

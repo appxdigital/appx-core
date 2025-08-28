@@ -1,6 +1,6 @@
 import {Injectable, UnauthorizedException} from '@nestjs/common';
 import {PassportStrategy} from '@nestjs/passport';
-import {Strategy, ExtractJwt} from 'passport-jwt';
+import {ExtractJwt, Strategy} from 'passport-jwt';
 import {ConfigService} from '@nestjs/config';
 import {Request} from 'express';
 import {PrismaService} from '../../prisma/prisma.service';
@@ -34,7 +34,7 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
             throw new UnauthorizedException('User not found');
         }
 
-        const tokenRecord = await this.prisma.userRefreshToken.findUnique({
+        const tokenRecord = await this.prisma.userRefreshToken.findFirst({
             where: {token: refreshToken},
         });
 

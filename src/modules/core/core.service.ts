@@ -29,7 +29,7 @@ export class CoreService<T> {
      * @returns A promise of the record
      */
     async findOne(where: any, options: any = {}): Promise<T> {
-        const record = this.modelDelegate.findUnique({
+        const record = this.modelDelegate.findFirst({
             where,
             ...options
         });
@@ -46,7 +46,7 @@ export class CoreService<T> {
      * @returns A promise of the record
      */
     async findById(id: string): Promise<T> {
-        const record = await this.modelDelegate.findUnique({
+        const record = await this.modelDelegate.findFirst({
             where: this._generateWhereFromIdField(id)
         });
         if (!record) {
@@ -76,10 +76,10 @@ export class CoreService<T> {
      */
     async updateById(id: string | number, data: any): Promise<T> {
         try {
-            return await this.modelDelegate.update({
+            return (await this.modelDelegate.updateMany({
                 where: this._generateWhereFromIdField(id),
                 data,
-            });
+            }))[0];
         } catch (error) {
             handleError(error);
         }
@@ -92,9 +92,9 @@ export class CoreService<T> {
      */
     async deleteById(id: string | number): Promise<T> {
         try {
-            return await this.modelDelegate.delete({
+            return (await this.modelDelegate.deleteMany({
                 where: this._generateWhereFromIdField(id)
-            });
+            }))[0];
         } catch (error) {
             handleError(error);
         }
