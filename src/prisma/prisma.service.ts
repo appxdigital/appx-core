@@ -13,6 +13,9 @@ export type CorePrismaOptions = {
     BYPASS_FILTERING?: boolean;
 };
 
+// Exclude findUnique, findUniqueOrThrow, delete and update because they are not compatible with permission filtering
+export type CorePrismaModel<M extends ModelKey> = Exclude<RuntimeClient[M], 'findUnique' | 'findUniqueOrThrow' | 'delete' | 'update'>;
+
 @Injectable()
 export class PrismaService {
     private fieldConfigs: Record<string, any> = {};
@@ -25,6 +28,18 @@ export class PrismaService {
         this.prismaClient = prismaClient;
         this.parseSchema();
         this.proxyModels();
+    }
+
+    debugQueries(enable: boolean) {
+        RequestContext.currentContext.req.corePrismaDebug = enable;
+    }
+
+    private debug(msg: string, type: 'log' | 'warn' | 'error' | 'info' = 'log') {
+        if (RequestContext.currentContext?.req.corePrismaDebug) {
+            // Default for log, yellow for warn, red for error, blue for info
+            const color = type === 'log' ? '' : type === 'warn' ? '\x1b[33m' : type === 'error' ? '\x1b[31m' : '\x1b[34m';
+            console.debug(color, `[APPX-CORE PRISMA] ${msg}`, '\x1b[0m');
+        }
     }
 
     $transaction<T>(fn: (prisma: Prisma.TransactionClient) => Promise<T>) {
@@ -43,6 +58,7 @@ export class PrismaService {
                             const user = RequestContext.currentContext?.req.user || {};
                             const userRole = user?.role || 'GUEST';
                             if (typeof model[methodKey] === 'function' && !methodKey.toString().startsWith('_') && !methodKey.toString().startsWith('$')) {
+                                this.debug(`Proxying ${String(propKey)}.${String(methodKey)}() for role ${userRole}`);
                                 const contextModel = RequestContext.currentContext?.req.prisma?.[propKey] || model;
                                 return async (params: any = {}, options?: CorePrismaOptions) => {
 
@@ -59,14 +75,20 @@ export class PrismaService {
                                     }
 
                                     // delete, deleteMany, update and updateMany methods should not apply field omission because they are not selecting fields
-                                    if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'create', 'createMany'].includes(methodKey.toString()))
+                                    if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'create', 'createMany'].includes(methodKey.toString())) {
                                         params = this.applyFieldOmission(String(propKey), userRole, params);
+                                    } else {
+                                        this.debug(`Skipping field omission for ${String(propKey)}.${String(methodKey)}()`);
+                                    }
                                     if (!options?.BYPASS_FILTERING && !['create', 'createMany'].includes(methodKey.toString())) {
                                         params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
+                                    } else {
+                                        this.debug(`Skipping permission filtering for ${String(propKey)}.${String(methodKey)}()`);
                                     }
                                     if (methodKey === 'count' && !!params.select) {
                                         delete params.select;
                                     }
+                                    this.debug(`Executing ${String(propKey)}.${String(methodKey)}() with params: ${JSON.stringify(params)}`);
                                     return contextModel[methodKey](params);
                                 };
                             }
@@ -84,7 +106,7 @@ export class PrismaService {
      * Used in the graphql generic resolver
      * @param model
      */
-    getModelDelegate<M extends ModelKey>(model: M): RuntimeClient[M] {
+    getModelDelegate<M extends ModelKey>(model: M): CorePrismaModel<M> {
         const modelName = (model as string).toLowerCase();
 
         const client = this.prismaClient;
@@ -98,7 +120,7 @@ export class PrismaService {
 
     get model(): RuntimeClient {
         return new Proxy(this.prismaClient, {
-            get: (target: RuntimeClient, prop: ModelKey): RuntimeClient[ModelKey] => {
+            get: (target: RuntimeClient, prop: ModelKey): CorePrismaModel<ModelKey> => {
                 if (prop in target) {
                     return target[prop];
                 } else {
@@ -108,11 +130,11 @@ export class PrismaService {
         });
     }
 
-    get user(): RuntimeClient['user'] {
+    get user(): CorePrismaModel<'user'> {
         return this.prismaClient.user;
     }
 
-    get session(): RuntimeClient['session'] {
+    get session(): CorePrismaModel<'session'> {
         return this.prismaClient.session;
     }
 
@@ -190,6 +212,7 @@ export class PrismaService {
         userRole: string,
         args: Record<string, any>,
     ): any {
+        this.debug(`Applying field omission for model ${modelName} and role ${userRole}`);
         const omitFields = this.getFieldsToOmit(modelName, userRole);
         if (!args) {
             args = {};
@@ -200,6 +223,7 @@ export class PrismaService {
                 delete args.select[field];
             });
         } else if (args.include) {
+            this.debug(`Found included model '${modelName}', generating select fields`);
             args.select = this.buildSelectFields(
                 modelName,
                 omitFields,
@@ -254,15 +278,35 @@ export class PrismaService {
         const normalizedName = modelName.toLowerCase().trim();
         const permissions = permissionsConfig[normalizedName]?.[userRole];
 
+        if (!permissions) {
+            throw new HttpException(`No permissions found for model '${modelName}' and role ${userRole}`, HttpStatus.FORBIDDEN);
+        }
+
+        let actionPermissions = this.selectPermission(permissions, action.toString(), modelName, userRole);
+
+        if (!actionPermissions) {
+            console.debug(`No permissions found for action '${modelName}.${String(action)}()' on role ${userRole}`)
+            throw new HttpException('Missing permissions on model ' + modelName, HttpStatus.FORBIDDEN);
+        }
+
         if (args.select) {
             for (const field of Object.keys(args.select)) {
-                let relation = this.getRelationType(modelName, field);
+                // If field is relation
+                let relation = this.getRelation(modelName, field);
                 if (!relation) {
                     continue;
                 }
 
                 if (relation.relation === 'belongsTo') {
-                    const relatedPermissions = permissionsConfig[relation.model.toLowerCase()]?.[userRole]?.[action];
+                    this.debug(`Found 1:1 / *:1 (belongsTo) relation to model '${relation.model}' from model '${modelName}' via field '${field}'. Filter will be applied to main conditions...`);
+
+                    const relatedPermissions = this.selectPermission(permissionsConfig[relation.model.toLowerCase()]?.[userRole] || {}, action.toString(), relation.model, userRole)
+
+                    if (!relatedPermissions) {
+                        console.debug(`No permissions found for action '${relation.model}.${String(action)}()' on role ${userRole}`)
+                        throw new HttpException('Missing permissions on model ' + relation.model, HttpStatus.FORBIDDEN);
+                    }
+
                     belongsToQueue.push({
                         field,
                         relation,
@@ -271,44 +315,35 @@ export class PrismaService {
                     continue;
                 }
 
-                if (permissionsConfig[relation.model.toLowerCase()]) {
-                    /* Where conditions are applied outside of the select. Example as per documentation:
-                    const result = await prisma.user.findFirst({
-                      select: {
-                        posts: {
-                          where: {
-                            published: false,
-                          },
-                          select: {
-                            title: true,
-                          },
-                        },
+                this.debug(`Found 1:N / N:N (hasMany) relation to model '${relation.model}' from model '${modelName}' via field '${field}'. Applying filter to the relation...`);
+
+                /* Where conditions are applied outside of the select. Example as per documentation:
+                const result = await prisma.user.findFirst({
+                  select: {
+                    posts: {
+                      where: {
+                        published: false,
                       },
-                    })
-                     */
-                    args.select[field].where = this.applyWhereConditions(relation.model, userRole, args.select[field], user, action).where;
-                    delete args.select[field].select.where;
-                } else {
-                    throw new ForbiddenException(`No permissions found for model ${relation.model} and role ${userRole}`);
-                }
+                      select: {
+                        title: true,
+                      },
+                    },
+                  },
+                })
+                 */
+                args.select[field].where = this.applyWhereConditions(relation.model, userRole, args.select[field], user, action).where;
+                delete args.select[field].select.where;
             }
         }
 
-        if (!permissions) {
-            throw new HttpException(`No permissions found for model ${modelName} and role ${userRole}`, HttpStatus.FORBIDDEN);
-        }
-
-        const actionPermissions = permissions[action];
-
-        if (!actionPermissions) {
-            throw new HttpException(`No permissions found for action ${String(action)} on model ${modelName} and role ${userRole}`, HttpStatus.FORBIDDEN);
-        }
-
         if (actionPermissions === 'ALL' && belongsToQueue.length === 0 || action.toString().startsWith('create')) {
+            this.debug(`No conditions to apply for '${modelName}.${String(action)}()' on role ${userRole}`);
             return args;
         }
 
         const whereClause = this.buildConditions(actionPermissions.conditions, user);
+
+        this.debug(`Applying where conditions for '${modelName}.${String(action)}()' on role ${userRole}: ${JSON.stringify(whereClause)}`);
 
         if (!args.where) {
             args.where = whereClause;
@@ -316,14 +351,20 @@ export class PrismaService {
             args.where = {AND: [args.where, whereClause]};
         }
 
-        //TODO Test this in more scenarios, it may need to be more robust, it's a quick fix but I must make sure it wont be abused by adding a model with this type of relation to bypass something it shouldn't
-
+        // Failsafe: If there are no conditions at all and there were supposed to be, block access
         if (Object.keys(args.where).length === 0 && !belongsToQueue?.length) {
+            this.debug(`Found a weird edge case. Contact Manuel Olveira @ AppX.`);
             throw new ForbiddenException(`You are not authorized to access this record`);
+        }
+
+        if (belongsToQueue?.length > 0) {
+            this.debug(`Merging belongsTo relation conditions into main ${modelName}.`, 'warn');
         }
 
         for (const entry of belongsToQueue) {
             const {relatedPermissions, field} = entry;
+
+            this.debug(`Merging conditions for belongsTo relation field '${field}': ${JSON.stringify(relatedPermissions?.conditions)}`, 'info');
 
             args.where = {
                 ...args.where,
@@ -337,18 +378,6 @@ export class PrismaService {
         }
 
         return args;
-    }
-
-    getRelationType(parentModel: string, relatedField: string) {
-        parentModel = parentModel.toLowerCase();
-        relatedField = relatedField.toLowerCase();
-
-        const parent = this.fieldConfigs[parentModel];
-
-        const relation = parent.relationFields[relatedField];
-        if (!relation) return null;
-
-        return relation;
     }
 
     /**
@@ -421,9 +450,11 @@ export class PrismaService {
     private getFieldsToOmit(modelName: string, role: string): string[] {
         const modelInfo = this.fieldConfigs[modelName.toLowerCase()] || {};
         const fieldConfig = modelInfo.fieldConfig || {};
-        return Object.entries(fieldConfig)
+        const omitFields = Object.entries(fieldConfig)
             .filter(([_, roles]) => !(roles as string[]).includes(role))
             .map(([field]) => field);
+        this.debug(`Fields to omit on '${modelName}', based on schema @Role() configuration: ${omitFields.join(', ')}`);
+        return omitFields;
     }
 
     /**
@@ -462,10 +493,10 @@ export class PrismaService {
                 if (includedArgs === true) {
                     includedArgs = {};
                 }
-                const relatedModelName = this.getRelatedModelName(
-                    modelName,
-                    relationKey,
-                );
+                const relatedModelName = this.getRelation(modelName, relationKey, true).model;
+
+                this.debug(`Found relation to model '${relatedModelName}' from model '${modelName}' via field '${relationKey}'. Generating select fields...`);
+
                 const relatedModelOmitFields = this.getFieldsToOmit(
                     relatedModelName,
                     userRole,
@@ -486,29 +517,43 @@ export class PrismaService {
         return selectFields;
     }
 
-    /**
-     * Retrieves the related model's name for a given relation field.
-     * This is used to navigate relations between models when constructing the `select` object.
-     *
-     * @param parentModelName - The name of the parent model.
-     * @param relationKey - The key of the relation field.
-     * @returns The name of the related model.
-     * @throws Error if the relation field is not found in the parent model.
-     */
-    private getRelatedModelName(
-        parentModelName: string,
-        relationKey: string,
-    ): string {
-        const modelInfo = this.fieldConfigs[parentModelName.toLowerCase()];
-        if (!modelInfo) {
-            throw new Error(`Model information not found for ${parentModelName}`);
-        }
-        if (modelInfo.relationFields[relationKey]) {
-            return modelInfo.relationFields[relationKey].model;
+    getRelation(parentModel: string, relatedField: string, throwOnNotFound?: true): {
+        model: string,
+        relation: string,
+        foreignKey?: string,
+        referencingColumn?: string,
+    }
+    getRelation(parentModel: string, relatedField: string, throwOnNotFound = false): {
+        model: string,
+        relation: string,
+        foreignKey?: string,
+        referencingColumn?: string,
+    } | null {
+        parentModel = parentModel.toLowerCase();
+
+        const parent = this.fieldConfigs[parentModel];
+
+        const relation = parent.relationFields[relatedField];
+        if (!relation && throwOnNotFound)
+            throw new Error(`Relation key ${relatedField} not found in model ${parentModel}`,);
+
+        return relation;
+    }
+
+    selectPermission(permissions: any, action: string, modelName: string, userRole: string) {
+        let actionPermissions = permissions[action];
+
+        // If action is find* or count and there is no permission, coalesce to one of the find actions
+        if (!actionPermissions && (action.startsWith('find') || action === 'count')) {
+            if (permissions['findMany']) {
+                this.debug(`Using 'findMany' permissions for '${action}' action on model '${modelName}' and role ${userRole}`, 'info');
+                actionPermissions = permissions['findMany'];
+            } else if (permissions['findFirst']) {
+                this.debug(`Using 'findFirst' permissions for '${action}' action on model '${modelName}' and role ${userRole}`, 'info');
+                actionPermissions = permissions['findFirst'];
+            }
         }
 
-        throw new Error(
-            `Relation key ${relationKey} not found in model ${parentModelName}`,
-        );
+        return actionPermissions;
     }
 }

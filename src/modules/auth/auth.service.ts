@@ -24,7 +24,10 @@ export class AuthService {
     }
 
     async register(registerDto: RegisterDto) {
-        const existingUser = await this.userService.findByEmail(registerDto.email);
+        const existingUser = await this.prisma.user.findFirst(
+            {where: {email: registerDto.email}},
+            {BYPASS_FILTERING: true}
+        );
         if (existingUser) {
             throw new HttpException('Email already in use', HttpStatus.CONFLICT);
         }
@@ -209,16 +212,16 @@ export class AuthService {
         const expiresAt = new Date(Date.now() + refreshExpiresInMs);
 
         await this.prisma.userRefreshToken.create({
-            data: {
-                token: refreshTokenString,
-                userId: user.id,
-                expiresAt: expiresAt,
-            },
+                data: {
+                    token: refreshTokenString,
+                    userId: user.id,
+                    expiresAt: expiresAt,
+                },
             },
             // @ts-ignore
             {
                 BYPASS_FILTERING: true,
-        });
+            });
 
         return {access_token: accessToken, refresh_token: refreshTokenString};
     }
@@ -230,13 +233,13 @@ export class AuthService {
 
         // Invalidate the used refresh token
         await this.prisma.userRefreshToken.updateMany({
-            where: {id: currentTokenId},
-            data: {revokedAt: new Date()},
+                where: {id: currentTokenId},
+                data: {revokedAt: new Date()},
             },
             // @ts-ignore
             {
                 BYPASS_FILTERING: true,
-        });
+            });
 
         const user = await this.userService.findByField("id", userId);
         if (!user) {
@@ -268,12 +271,12 @@ export class AuthService {
 
     async revokeRefreshTokensForUser(userId: number): Promise<void> {
         await this.prisma.userRefreshToken.updateMany({
-            where: {userId: userId, revokedAt: null},
-            data: {revokedAt: new Date()},
+                where: {userId: userId, revokedAt: null},
+                data: {revokedAt: new Date()},
             },
             // @ts-ignore
             {
                 BYPASS_FILTERING: true,
-        });
+            });
     }
 }
