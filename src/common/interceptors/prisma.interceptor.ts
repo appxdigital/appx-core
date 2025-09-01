@@ -1,9 +1,4 @@
-import {
-    CallHandler,
-    ExecutionContext,
-    Injectable,
-    NestInterceptor,
-} from '@nestjs/common';
+import {CallHandler, ExecutionContext, Injectable, NestInterceptor,} from '@nestjs/common';
 import {PrismaService} from '../../prisma/prisma.service';
 import {Reflector} from '@nestjs/core';
 import {ConfigService} from '@nestjs/config';
@@ -12,6 +7,7 @@ import {catchError, tap} from 'rxjs/operators';
 import {Observable, throwError} from 'rxjs';
 import {PrismaClient} from '@prisma/client';
 import {handleError} from "../utils/error-handler";
+import {PERMISSION_METADATA_KEY} from "../decorators/permission.decorator";
 
 @Injectable()
 export class PrismaInterceptor implements NestInterceptor {
@@ -31,6 +27,10 @@ export class PrismaInterceptor implements NestInterceptor {
             handlerType === 'graphql'
                 ? context.getArgByIndex(2)  // GraphQL context
                 : context.switchToHttp().getRequest();  // HTTP context
+
+        // Attach expose_models metadata if needed
+        const permissionMetadata = this.reflector.get(PERMISSION_METADATA_KEY, context.getHandler()) || {};
+        RequestContext.currentContext.req.prismaExposedModels = permissionMetadata['expose_models'] || [];
 
         const useTransaction = this.reflector.get<boolean>('useTransaction', context.getHandler()) ?? this.defaultUseTransaction === 'true';
         if (useTransaction) {

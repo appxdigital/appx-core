@@ -278,15 +278,22 @@ export class PrismaService {
         const normalizedName = modelName.toLowerCase().trim();
         const permissions = permissionsConfig[normalizedName]?.[userRole];
 
-        if (!permissions) {
-            throw new HttpException(`No permissions found for model '${modelName}' and role ${userRole}`, HttpStatus.FORBIDDEN);
-        }
+        let actionPermissions;
 
-        let actionPermissions = this.selectPermission(permissions, action.toString(), modelName, userRole);
+        // If model is exposed, permissions is ALL
+        if (RequestContext.currentContext.req.prismaExposedModels.map((m: string) => m.toLowerCase()).includes(modelName.toLowerCase())) {
+            actionPermissions = 'ALL';
+        } else {
+            if (!permissions) {
+                throw new HttpException(`No permissions found for model '${modelName}' and role ${userRole}`, HttpStatus.FORBIDDEN);
+            }
 
-        if (!actionPermissions) {
-            console.debug(`No permissions found for action '${modelName}.${String(action)}()' on role ${userRole}`)
-            throw new HttpException('Missing permissions on model ' + modelName, HttpStatus.FORBIDDEN);
+            actionPermissions = this.selectPermission(permissions, action.toString(), modelName, userRole);
+
+            if (!actionPermissions) {
+                console.debug(`No permissions found for action '${modelName}.${String(action)}()' on role ${userRole}`)
+                throw new HttpException('Missing permissions on model ' + modelName, HttpStatus.FORBIDDEN);
+            }
         }
 
         if (args.select) {
@@ -302,9 +309,20 @@ export class PrismaService {
 
                     const relatedPermissions = this.selectPermission(permissionsConfig[relation.model.toLowerCase()]?.[userRole] || {}, action.toString(), relation.model, userRole)
 
+                    // If model is exposed, do not apply conditions
+                    if (RequestContext.currentContext.req.prismaExposedModels.map((m: string) => m.toLowerCase()).includes(relation.model.toLowerCase())) {
+                        this.debug(`Related model '${relation.model}' is exposed via @Permission() decorator. Skipping conditions for action '${String(action)}' on role ${userRole}.`);
+                        continue;
+                    }
+
                     if (!relatedPermissions) {
                         console.debug(`No permissions found for action '${relation.model}.${String(action)}()' on role ${userRole}`)
                         throw new HttpException('Missing permissions on model ' + relation.model, HttpStatus.FORBIDDEN);
+                    }
+
+                    if (relatedPermissions === 'ALL') {
+                        this.debug(`Related model '${relation.model}' has 'ALL' permissions for action '${String(action)}' on role ${userRole}. No conditions to apply.`);
+                        continue;
                     }
 
                     belongsToQueue.push({
@@ -336,7 +354,33 @@ export class PrismaService {
             }
         }
 
-        if (actionPermissions === 'ALL' && belongsToQueue.length === 0 || action.toString().startsWith('create')) {
+        if (belongsToQueue?.length > 0) {
+            this.debug(`Merging belongsTo relation conditions into main ${modelName}.`, 'warn');
+        }
+
+        for (const entry of belongsToQueue) {
+            const {relatedPermissions, field} = entry;
+
+            this.debug(`Merging conditions for belongsTo relation field '${field}': ${JSON.stringify(relatedPermissions?.conditions)}`, 'info');
+
+            args.where = {
+                ...(args.where || {}),
+                [field]: {
+                    AND: [
+                        args?.where?.[field] ?? {},
+                        this.buildConditions(relatedPermissions?.conditions, user)
+                    ]
+                }
+            };
+        }
+
+        // If model is exposed, do not apply conditions
+        if (RequestContext.currentContext.req.prismaExposedModels.map((m: string) => m.toLowerCase()).includes(modelName.toLowerCase())) {
+            this.debug(`Model '${modelName}' is exposed via @Permission() decorator. Skipping conditions for action '${String(action)}' on role ${userRole}.`);
+            return args;
+        }
+
+        if (actionPermissions === 'ALL') {
             this.debug(`No conditions to apply for '${modelName}.${String(action)}()' on role ${userRole}`);
             return args;
         }
@@ -349,32 +393,6 @@ export class PrismaService {
             args.where = whereClause;
         } else {
             args.where = {AND: [args.where, whereClause]};
-        }
-
-        // Failsafe: If there are no conditions at all and there were supposed to be, block access
-        if (Object.keys(args.where).length === 0 && !belongsToQueue?.length) {
-            this.debug(`Found a weird edge case. Contact Manuel Olveira @ AppX.`);
-            throw new ForbiddenException(`You are not authorized to access this record`);
-        }
-
-        if (belongsToQueue?.length > 0) {
-            this.debug(`Merging belongsTo relation conditions into main ${modelName}.`, 'warn');
-        }
-
-        for (const entry of belongsToQueue) {
-            const {relatedPermissions, field} = entry;
-
-            this.debug(`Merging conditions for belongsTo relation field '${field}': ${JSON.stringify(relatedPermissions?.conditions)}`, 'info');
-
-            args.where = {
-                ...args.where,
-                [field]: {
-                    AND: [
-                        args?.where?.[field] ?? {},
-                        this.buildConditions(relatedPermissions?.conditions, user)
-                    ]
-                }
-            };
         }
 
         return args;
