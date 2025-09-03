@@ -78,7 +78,7 @@ export abstract class CoreController<T> {
     }
 
     @Delete(':id')
-    @Permission('delete')
+    @Permission('deleteMany')
     async delete(@Param('id') id: string) {
         return this.service.deleteById(id);
     }
