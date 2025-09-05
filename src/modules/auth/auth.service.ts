@@ -185,7 +185,13 @@ export class AuthService {
     }
 
     async validateJwtPayload(payload: any): Promise<any> {
-        const user = await this.userService.findByField("id", payload.sub);
+        const user = await this.prisma.user.findFirst({
+            where: {
+                id: payload.sub,
+            }
+        }, {
+            BYPASS_FILTERING: true,
+        });
         if (!user) {
             throw new UnauthorizedException('Invalid token');
         }
@@ -241,7 +247,12 @@ export class AuthService {
                 BYPASS_FILTERING: true,
             });
 
-        const user = await this.userService.findByField("id", userId);
+        const user = await this.prisma.user.findFirst({
+            where: {id: userId,}
+        }, {
+            BYPASS_FILTERING: true,
+        });
+
         if (!user) {
             throw new ForbiddenException('Access Denied');
         }
@@ -260,7 +271,11 @@ export class AuthService {
 
 
     async loginJwt(userFromAuthGuard: any): Promise<{access_token: string; refresh_token: string; user: any}> {
-        const user = await this.userService.findByField("id", userFromAuthGuard.id);
+        const user = await this.prisma.user.findFirst({
+            where: {id: userFromAuthGuard.id},
+        }, {
+            BYPASS_FILTERING: true,
+        });
         if (!user) {
             throw new UnauthorizedException('User not found');
         }

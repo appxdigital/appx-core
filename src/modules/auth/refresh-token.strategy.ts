@@ -36,6 +36,9 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
 
         const tokenRecord = await this.prisma.userRefreshToken.findFirst({
             where: {token: refreshToken},
+            },
+            {
+                BYPASS_FILTERING: true,
         });
 
         if (!tokenRecord) {
@@ -45,6 +48,9 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
             await this.prisma.userRefreshToken.updateMany({
                 where: {userId: user.id, revokedAt: null},
                 data: {revokedAt: new Date()},
+                },
+                {
+                    BYPASS_FILTERING: true,
             });
             throw new UnauthorizedException('Refresh token revoked');
         }

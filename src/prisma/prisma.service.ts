@@ -281,7 +281,7 @@ export class PrismaService {
         let actionPermissions;
 
         // If model is exposed, permissions is ALL
-        if (RequestContext.currentContext.req.prismaExposedModels.map((m: string) => m.toLowerCase()).includes(modelName.toLowerCase())) {
+        if (RequestContext.currentContext.req.prismaExposedModels?.map((m: string) => m.toLowerCase()).includes(modelName.toLowerCase())) {
             actionPermissions = 'ALL';
         } else {
             if (!permissions) {
@@ -310,7 +310,7 @@ export class PrismaService {
                     const relatedPermissions = this.selectPermission(permissionsConfig[relation.model.toLowerCase()]?.[userRole] || {}, action.toString(), relation.model, userRole)
 
                     // If model is exposed, do not apply conditions
-                    if (RequestContext.currentContext.req.prismaExposedModels.map((m: string) => m.toLowerCase()).includes(relation.model.toLowerCase())) {
+                    if (RequestContext.currentContext.req.prismaExposedModels?.map((m: string) => m.toLowerCase()).includes(relation.model.toLowerCase())) {
                         this.debug(`Related model '${relation.model}' is exposed via @Permission() decorator. Skipping conditions for action '${String(action)}' on role ${userRole}.`);
                         continue;
                     }
@@ -375,7 +375,7 @@ export class PrismaService {
         }
 
         // If model is exposed, do not apply conditions
-        if (RequestContext.currentContext.req.prismaExposedModels.map((m: string) => m.toLowerCase()).includes(modelName.toLowerCase())) {
+        if (RequestContext.currentContext.req.prismaExposedModels?.map((m: string) => m.toLowerCase()).includes(modelName.toLowerCase())) {
             this.debug(`Model '${modelName}' is exposed via @Permission() decorator. Skipping conditions for action '${String(action)}' on role ${userRole}.`);
             return args;
         }

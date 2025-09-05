@@ -1,6 +1,6 @@
 {
     "name": "@appxdigital/appx-core",
-    "version": "0.1.93",
+    "version": "0.1.94",
     "description": "Appx Core is a library that provides a set of tools to help you build your application faster.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
