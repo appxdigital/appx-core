@@ -30,7 +30,9 @@ export class PrismaInterceptor implements NestInterceptor {
 
         // Attach expose_models metadata if needed
         const permissionMetadata = this.reflector.get(PERMISSION_METADATA_KEY, context.getHandler()) || {};
-        RequestContext.currentContext.req.prismaExposedModels = permissionMetadata['expose_models'] || [];
+
+        if (RequestContext.currentContext)
+            RequestContext.currentContext.req.prismaExposedModels = permissionMetadata['expose_models'] || [];
 
         const useTransaction = this.reflector.get<boolean>('useTransaction', context.getHandler()) ?? this.defaultUseTransaction === 'true';
         if (useTransaction) {

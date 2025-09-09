@@ -92,9 +92,9 @@ export class CoreService<T> {
      */
     async deleteById(id: string | number): Promise<T> {
         try {
-            return (await this.modelDelegate.deleteMany({
+            return this.modelDelegate.deleteMany({
                 where: this._generateWhereFromIdField(id)
-            }))[0];
+            });
         } catch (error) {
             handleError(error);
         }
