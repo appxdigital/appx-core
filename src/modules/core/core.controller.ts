@@ -58,7 +58,7 @@ export abstract class CoreController<T> {
 
 
     @Put(':id')
-    @Permission('update')
+    @Permission('updateMany')
     async update(@Param('id') id: string, @Body() data: Partial<T>) {
         const user = RequestContext.currentContext.req.user;
         const role = user?.role || 'GUEST';
