@@ -228,6 +228,7 @@ export class PrismaService {
                 modelName,
                 omitFields,
                 args.include,
+                null,
                 userRole,
             );
             delete args.include;
@@ -235,6 +236,7 @@ export class PrismaService {
             args.select = this.buildSelectFields(
                 modelName,
                 omitFields,
+                null,
                 null,
                 userRole,
             );
@@ -301,13 +303,18 @@ export class PrismaService {
                 // If field is relation
                 let relation = this.getRelation(modelName, field);
                 if (!relation) {
+                    if (field === '_count') {
+                        // TODO implement filtering on _count
+                        // args.select[field] = this.applyWhereConditions(modelName, userRole, args.select[field], user, action);
+                    }
                     continue;
                 }
 
                 if (relation.relation === 'belongsTo') {
                     this.debug(`Found 1:1 / *:1 (belongsTo) relation to model '${relation.model}' from model '${modelName}' via field '${field}'. Filter will be applied to main conditions...`);
 
-                    const relatedPermissions = this.selectPermission(permissionsConfig[relation.model.toLowerCase()]?.[userRole] || {}, action.toString(), relation.model, userRole)
+                    // findFirst permissions for related model
+                    const relatedPermissions = this.selectPermission(permissionsConfig[relation.model.toLowerCase()]?.[userRole] || {}, 'findFirst', relation.model, userRole)
 
                     // If model is exposed, do not apply conditions
                     if (RequestContext.currentContext?.req.prismaExposedModels?.map((m: string) => m.toLowerCase()).includes(relation.model.toLowerCase())) {
@@ -349,7 +356,13 @@ export class PrismaService {
                   },
                 })
                  */
-                args.select[field].where = this.applyWhereConditions(relation.model, userRole, args.select[field], user, action).where;
+
+                if (args.select[field] === true) {
+                    args.select[field] = {};
+                }
+
+                // findMany permissions for related model
+                args.select[field].where = this.applyWhereConditions(relation.model, userRole, args.select[field], user, 'findMany').where;
                 delete args.select[field].select.where;
             }
         }
@@ -482,6 +495,7 @@ export class PrismaService {
      * @param modelName - The name of the model being queried.
      * @param omitFields - A list of fields to omit based on the user's role.
      * @param includeRelations - The relations to include in the query.
+     * @param defaultSelect - The select object provided in the query arguments.
      * @param userRole - The role of the user making the request.
      * @returns A `select` object for Prisma queries.
      */
@@ -489,6 +503,7 @@ export class PrismaService {
         modelName: string,
         omitFields: string[],
         includeRelations: any,
+        defaultSelect: any,
         userRole: string,
     ): any {
         const modelInfo = this.fieldConfigs[modelName.toLowerCase()];
@@ -496,8 +511,23 @@ export class PrismaService {
             return {};
         }
 
-        const {scalarFields, relationFields} = modelInfo;
+        let {scalarFields, relationFields} = modelInfo;
         const selectFields: Record<string, any> = {};
+
+        // If defaultSelect is provided, only include those fields
+        if (defaultSelect) {
+            // Use default select but separate scalar and relation fields. If not in any, consider relation
+            scalarFields = Object.keys(defaultSelect).filter((field) => modelInfo.scalarFields.includes(field));
+            relationFields = Object.keys(defaultSelect).filter((field) => !modelInfo.scalarFields.includes(field) || field === '_count').reduce((acc, field) => {
+                acc[field] = defaultSelect[field];
+                return acc;
+            }, {} as Record<string, any>);
+
+            // Merge with includeRelations if any
+            if (Object.keys(relationFields).length > 0) {
+                includeRelations = {...(includeRelations || {}), ...relationFields};
+            }
+        }
 
         for (const field of scalarFields) {
             if (!omitFields.includes(field)) {
@@ -506,25 +536,37 @@ export class PrismaService {
         }
         if (includeRelations) {
             for (const relationKey in includeRelations) {
-                if (!relationFields[relationKey]) continue;
+                if (!relationFields[relationKey] && relationKey !== '_count') continue;
                 let includedArgs = includeRelations[relationKey];
                 if (includedArgs === true) {
                     includedArgs = {};
                 }
-                const relatedModelName = this.getRelation(modelName, relationKey, true).model;
 
-                this.debug(`Found relation to model '${relatedModelName}' from model '${modelName}' via field '${relationKey}'. Generating select fields...`);
+                let relatedSelectFields: {[key: string]: any} = {};
+                if (relationKey === '_count') {
+                    if (includedArgs.select) {
+                        relatedSelectFields = includedArgs.select;
+                        omitFields.forEach((field) => {
+                            delete relatedSelectFields[field];
+                        });
+                    }
+                } else {
+                    const relatedModelName = this.getRelation(modelName, relationKey, true).model;
 
-                const relatedModelOmitFields = this.getFieldsToOmit(
-                    relatedModelName,
-                    userRole,
-                );
-                const relatedSelectFields = this.buildSelectFields(
-                    relatedModelName,
-                    relatedModelOmitFields,
-                    includedArgs.include || null,
-                    userRole,
-                );
+                    this.debug(`Found relation to model '${relatedModelName}' from model '${modelName}' via field '${relationKey}'. Generating select fields...`);
+
+                    const relatedModelOmitFields = this.getFieldsToOmit(
+                        relatedModelName,
+                        userRole,
+                    );
+                    relatedSelectFields = this.buildSelectFields(
+                        relatedModelName,
+                        relatedModelOmitFields,
+                        includedArgs.include || null,
+                        includedArgs.select || null,
+                        userRole,
+                    );
+                }
 
                 if (Object.keys(relatedSelectFields).length > 0) {
                     selectFields[relationKey] = {select: relatedSelectFields};
