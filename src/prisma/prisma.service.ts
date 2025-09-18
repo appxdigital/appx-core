@@ -34,6 +34,17 @@ export class PrismaService {
         RequestContext.currentContext.req.corePrismaDebug = enable;
     }
 
+    /*
+    * Exposes the specified models for the duration of the callback execution.
+    */
+    withExposedModels(models: string[], callback: () => Promise<void>) {
+        const previous = RequestContext.currentContext?.req.prismaExposedModels || [];
+        RequestContext.currentContext.req.prismaExposedModels = [...new Set([...previous, ...models.map(m => m.toLowerCase())])];
+        return callback().finally(() => {
+            RequestContext.currentContext.req.prismaExposedModels = previous;
+        });
+    }
+
     private debug(msg: string, type: 'log' | 'warn' | 'error' | 'info' = 'log') {
         if (RequestContext.currentContext?.req.corePrismaDebug) {
             // Default for log, yellow for warn, red for error, blue for info
