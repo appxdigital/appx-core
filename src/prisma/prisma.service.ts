@@ -191,6 +191,7 @@ export class PrismaService {
                     relationFields[field_name] = {
                         model: field.type,
                         relation: field.isList ? 'hasMany' : 'belongsTo',
+                        isRequired: field.isRequired,
                     }
                     if (!field.isList && field.relationToFields && field.relationFromFields) {
                         relationFields[field_name].foreignKey = field.relationToFields[0];
@@ -383,19 +384,45 @@ export class PrismaService {
         }
 
         for (const entry of belongsToQueue) {
-            const {relatedPermissions, field} = entry;
+            const {relatedPermissions, field, relation} = entry;
 
             this.debug(`Merging conditions for belongsTo relation field '${field}': ${JSON.stringify(relatedPermissions?.conditions)}`, 'info');
 
-            args.where = {
-                ...(args.where || {}),
-                [field]: {
-                    AND: [
-                        args?.where?.[field] ?? {},
-                        this.buildConditions(relatedPermissions?.conditions, user)
+            let belongsToConditions = this.buildConditions(relatedPermissions?.conditions, user);
+
+            if (!args.where)
+                args.where = {};
+
+            // If relation is optional allow for non-matching records
+            if (relation.isRequired === false) {
+                args.where = {
+                    OR: [
+                        {
+                            ...args.where,
+                            [field]: {
+                                AND: [
+                                    args?.where?.[field] ?? {},
+                                    belongsToConditions
+                                ]
+                            }
+                        },
+                        {
+                            ...args.where,
+                            [field]: {is: null}
+                        }
                     ]
-                }
-            };
+                };
+            } else {
+                args.where = {
+                    ...(args.where || {}),
+                    [field]: {
+                        AND: [
+                            args?.where?.[field] ?? {},
+                            belongsToConditions
+                        ]
+                    }
+                };
+            }
         }
 
         // If model is exposed, do not apply conditions
@@ -593,12 +620,14 @@ export class PrismaService {
         relation: string,
         foreignKey?: string,
         referencingColumn?: string,
+        isRequired: boolean
     }
     getRelation(parentModel: string, relatedField: string, throwOnNotFound = false): {
         model: string,
         relation: string,
         foreignKey?: string,
         referencingColumn?: string,
+        isRequired: boolean
     } | null {
         parentModel = parentModel.toLowerCase();
 
