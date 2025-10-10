@@ -1,5 +1,5 @@
 import {CallHandler, ExecutionContext, Injectable, NestInterceptor,} from '@nestjs/common';
-import {PrismaService} from '../../prisma/prisma.service';
+import {CorePrismaContext, PrismaService} from '../../prisma/prisma.service';
 import {Reflector} from '@nestjs/core';
 import {ConfigService} from '@nestjs/config';
 import {RequestContext} from 'nestjs-request-context';
@@ -31,53 +31,62 @@ export class PrismaInterceptor implements NestInterceptor {
         // Attach expose_models metadata if needed
         const permissionMetadata = this.reflector.get(PERMISSION_METADATA_KEY, context.getHandler()) || {};
 
-        if (RequestContext.currentContext)
-            RequestContext.currentContext.req.prismaExposedModels = permissionMetadata['expose_models'] || [];
-
-        const useTransaction = this.reflector.get<boolean>('useTransaction', context.getHandler()) ?? this.defaultUseTransaction === 'true';
-        if (useTransaction) {
-            return new Observable((observer) => {
-                this.prismaService
-                    .$transaction(async (transactionClient: PrismaClient) => {
-                        RequestContext.currentContext.req.prisma = transactionClient;
-                        await new Promise((resolve, reject) => {
-                            next
-                                .handle()
-                                .pipe(
-                                    tap(() => {}),
-                                    catchError((err) => {
-                                        const handledError = handleError(err);
-                                        reject(handledError);
-                                        return throwError(() => handledError);
-                                    }),
-                                )
-                                .subscribe({
-                                    next: (result) => observer.next(result),
-                                    complete: () => {
-                                        delete RequestContext.currentContext.req.prisma;
-                                        observer.complete();
-                                        resolve(null);
-                                    },
-                                    error: (err) => {
-                                        delete RequestContext.currentContext.req.prisma;
-                                        observer.error(err);
-                                        reject(err);
-                                    },
-                                });
+        return new Observable((observer) => {
+            CorePrismaContext.run({
+                exposedModels: permissionMetadata['expose_models'] || [],
+            }, () => {
+                const useTransaction = this.reflector.get<boolean>('useTransaction', context.getHandler()) ?? this.defaultUseTransaction === 'true';
+                if (useTransaction) {
+                    this.prismaService
+                        .$transaction(async (transactionClient: PrismaClient) => {
+                            RequestContext.currentContext.req.prisma = transactionClient;
+                            await new Promise((resolve, reject) => {
+                                next
+                                    .handle()
+                                    .pipe(
+                                        tap(() => {}),
+                                        catchError((err) => {
+                                            const handledError = handleError(err);
+                                            reject(handledError);
+                                            return throwError(() => handledError);
+                                        }),
+                                    )
+                                    .subscribe({
+                                        next: (result) => observer.next(result),
+                                        complete: () => {
+                                            delete RequestContext.currentContext.req.prisma;
+                                            observer.complete();
+                                            resolve(null);
+                                        },
+                                        error: (err) => {
+                                            delete RequestContext.currentContext.req.prisma;
+                                            observer.error(err);
+                                            reject(err);
+                                        },
+                                    });
+                            });
+                        })
+                        .catch((err: Error) => {
+                            delete RequestContext.currentContext.req.prisma;
+                            observer.error(err);
                         });
-                    })
-                    .catch((err: Error) => {
-                        delete RequestContext.currentContext.req.prisma;
-                        observer.error(err);
+                } else {
+                    next.handle().pipe(
+                        tap(() => {}),
+                        catchError((error) => {
+                            return throwError(() => handleError(error));
+                        }),
+                    ).subscribe({
+                        next: (result) => observer.next(result),
+                        complete: () => {
+                            observer.complete();
+                        },
+                        error: (err) => {
+                            observer.error(err);
+                        }
                     });
+                }
             });
-        } else {
-            return next.handle().pipe(
-                tap(() => {}),
-                catchError((error) => {
-                    return throwError(() => handleError(error));
-                }),
-            );
-        }
+        });
     }
 }

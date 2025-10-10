@@ -4,6 +4,11 @@ import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
 import {RequestContext} from "nestjs-request-context";
 import type {PrismaClient as RuntimeClient} from '.prisma/client';
 import {RuntimeDataModel} from "@prisma/client/runtime/edge";
+import {AsyncLocalStorage} from 'node:async_hooks';
+
+export const CorePrismaContext = new AsyncLocalStorage<{
+    exposedModels: string[]
+}>();
 
 type ModelKey = keyof RuntimeClient;
 
@@ -38,10 +43,13 @@ export class PrismaService {
     * Exposes the specified models for the duration of the callback execution.
     */
     withExposedModels(models: string[], callback: () => Promise<void>) {
-        const previous = RequestContext.currentContext?.req.prismaExposedModels || [];
-        RequestContext.currentContext.req.prismaExposedModels = [...new Set([...previous, ...models.map(m => m.toLowerCase())])];
-        return callback().finally(() => {
-            RequestContext.currentContext.req.prismaExposedModels = previous;
+        const previous = CorePrismaContext.getStore()?.exposedModels || [];
+        return new Promise<void>(async (resolve, reject) => {
+            CorePrismaContext.run({
+                exposedModels: [...new Set([...previous, ...models.map(m => m.toLowerCase())])],
+            }, () => {
+                callback().then(resolve).catch(reject);
+            })
         });
     }
 
@@ -295,7 +303,8 @@ export class PrismaService {
         let actionPermissions;
 
         // If model is exposed, permissions is ALL
-        if (RequestContext.currentContext?.req.prismaExposedModels?.map((m: string) => m.toLowerCase()).includes(modelName.toLowerCase())) {
+        const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
+        if (exposedModels.includes(modelName.toLowerCase())) {
             actionPermissions = 'ALL';
         } else {
             if (!permissions) {
@@ -329,7 +338,7 @@ export class PrismaService {
                     const relatedPermissions = this.selectPermission(permissionsConfig[relation.model.toLowerCase()]?.[userRole] || {}, 'findFirst', relation.model, userRole)
 
                     // If model is exposed, do not apply conditions
-                    if (RequestContext.currentContext?.req.prismaExposedModels?.map((m: string) => m.toLowerCase()).includes(relation.model.toLowerCase())) {
+                    if (exposedModels.includes(relation.model.toLowerCase())) {
                         this.debug(`Related model '${relation.model}' is exposed via @Permission() decorator. Skipping conditions for action '${String(action)}' on role ${userRole}.`);
                         continue;
                     }
@@ -426,7 +435,7 @@ export class PrismaService {
         }
 
         // If model is exposed, do not apply conditions
-        if (RequestContext.currentContext?.req.prismaExposedModels?.map((m: string) => m.toLowerCase()).includes(modelName.toLowerCase())) {
+        if (exposedModels.includes(modelName.toLowerCase())) {
             this.debug(`Model '${modelName}' is exposed via @Permission() decorator. Skipping conditions for action '${String(action)}' on role ${userRole}.`);
             return args;
         }
