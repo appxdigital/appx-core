@@ -397,7 +397,7 @@ export class PrismaService {
 
             this.debug(`Merging conditions for belongsTo relation field '${field}': ${JSON.stringify(relatedPermissions?.conditions)}`, 'info');
 
-            let belongsToConditions = this.buildConditions(relatedPermissions?.conditions, user);
+            let belongsToConditions = PrismaService._buildConditions(relatedPermissions?.conditions, user);
 
             if (!args.where)
                 args.where = {};
@@ -445,7 +445,7 @@ export class PrismaService {
             return args;
         }
 
-        const whereClause = this.buildConditions(actionPermissions.conditions, user);
+        const whereClause = PrismaService._buildConditions(actionPermissions.conditions, user);
 
         this.debug(`Applying where conditions for '${modelName}.${String(action)}()' on role ${userRole}: ${JSON.stringify(whereClause)}`);
 
@@ -466,7 +466,7 @@ export class PrismaService {
      * @param user - The user object used to replace placeholders.
      * @returns The constructed `where` clause object.
      */
-    private buildConditions(conditions: any[], user: any): any {
+    public static _buildConditions(conditions: any[], user: any): any {
         const whereClause: Record<string, any> = {};
 
         if (!conditions) {
@@ -490,7 +490,7 @@ export class PrismaService {
      * @param user - The user object containing values like `id`.
      * @returns The condition with placeholders replaced by actual values.
      */
-    private replacePlaceholders(condition: any, user: any): any {
+    private static replacePlaceholders(condition: any, user: any): any {
         if (condition === null) {
             return null;
         }
