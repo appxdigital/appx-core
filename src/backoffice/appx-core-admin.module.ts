@@ -20,6 +20,10 @@ export class AppxCoreAdminModule {
     }
 }
 
+function lowerCase(name: string) {
+    return name.substring(0, 1).toLowerCase() + name.substring(1)
+}
+
 async function createAdminJsModule(
     adminConfig: AdminConfigType,
     permissionConfig: PermissionsConfigType,
@@ -185,7 +189,7 @@ async function createAdminJsModule(
                                     get(target, prop) {
                                         return (
                                             (target as any)[prop] ||
-                                            (target as any).model[m.model.name.toLowerCase()]
+                                            (target as any).model[lowerCase(m.model.name)]
                                         );
                                     },
                                 }),
