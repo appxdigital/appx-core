@@ -26,9 +26,9 @@ export function createPermissionHandler(
         new: 'create',
     };
 
-    const mappedAction = Array.isArray(actionMapping[action])
-        ? actionMapping[action]
-        : [actionMapping[action]];
+    let mappedAction = actionMapping[action];
+    if (!Array.isArray(mappedAction))
+        mappedAction = [mappedAction];
 
     for (const act of mappedAction) {
         if (!rolePermissions[act]) {

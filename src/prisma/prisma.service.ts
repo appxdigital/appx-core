@@ -3,6 +3,7 @@ import {Prisma, PrismaClient} from '@prisma/client';
 import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
 import {RequestContext} from "nestjs-request-context";
 import type {PrismaClient as RuntimeClient} from '.prisma/client';
+// @ts-ignore
 import {RuntimeDataModel} from "@prisma/client/runtime/edge";
 import {AsyncLocalStorage} from 'node:async_hooks';
 
@@ -186,7 +187,7 @@ export class PrismaService {
                 if (commentPart) {
                     const roleMatch = commentPart.match(/@Role\((.*?)\)/);
                     if (roleMatch) {
-                        fieldConfig[field_name] = roleMatch[1].split(',').map(role => role.trim());
+                        fieldConfig[field_name] = roleMatch[1].split(',').map((role: string) => role.trim());
                     }
                 }
 

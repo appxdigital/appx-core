@@ -6,7 +6,7 @@ import * as path from 'path';
 const scriptsDir = path.join(__dirname);
 
 console.log('Running Prisma Generate...');
-execSync(`npx prisma generate`, {
+execSync(`prisma generate`, {
     stdio: 'inherit',
 });
 

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import {createFileIfNotExists, kebabToPascalCase} from './utils';
+import {createFileIfNotExists, IGNORE_FOLDERS, kebabToPascalCase} from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const modulesOutputPath = path.join(process.cwd(), 'src/modules');
@@ -32,7 +32,7 @@ export class ${model}Controller extends CoreController<${model}> {
  * Generate controllers for each model
  */
 fs.readdirSync(modelsPath).forEach((folder) => {
-    if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
+    if (IGNORE_FOLDERS.includes(folder)) return;
 
     const modelName = kebabToPascalCase(folder);  // Capitalize model name e.g., 'Comment', 'Post'
     const modelOutputPath = path.join(modulesOutputPath, folder);

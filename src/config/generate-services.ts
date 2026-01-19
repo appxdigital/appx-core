@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import {createFileIfNotExists, kebabToPascalCase} from './utils';
+import {createFileIfNotExists, IGNORE_FOLDERS, kebabToPascalCase} from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const servicesOutputPath = path.join(process.cwd(), 'src/modules');
@@ -16,7 +16,7 @@ import { ${model} } from '@prisma/client';
 
 @Injectable()
 export class ${model}Service extends CoreService<${model}> {
-  constructor(prisma: PrismaService) {
+  constructor(private readonly prisma: PrismaService) {
     super(prisma.model.${model[0].toLowerCase() + model.slice(1)});
   }
 
@@ -28,7 +28,7 @@ export class ${model}Service extends CoreService<${model}> {
  * Generate services for each model
  */
 fs.readdirSync(modelsPath).forEach((folder) => {
-    if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
+    if (IGNORE_FOLDERS.includes(folder)) return;
 
     const modelName = kebabToPascalCase(folder);
     const modelOutputPath = path.join(servicesOutputPath, folder);

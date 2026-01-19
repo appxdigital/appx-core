@@ -16,3 +16,10 @@ export const createFileIfNotExists = (filePath: string, content: string) => {
         console.log(`${filePath} already exists, skipping.`);
     }
 };
+
+export const IGNORE_FOLDERS = [
+    'prisma',
+    'schema.gql',
+    'session',
+    'user-refresh-token'
+];

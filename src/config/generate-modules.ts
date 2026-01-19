@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import {kebabToPascalCase} from './utils';
+import {IGNORE_FOLDERS, kebabToPascalCase} from './utils';
 
 const modelsPath = path.join(process.cwd(), 'src/generated');
 const modulesOutputPath = path.join(process.cwd(), 'src/modules');
@@ -78,7 +78,7 @@ const updateAppModule = () => {
      * Iterate over the modules directory and add new imports to the AppModule
      */
     fs.readdirSync(modulesOutputPath).forEach((folder) => {
-        if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
+        if (IGNORE_FOLDERS.includes(folder)) return;
 
         const modelName = kebabToPascalCase(folder);
         const moduleName = `${modelName}Module`;
@@ -121,7 +121,7 @@ const updateAppModule = () => {
  * Generate modules for each model
  */
 fs.readdirSync(modelsPath).forEach((folder) => {
-    if (folder === 'prisma' || folder === 'schema.gql' || folder === 'session') return;
+    if (IGNORE_FOLDERS.includes(folder)) return;
 
     const modelName = kebabToPascalCase(folder);
     const modelOutputPath = path.join(modulesOutputPath, folder);
