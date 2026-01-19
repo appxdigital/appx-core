@@ -1,0 +1,47 @@
+datasource db {
+  provider = "{{DB_PROVIDER}}"
+  url      = env("DB_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator nestgraphql {
+  provider = "node node_modules/prisma-nestjs-graphql"
+  output   = "../src/generated/"
+}
+
+model User {
+  id             Int                 @id @default(autoincrement())
+  email          String              @unique
+  name           String?
+  password       String?             /// @Role(none)
+  role           Role                @default(GUEST)
+  refreshTokens  UserRefreshToken[]
+}
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String   @db.Text
+  expiresAt DateTime
+  userId    Int?
+}
+
+model UserRefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique @db.VarChar(255)
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([userId])
+}
+
+enum Role {
+  ADMIN
+  GUEST
+}
