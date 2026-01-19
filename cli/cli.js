@@ -406,10 +406,15 @@ async function createProject(answers, fileUploadConfigData) {
         coreGenerate(answers?.showOutput);
         incrementProgress(answers?.showOutput, "generateCoreModels");
 
+        if (fileUploadConfigData.provider) {
+            await insertFileUploadConfiguration(fileUploadConfigData, projectPath);
+            incrementProgress(showOutput, "fileUploadSetup");
+        }
+
         // Format code
         executeCommand('npx --yes prettier --write .', answers?.showOutput);
 
-        // Initialize git repo
+        // Create git repo and initial commit
         initializeGitRepo(projectPath, answers?.showOutput);
         incrementProgress(answers?.showOutput, "gitInit");
 
@@ -417,11 +422,6 @@ async function createProject(answers, fileUploadConfigData) {
         executeCommand(`prisma migrate dev`, answers?.showOutput);
 
         incrementProgress(answers?.showOutput, "migrateDatabase");
-
-        if (fileUploadConfigData.provider) {
-            await insertFileUploadConfiguration(fileUploadConfigData, projectPath);
-            incrementProgress(showOutput, "fileUploadSetup");
-        }
 
         if (!showOutput) {
             progressBar.stop();
@@ -522,7 +522,7 @@ function initializeGitRepo(projectPath, showOutput = false) {
 }
 
 async function createGitignore(projectPath) {
-    const envFilesToAdd = ['.env', '.env.production'];
+    const envFilesToAdd = ['.env', '.env.production', 'src/generated/**'];
 
     const {defaultGitIgnore} = await import(path.join(projectPath, 'node_modules', '@nestjs/cli/lib/configuration/defaults.js'));
     const existingLines = defaultGitIgnore.split('\n');

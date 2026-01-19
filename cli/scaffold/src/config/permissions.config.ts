@@ -1,4 +1,4 @@
-import {PermissionPlaceholder, PermissionsConfigType,} from '@appxdigital/appx-core';
+import {PermissionPlaceholder, PermissionsConfigType} from '@appxdigital/appx-core';
 
 export const PermissionsConfig: PermissionsConfigType = {
     User: {
@@ -9,9 +9,9 @@ export const PermissionsConfig: PermissionsConfigType = {
             updateMany: 'ALL',
             deleteMany: 'ALL',
         },
-        CLIENT: {
+        USER: {
             findFirst: {
-                conditions: {id: PermissionPlaceholder.USER_ID},
+                conditions: {id: PermissionPlaceholder.USER_ID}, // Can only see its own user
             },
         }
     },

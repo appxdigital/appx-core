@@ -17,7 +17,7 @@ model User {
   email          String              @unique
   name           String?
   password       String?             /// @Role(none)
-  role           Role                @default(GUEST)
+  role           Role                @default(USER)
   refreshTokens  UserRefreshToken[]
 }
 
@@ -43,5 +43,5 @@ model UserRefreshToken {
 
 enum Role {
   ADMIN
-  GUEST
+  USER
 }
