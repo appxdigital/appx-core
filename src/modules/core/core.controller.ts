@@ -32,7 +32,7 @@ export abstract class CoreController<T> {
     }
 
     @Get(':id')
-    @Permission('findUnique')
+    @Permission('findFirst')
     async findOne(@Param('id') id: string) {
         return this.service.findById(id);
     }
