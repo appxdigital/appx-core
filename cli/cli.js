@@ -27,7 +27,7 @@ import packageJson from './package.json' with {type: 'json'};
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CORE_VERSION = '0.1.116';
+const CORE_VERSION = '0.1.117';
 
 const phaseDurations = {
     installDependencies: 30,
