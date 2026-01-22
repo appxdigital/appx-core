@@ -572,4 +572,4 @@ Report vulnerabilities privately to **core@appx-digital.com**. Do not open publi
 
 ## License
 
-MIT License. See `LICENSE`.
+MIT License. See [LICENSE](LICENSE).
