@@ -14,7 +14,6 @@ Built and maintained by **AppX** (appx-digital.com).
 
 - [Why AppX Core](#why-appx-core)
 - [Key Features](#key-features)
-- [Quick Start](#quick-start)
 - [Architecture Overview](#architecture-overview)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
@@ -83,9 +82,26 @@ AppX Core puts **security and data-access control first**, while keeping develop
 
 ---
 
-## Quick Start
+## Architecture Overview
 
-If you only read one section, read this one.
+AppX Core is designed as a **base layer** on top of NestJS:
+
+- Your application remains a NestJS project with conventional modules.
+- AppX Core provides:
+  - base configuration and wiring
+  - authentication modules
+  - permissions system (ABAC)
+  - generation pipeline based on Prisma schema
+  - AdminJS integration
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js 20+**
+- A running database (**MySQL** or **PostgreSQL** tested/validated)
 
 ### 1) Install the CLI
 
@@ -93,16 +109,16 @@ If you only read one section, read this one.
 npm install -g @appxdigital/appx-core-cli
 ```
 
-### 2) Scaffold a new project
+### 2) Create a New Project
 
 ```bash
 appx-core create
 cd <your-project>
 ```
 
-### 3) Add a `.env`
+### 3) Configure Environment
 
-Create `.env` at the project root (you can start from the example below):
+Create a `.env` file at the project root:
 
 ```bash
 ## DataBase Configurations ##
@@ -130,89 +146,13 @@ JWT_SECRET="change-me"
 JWT_REFRESH_SECRET="change-me"
 ```
 
-### 4) Define your data model
+### 4) Define Data Models
 
 Edit:
 
 - `prisma/schema.prisma`
 
 Add your application models. You can add fields and relations freely. Avoid removing or changing types of the default models shipped with AppX Core.
-
-### 5) Generate modules and CRUD
-
-```bash
-appx-core generate
-```
-
-Run this every time you change `schema.prisma`.
-
-### 6) Run migrations
-
-```bash
-npx prisma migrate dev
-```
-
-### 7) Start the server
-
-```bash
-npm run start:dev
-```
-
-### What you get immediately
-
-- Admin backoffice at **`/admin`** (after you include models in `src/config/admin.config.ts`)
-- Auth endpoints with no prefix:
-  - `POST /auth/register`
-  - `POST /auth/login`
-  - `POST /auth/logout`
-  - `GET /me`
-  - `POST /login/jwt` (recommended)
-  - `POST /logout/jwt`
-
----
-
-## Architecture Overview
-
-AppX Core is designed as a **base layer** on top of NestJS:
-
-- Your application remains a NestJS project with conventional modules.
-- AppX Core provides:
-  - base configuration and wiring
-  - authentication modules
-  - permissions system (ABAC)
-  - generation pipeline based on Prisma schema
-  - AdminJS integration
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- **Node.js 20+**
-- A running database (**MySQL** or **PostgreSQL** tested/validated)
-
-### Installation
-
-```bash
-npm install -g @appxdigital/appx-core-cli
-```
-
-### Create a New Project
-
-```bash
-appx-core create
-```
-
-Follow the prompts. This scaffolds a native NestJS project with AppX Core integrated.
-
-### Configure Environment
-
-Use the `.env` example in [Quick Start](#quick-start).
-
-### Define Data Models
-
-Open `prisma/schema.prisma` and define your application models.
 
 If you already have an existing database schema and want to import it:
 
@@ -222,23 +162,40 @@ npx prisma db pull
 
 **Important:** `db pull` overrides `schema.prisma`. Ensure you preserve default AppX Core models/configuration and merge accordingly.
 
-### Generate Modules and CRUD
+### 5) Generate Modules and CRUD
+
+After you edit `schema.prisma`, run:
 
 ```bash
 appx-core generate
 ```
 
-### Run Migrations
+Run this **every time** you change the Prisma schema. This is the only required generation step (no need to run `prisma generate` separately).
+
+### 6) Run Migrations
 
 ```bash
 npx prisma migrate dev
 ```
 
-### Run the App
+You will be asked for a migration name.
+
+### 7) Run the App
 
 ```bash
 npm run start:dev
 ```
+
+### What you get out of the box
+
+- Admin backoffice at **`/admin`** (after you include models in `src/config/admin.config.ts`)
+- Auth endpoints with no prefix:
+  - `POST /auth/register`
+  - `POST /auth/login`
+  - `POST /auth/logout`
+  - `GET /me`
+  - `POST /login/jwt` (recommended)
+  - `POST /logout/jwt`
 
 ---
 
