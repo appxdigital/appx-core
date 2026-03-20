@@ -26,7 +26,7 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     private readonly usernameField: string;
     private readonly passwordField: string;
 
-    constructor(private authService: AuthService) {
+    constructor(protected readonly authService: AuthService) {
         const {usernameField, passwordField} = getAuthFieldNames(UserDto);
 
         super({
