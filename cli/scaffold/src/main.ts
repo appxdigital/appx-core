@@ -15,23 +15,17 @@ async function bootstrap() {
     const port = configService.get<number>('APP_PORT') ?? 3000;
     const sessionTTL = configService.get<number>('SESSION_TTL') || 86400;
     const cookiename = configService.get<string>('SESSION_COOKIE_NAME');
-    const isProduction = process.env.NODE_ENV === 'production';
 
     // Application request logging
     app.use(morgan('[:date[iso]] :remote-addr :method :url :status :response-time ms - :res[content-length]'));
 
     app.use(
         session({
-            cookie: {
-                maxAge: sessionTTL * 1000,
-                secure: isProduction,
-                httpOnly: isProduction,
-            },
             secret: secret ?? 'APPXCORESECRET',
             resave: false,
             name: cookiename,
             saveUninitialized: false,
-            store: new CorePrismaSessionStore(prismaService),
+            store: new CorePrismaSessionStore(prismaService, {ttl: sessionTTL}),
         }),
     );
     app.use(passport.initialize());
