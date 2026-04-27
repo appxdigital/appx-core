@@ -1,7 +1,7 @@
 {
     "type": "module",
     "name": "@appxdigital/appx-core-cli",
-    "version": "1.0.16",
+    "version": "1.0.17",
     "main": "index.js",
     "scripts": {
         "npm:publish": "npm publish --access public",
