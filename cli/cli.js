@@ -27,7 +27,7 @@ import packageJson from './package.json' with {type: 'json'};
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CORE_VERSION = '0.1.119';
+const CORE_VERSION = '0.1.120';
 
 const phaseDurations = {
     installDependencies: 30,
@@ -522,7 +522,7 @@ function initializeGitRepo(projectPath, showOutput = false) {
 }
 
 async function createGitignore(projectPath) {
-    const envFilesToAdd = ['.env', '.env.production', 'src/generated/**'];
+    const envFilesToAdd = ['.env', '.env.production', 'src/generated/**', 'tmp'];
 
     const {defaultGitIgnore} = await import(path.join(projectPath, 'node_modules', '@nestjs/cli/lib/configuration/defaults.js'));
     const existingLines = defaultGitIgnore.split('\n');
