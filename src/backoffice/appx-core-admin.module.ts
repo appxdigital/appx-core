@@ -1,3 +1,6 @@
+// Set tmp dir to avoid dot ".adminjs" since it is not served by default on Express 5
+process.env.ADMIN_JS_TMP_DIR ??= 'tmp/adminjs';
+
 import {DynamicModule, Global, Module} from '@nestjs/common';
 import {createActions, dynamicImport} from './utils';
 import {readFileSync} from 'fs';
@@ -28,9 +31,6 @@ async function createAdminJsModule(
     adminConfig: AdminConfigType,
     permissionConfig: PermissionsConfigType,
 ): Promise<DynamicModule> {
-    // Set tmp dir to avoid dot ".adminjs" since it is not served by default on Express 5
-    process.env.ADMIN_JS_TMP_DIR ??= 'tmp/adminjs';
-
     // Due to AdminJS only allowing ESM now, we need to use dynamic imports to load the modules, this function can be found within src/backoffice/utils.ts
     const {default: AdminJS} = await dynamicImport('adminjs');
     const {Database, Resource, convertParam} = await dynamicImport('@adminjs/prisma');
