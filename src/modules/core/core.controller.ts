@@ -9,6 +9,7 @@ interface CreatePermission<T> {
     [key: string]: any;
 
     setUserIdField?: keyof T;
+    restrictedFields?: (keyof T)[];
 }
 
 @UseGuards(RbacGuard)
@@ -46,12 +47,15 @@ export abstract class CoreController<T> {
         const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[role];
         const actionPermission = rolePermissions?.['create'] as CreatePermission<T> | string;
 
-        if (
-            typeof actionPermission !== 'string' &&
-            actionPermission?.setUserIdField
-        ) {
-            const userIdField = actionPermission.setUserIdField;
-            data[userIdField] = user.id;
+        if (typeof actionPermission !== 'string' && actionPermission) {
+            // Strip restricted fields first, then force the server-owned user id
+            // (so setUserIdField cannot be clobbered by a restricted-field strip).
+            for (const field of (actionPermission.restrictedFields ?? []) as (keyof T)[]) {
+                delete data[field];
+            }
+            if (actionPermission.setUserIdField) {
+                data[actionPermission.setUserIdField] = user.id;
+            }
         }
         return this.service.create(data);
     }
@@ -64,7 +68,9 @@ export abstract class CoreController<T> {
         const role = user?.role || 'GUEST';
         const model = (this.constructor as typeof CoreController).entityName;
         const rolePermissions = this.permissionsService.getPermissionsConfig()[model]?.[role];
-        const actionPermission = rolePermissions?.['update'];
+        // The action key is 'updateMany' (matches @Permission('updateMany') and
+        // the proxy) — reading 'update' here meant restrictedFields never applied.
+        const actionPermission = rolePermissions?.['updateMany'];
         let restrictedFields: string[] = [];
 
         if (typeof actionPermission !== 'string' && actionPermission?.restrictedFields) {
