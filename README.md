@@ -348,6 +348,37 @@ For each generated model/controller (subject to permissions):
 
 To show a model in the admin backoffice, register it in `src/config/admin.config.ts`.
 
+### Request validation (generated DTOs)
+
+`appx-core generate` emits a `class-validator` DTO per model and action so `POST`/`PUT` bodies are validated and unknown fields are rejected (keep `setupCoreSecurity(app)` in `main.ts`, which enables `whitelist`). Two files are generated per action:
+
+- **Base** — `src/generated/dto/<model>/<action>-<model>.generated.dto.ts`. Derived from your Prisma schema, **regenerated (overwritten) on every `generate`**, and gitignored. Do not edit it.
+- **Subclass** — `src/modules/<model>/dto/<action>-<model>.dto.ts`. Generated **once** and yours to keep. Add custom validation here; it is never overwritten:
+
+  ```ts
+  import { IsEmail, Length } from 'class-validator';
+  import { CreateUserGeneratedDto } from '../../../generated/dto/user/create-user.generated.dto';
+
+  export class CreateUserDto extends CreateUserGeneratedDto {
+    @IsEmail()
+    email!: string;          // tighten the base @IsString()
+
+    @Length(2, 60)
+    name?: string;
+  }
+  ```
+
+**What's writable.** A field appears in the DTO unless it is the primary key (`@id`), a server-managed timestamp (`@default(now())` / `@updatedAt`), or annotated non-writable. To exclude a field from all generated CRUD writes, annotate it in `schema.prisma` with a doc-comment:
+
+```prisma
+model User {
+  password String? /// @Role(none)   // never read AND never CRUD-writable
+  role     Role    /// @NoWrite       // not writable via CRUD (set it through a controlled flow)
+}
+```
+
+Use `/// @NoWrite` to exclude a field for **all** roles. For **per-role** control (e.g. only ADMIN may set `role`), use `restrictedFields` on the permission instead of `@NoWrite`.
+
 ---
 
 ## Examples

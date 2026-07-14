@@ -1,5 +1,11 @@
 .idea
+.DS_Store
 dist
 appx_core-*.tgz
 .gitignore
 node_modules
+
+# Test runtime artifacts (generated schema + Prisma client per run)
+test/fixtures/.runtime/
+dist-test/
+coverage/
