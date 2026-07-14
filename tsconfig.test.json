@@ -1,0 +1,23 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "rootDir": ".",
+        "outDir": "./dist-test",
+        "noEmit": true,
+        "types": ["jest", "node"],
+        "strict": false,
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "isolatedModules": false
+    },
+    "include": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "dist-test",
+        "test/fixtures/.runtime"
+    ]
+}

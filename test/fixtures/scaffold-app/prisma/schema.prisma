@@ -1,0 +1,128 @@
+// Test-fixture schema. Initially produced by cli/scaffold/prisma/schema.prisma.template
+// and augmented with domain models below to exercise rich ABAC patterns:
+//   - multi-tenant scoping (Tenant.users)
+//   - many-to-many via join table (ProjectMember)
+//   - optional belongsTo (Task.assignee)
+//   - deep nested conditions in permissions (Comment → Task → Project → OR)
+//   - shared condition constants (ProjectAccessCondition in permissions.config.ts)
+//   - field-level @Role annotation on a non-password field (Project.secretApiKey)
+//
+// A real consumer's schema would look similar. Keep this file aligned with what
+// test/fixtures/scaffold-app/src/config/permissions.config.ts assumes.
+
+datasource db {
+  provider = "mysql"
+  url      = env("DB_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator nestgraphql {
+  provider = "node node_modules/prisma-nestjs-graphql"
+  output   = "../src/generated/"
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+// ----- Framework-owned models (do not remove fields) -----
+
+model User {
+  id             Int                 @id @default(autoincrement())
+  email          String              @unique
+  name           String?
+  password       String?             /// @Role(none)
+  role           Role                @default(USER)
+  refreshTokens  UserRefreshToken[]
+
+  // Multi-tenant scoping (optional — register flow does NOT set it)
+  tenantId       Int?
+  tenant         Tenant?             @relation(fields: [tenantId], references: [id])
+
+  // Project ownership + membership
+  ownedProjects  Project[]
+  memberships    ProjectMember[]
+
+  // Authored content
+  comments       Comment[]
+  assignedTasks  Task[]              @relation("AssigneeTasks")
+}
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String   @db.Text
+  expiresAt DateTime
+  userId    Int?
+}
+
+model UserRefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique @db.VarChar(255)
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([userId])
+}
+
+// ----- Domain models for ABAC test coverage -----
+
+model Tenant {
+  id    Int    @id @default(autoincrement())
+  name  String
+  users User[]
+}
+
+model Project {
+  id           Int             @id @default(autoincrement())
+  name         String
+  ownerId      Int
+  owner        User            @relation(fields: [ownerId], references: [id])
+  members      ProjectMember[]
+  tasks        Task[]
+  // Sensitive field — only ADMIN can read it (proxy field omission)
+  secretApiKey String?         /// @Role(ADMIN)
+  createdAt    DateTime        @default(now())
+}
+
+model ProjectMember {
+  id        Int     @id @default(autoincrement())
+  projectId Int
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String  @default("contributor")    // "manager" | "contributor"
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+model Task {
+  id         Int       @id @default(autoincrement())
+  title      String
+  status     String    @default("open")
+  projectId  Int
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // Optional belongsTo — exercises the proxy's null-allowed code path
+  assigneeId Int?
+  assignee   User?     @relation("AssigneeTasks", fields: [assigneeId], references: [id])
+  comments   Comment[]
+  createdAt  DateTime  @default(now())
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  body      String   @db.Text
+  taskId    Int
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+}
