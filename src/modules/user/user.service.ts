@@ -12,9 +12,15 @@ export class UserService extends CoreService<User> {
     }
 
     async createUser(createUserInput: UserCreateInput): Promise<User> {
-        return this.prisma.user.create({
-            data: createUserInput,
-        });
+        // Registration is an unauthenticated framework flow (role GUEST has no
+        // create permission). Its input is already constrained by RegisterDto,
+        // so bypass access filtering — otherwise the create default-deny would
+        // reject sign-up.
+        return this.prisma.user.create(
+            {data: createUserInput},
+            // @ts-ignore — options arg is accepted by the proxy delegate
+            {BYPASS_FILTERING: true},
+        );
     }
 
     async findByField(field: string, value: any): Promise<any> {

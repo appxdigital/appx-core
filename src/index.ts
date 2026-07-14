@@ -22,6 +22,8 @@ export * from './common/interfaces/storage-service.interface';
 export * from './modules/file/file-upload.controller';
 export * from './modules/file/file-upload.service';
 export * from './common/decorators/permission.decorator';
+export * from './common/setup/setup-core-security';
+export * from './common/setup/core-config';
 export * from './common/interceptors/file.interceptor';
 export * from './modules/auth/authenticated.guard';
 export * from './modules/auth/jwt-auth.guard';

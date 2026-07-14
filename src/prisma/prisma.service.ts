@@ -26,6 +26,13 @@ export type CorePrismaModel<M extends ModelKey> = Exclude<RuntimeClient[M], 'fin
 export class PrismaService {
     private fieldConfigs: Record<string, any> = {};
     prismaClient: PrismaClient;
+    /**
+     * The un-proxied Prisma client. Used internally (e.g. create-condition
+     * checks) to look up an already-existing parent row without re-applying
+     * that model's access filtering — matching "would a findFirst with these
+     * conditions match".
+     */
+    private rawClient!: PrismaClient;
 
     constructor(
         prismaClient: PrismaClient,
@@ -67,6 +74,10 @@ export class PrismaService {
     }
 
     proxyModels() {
+        // Capture the un-proxied client before wrapping it (used by internal
+        // lookups that must bypass this proxy's access filtering — see
+        // enforceCreateConditions).
+        this.rawClient = this.prismaClient;
         // Proxy client to intercept model calls
         this.prismaClient = new Proxy(this.prismaClient, {
             get: (target, propKey) => {
@@ -100,8 +111,14 @@ export class PrismaService {
                                     } else {
                                         this.debug(`Skipping field omission for ${String(propKey)}.${String(methodKey)}()`);
                                     }
-                                    if (!options?.BYPASS_FILTERING && !['create', 'createMany'].includes(methodKey.toString())) {
-                                        params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
+                                    if (!options?.BYPASS_FILTERING) {
+                                        if (['create', 'createMany'].includes(methodKey.toString())) {
+                                            // Conditions can't be pushed into a WHERE on insert, so
+                                            // validate the incoming data satisfies them before insert.
+                                            await this.enforceCreateConditions(String(propKey), userRole, params, user, methodKey.toString());
+                                        } else {
+                                            params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
+                                        }
                                     } else {
                                         this.debug(`Skipping permission filtering for ${String(propKey)}.${String(methodKey)}()`);
                                     }
@@ -109,7 +126,14 @@ export class PrismaService {
                                         delete params.select;
                                     }
                                     this.debug(`Executing ${String(propKey)}.${String(methodKey)}() with params: ${JSON.stringify(params)}`);
-                                    return contextModel[methodKey](params);
+                                    const result = await contextModel[methodKey](params);
+                                    // Dev-only: warn if a just-created row wouldn't be readable by its
+                                    // creator (create conditions broader than find conditions). Skipped
+                                    // outside development so no extra query runs on the hot path.
+                                    if (methodKey === 'create' && !options?.BYPASS_FILTERING && this.isDevMode()) {
+                                        await this.warnIfCreatedRowNotFindable(String(propKey), userRole, result);
+                                    }
+                                    return result;
                                 };
                             }
                             return model[methodKey];
@@ -457,6 +481,192 @@ export class PrismaService {
         }
 
         return args;
+    }
+
+    /**
+     * Enforces permission `conditions` on `create` / `createMany`.
+     *
+     * Conditions cannot be pushed into a `WHERE` on insert, so instead we verify
+     * the incoming data *would* satisfy them — i.e. a `findFirst` with those
+     * conditions would return the new row. Own-scalar fields are checked against
+     * `data`; relation conditions are checked by looking up the referenced parent
+     * (which lets Prisma evaluate arbitrarily-nested relation conditions for us).
+     *
+     * Also default-denies: create is only allowed for a role/action that has an
+     * explicit permission (or 'ALL'), mirroring find/update/delete. Framework
+     * flows that must create without a permission (registration, sessions,
+     * tokens) pass BYPASS_FILTERING and never reach here.
+     *
+     * Fails **closed**: throws on a violation and on any condition shape it
+     * cannot evaluate, rather than silently allowing the insert.
+     */
+    private async enforceCreateConditions(
+        modelName: string,
+        userRole: string,
+        params: any,
+        user: any,
+        action: string,
+    ): Promise<void> {
+        const normalizedName = modelName.toLowerCase().trim();
+
+        const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
+        if (exposedModels.includes(normalizedName)) return;
+
+        const permissions = this.normalizedPermissionsConfig[normalizedName]?.[userRole];
+        if (!permissions) {
+            throw new HttpException(
+                `No permissions defined for role ${userRole} on model '${modelName}' — create is denied by default. Define a '${action}' permission (or 'ALL').`,
+                HttpStatus.FORBIDDEN,
+            );
+        }
+
+        const actionPermissions = permissions[action] ?? permissions['create'];
+        if (!actionPermissions) {
+            throw new HttpException(
+                `Role ${userRole} has no '${action}' permission on model '${modelName}' — create is denied. Define it (or 'ALL').`,
+                HttpStatus.FORBIDDEN,
+            );
+        }
+        if (actionPermissions === 'ALL') return;
+
+        const conditions = (actionPermissions as any).conditions;
+        if (!conditions) return; // permission defined but no conditions (e.g. setUserIdField only) → allow
+
+        const condObj = Array.isArray(conditions) ? {AND: conditions} : conditions;
+        const resolved = PrismaService._buildConditions(condObj, user);
+
+        const data = params?.data;
+        const rows = Array.isArray(data) ? data : [data ?? {}];
+
+        for (const row of rows) {
+            const ok = await this.matchesCreateConditions(resolved, row || {}, modelName);
+            if (!ok) {
+                throw new ForbiddenException(
+                    `Not allowed to create ${modelName}: the record does not satisfy the '${action}' permission conditions for role ${userRole}.`,
+                );
+            }
+        }
+    }
+
+    /**
+     * True only in an explicit local-development environment. Deliberately NOT
+     * `!== 'production'` — staging and other envs should behave like production
+     * (no extra diagnostic queries/logging). Only `development` / `dev` opt in.
+     */
+    private isDevMode(): boolean {
+        const env = process.env.NODE_ENV;
+        return env === 'development' || env === 'dev';
+    }
+
+    /**
+     * Dev-only diagnostic. After a create that passed its create-conditions,
+     * checks whether the new row also satisfies the model's *find* conditions —
+     * if not, the creator can't read it back (create rule broader than find
+     * rule). Logs a warning; never affects the create. Runs only in development
+     * (gated by the caller).
+     */
+    private async warnIfCreatedRowNotFindable(modelKey: string, userRole: string, created: any): Promise<void> {
+        try {
+            if (!created || created.id === undefined || created.id === null) return;
+
+            const permissions = this.normalizedPermissionsConfig[modelKey.toLowerCase()]?.[userRole];
+            const findPerm = permissions?.['findFirst'] ?? permissions?.['findMany'];
+            if (!findPerm || findPerm === 'ALL' || !(findPerm as any).conditions) return;
+
+            const found = await (this.prismaClient as any)[modelKey].findFirst({where: {id: created.id}});
+            if (!found) {
+                console.warn(
+                    '\x1b[33m',
+                    `[APPX-CORE PRISMA] Created ${modelKey} id=${created.id} as role ${userRole}, but it does not satisfy the model's find conditions — the creator cannot read it back. Ensure your find conditions are at least as permissive as your create conditions.`,
+                    '\x1b[0m',
+                );
+            }
+        } catch {
+            // Dev diagnostic only — never let it affect the create.
+        }
+    }
+
+    /** Recursively evaluates a (placeholder-resolved) condition object against a to-be-created row. */
+    private async matchesCreateConditions(cond: any, row: any, modelName: string): Promise<boolean> {
+        for (const key of Object.keys(cond)) {
+            const val = cond[key];
+
+            if (key === 'AND') {
+                const arr = Array.isArray(val) ? val : [val];
+                for (const c of arr) if (!(await this.matchesCreateConditions(c, row, modelName))) return false;
+                continue;
+            }
+            if (key === 'OR') {
+                const arr = Array.isArray(val) ? val : [val];
+                let any = false;
+                for (const c of arr) if (await this.matchesCreateConditions(c, row, modelName)) { any = true; break; }
+                if (!any) return false;
+                continue;
+            }
+            if (key === 'NOT') {
+                const arr = Array.isArray(val) ? val : [val];
+                for (const c of arr) if (await this.matchesCreateConditions(c, row, modelName)) return false;
+                continue;
+            }
+
+            const relation = this.getRelation(modelName, key);
+            if (relation) {
+                if (!(await this.matchesCreateRelation(relation, key, val, row, modelName))) return false;
+                continue;
+            }
+
+            if (!this.matchesCreateScalar(row[key], val, key, modelName)) return false;
+        }
+        return true;
+    }
+
+    /** Evaluates a scalar-field condition (value or Prisma operator object) against the row's value. */
+    private matchesCreateScalar(actual: any, cond: any, key: string, modelName: string): boolean {
+        if (cond === null) return actual === null || actual === undefined;
+        if (cond instanceof Date || typeof cond !== 'object') return actual === cond;
+
+        for (const op of Object.keys(cond)) {
+            const opv = cond[op];
+            switch (op) {
+                case 'equals': if (actual !== opv) return false; break;
+                case 'not': if (actual === opv) return false; break;
+                case 'in': if (!Array.isArray(opv) || !opv.includes(actual)) return false; break;
+                case 'notIn': if (Array.isArray(opv) && opv.includes(actual)) return false; break;
+                case 'lt': if (!(actual < opv)) return false; break;
+                case 'lte': if (!(actual <= opv)) return false; break;
+                case 'gt': if (!(actual > opv)) return false; break;
+                case 'gte': if (!(actual >= opv)) return false; break;
+                default:
+                    throw new ForbiddenException(
+                        `create on ${modelName}: unsupported operator '${op}' on field '${key}' in a create condition. Use a simpler condition or setUserIdField.`,
+                    );
+            }
+        }
+        return true;
+    }
+
+    /** Verifies the parent referenced by a belongsTo condition exists and satisfies the nested condition. */
+    private async matchesCreateRelation(relation: any, field: string, nestedCond: any, row: any, modelName: string): Promise<boolean> {
+        if (relation.relation !== 'belongsTo' || !relation.referencingColumn) {
+            throw new ForbiddenException(
+                `create on ${modelName}: unsupported relation condition on '${field}' — a new row has no related '${field}' yet to match. Constrain the scalar foreign key instead.`,
+            );
+        }
+        const fkValue = row[relation.referencingColumn];
+        if (fkValue === undefined || fkValue === null) return false;
+
+        const delegate = relation.model.charAt(0).toLowerCase() + relation.model.slice(1);
+        // Use the request's transaction client if present (to see rows created
+        // earlier in the same request), else the raw client. Either way, access
+        // filtering on the parent is intentionally NOT re-applied — we check
+        // only the condition.
+        const client: any = RequestContext.currentContext?.req.prisma || this.rawClient;
+
+        const found = await client[delegate].findFirst({
+            where: {AND: [{[relation.foreignKey]: fkValue}, nestedCond]},
+            select: {[relation.foreignKey]: true},
+        });
+        return !!found;
     }
 
     /**

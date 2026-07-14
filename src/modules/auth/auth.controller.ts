@@ -68,9 +68,12 @@ export class AuthController {
         return this.authService.closeAllUserSessions(req, res);
     }
 
+    @UseGuards(AuthenticatedGuard)
     @Get('sessions/:userId')
     async getAllSessions(@Param('userId') userId: string, @Req() req: Request) {
-        //TODO - Implement a more dynamic way to handle role access
+        // AuthenticatedGuard gates authentication explicitly; the role check
+        // below is the authorization step. De-hardcoding 'ADMIN' into the
+        // permissions system is deferred (see ROADMAP / ).
         if (req.user?.role !== 'ADMIN') {
             throw new ForbiddenException('Access denied.');
         }
@@ -78,13 +81,14 @@ export class AuthController {
         return {sessions};
     }
 
+    @UseGuards(AuthenticatedGuard)
     @Post('sessions/:sessionId/close')
     async closeSpecificSession(
         @Param('sessionId') sessionId: string,
         @Req() req: Request,
         @Res() res: Response,
     ) {
-        //TODO - Implement a more dynamic way to handle role access
+        // See getAllSessions: AuthenticatedGuard = authn, role check = authz.
         if (req.user?.role !== 'ADMIN') {
             throw new ForbiddenException('Access denied.');
         }

@@ -452,7 +452,7 @@ function createPackageJson(projectPath, projectName) {
         license: "UNLICENSED",
         scripts: {
             "build": "nest build",
-            "start": "nest start",
+            "start": "cross-env NODE_ENV=development nest start",
             "start:dev": "cross-env NODE_ENV=development nest start --watch",
             "start:prod": "cross-env NODE_ENV=production node dist/main",
             "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
@@ -460,6 +460,7 @@ function createPackageJson(projectPath, projectName) {
         },
         dependencies: {
             "@appxdigital/appx-core": CORE_VERSION,
+            "helmet": "^8.0.0",
         },
         devDependencies: {
             "@nestjs/cli": "~11.0.0",

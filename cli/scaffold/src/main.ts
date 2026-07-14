@@ -3,8 +3,7 @@ import {AppModule} from './app.module';
 import {ConfigService} from '@nestjs/config';
 import session from 'express-session';
 import passport from 'passport';
-import {CorePrismaSessionStore, PrismaService} from '@appxdigital/appx-core';
-import {ValidationPipe} from '@nestjs/common';
+import {buildCoreSessionOptions, CorePrismaSessionStore, PrismaService, setupCoreSecurity} from '@appxdigital/appx-core';
 import morgan from 'morgan';
 
 async function bootstrap() {
@@ -15,26 +14,26 @@ async function bootstrap() {
     const port = configService.get<number>('APP_PORT') ?? 3000;
     const sessionTTL = configService.get<number>('SESSION_TTL') || 86400;
     const cookiename = configService.get<string>('SESSION_COOKIE_NAME');
+    const corsOrigin = configService.get<string>('CORS_ORIGIN') ?? 'http://localhost:3000';
 
     // Application request logging
     app.use(morgan('[:date[iso]] :remote-addr :method :url :status :response-time ms - :res[content-length]'));
 
     app.use(
-        session({
-            secret: secret ?? 'APPXCORESECRET',
-            resave: false,
-            name: cookiename,
-            saveUninitialized: false,
-            store: new CorePrismaSessionStore(prismaService, {ttl: sessionTTL}),
-        }),
+        session(
+            buildCoreSessionOptions({
+                secret,
+                cookieName: cookiename,
+                ttlSeconds: sessionTTL,
+                store: new CorePrismaSessionStore(prismaService, {ttl: sessionTTL}),
+            }),
+        ),
     );
     app.use(passport.initialize());
     app.use(passport.session());
-    app.enableCors({
-        origin: 'http://localhost:3000',
-        credentials: true,
+    setupCoreSecurity(app, {
+        cors: {origin: corsOrigin, credentials: true},
     });
-    app.useGlobalPipes(new ValidationPipe({transform: true}));
     await app.listen(port);
     console.log(`Your application is successfully running on: http://www.localhost:${port} 🚀`);
 }

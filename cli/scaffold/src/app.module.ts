@@ -2,7 +2,7 @@ import {MiddlewareConsumer, Module, NestModule, RequestMethod} from '@nestjs/com
 import {AppController} from './app.controller';
 import {AppService} from './app.service';
 import {ConfigModule} from '@nestjs/config';
-import {AppxCoreAdminModule, AppxCoreModule, AuthModule, PrismaInterceptor, UserPopulationGuard} from '@appxdigital/appx-core';
+import {AppxCoreAdminModule, AppxCoreModule, AuthModule, coreEnvFilePath, PrismaInterceptor, UserPopulationGuard} from '@appxdigital/appx-core';
 import {APP_GUARD, APP_INTERCEPTOR} from '@nestjs/core';
 import {RequestContextMiddleware, RequestContextModule} from 'nestjs-request-context'
 import {PermissionsConfig} from './config/permissions.config';
@@ -14,7 +14,7 @@ import {AdminConfig} from './config/admin.config';
         ConfigModule.forRoot({
             isGlobal: true,
             expandVariables: true,
-            envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
+            envFilePath: coreEnvFilePath(),
         }),
         AppxCoreModule.forRoot(PermissionsConfig),
         AppxCoreAdminModule.forRoot(AdminConfig, PermissionsConfig),
