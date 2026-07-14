@@ -25,6 +25,11 @@ execSync(`node ${path.join(scriptsDir, 'generate-services.js')}`, {
     stdio: 'inherit',
 });
 
+console.log('Generating DTOs...');
+execSync(`node ${path.join(scriptsDir, 'generate-dtos.js')}`, {
+    stdio: 'inherit',
+});
+
 console.log('Generating Controllers...');
 execSync(`node ${path.join(scriptsDir, 'generate-controllers.js')}`, {
     stdio: 'inherit',
