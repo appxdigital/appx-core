@@ -1,0 +1,137 @@
+name: Release CLI
+
+# Publishes @appxdigital/appx-core-cli. Driven ONLY by pushing a `cli-v*` git
+# tag, so the CLI keeps its own independent version from the library (which
+# uses `v*` tags via release.yml). The tag's shape decides the npm dist-tag:
+#   cli-v1.2.3-alpha.0 -> dist-tag `alpha`   (published, not gated)
+#   cli-v1.2.3-beta.0  -> dist-tag `beta`    (published, not gated)
+#   cli-v1.2.3-rc.0    -> dist-tag `next`    (published, not gated)
+#   cli-v1.2.3         -> dist-tag `latest`  (production; PAUSES for approval)
+#
+# Same posture as the library: production waits on the `production` GitHub
+# Environment's required reviewer, and auth is OIDC trusted publishing (no
+# NPM_TOKEN). Requires a one-time Trusted Publisher config on npmjs.com for
+# @appxdigital/appx-core-cli pointing at this repo + release-cli.yml.
+# See RELEASING.md.
+#
+# The CLI is plain ESM (no build step) and delegates its real codegen to the
+# library, so verification is a dependency install + a `--help` smoke test
+# rather than the full test suite.
+
+on:
+    push:
+        tags: ['cli-v*']
+
+concurrency:
+    group: release-cli-${{ github.ref }}
+    cancel-in-progress: false
+
+defaults:
+    run:
+        working-directory: cli
+
+jobs:
+    verify:
+        name: verify (tag, smoke)
+        runs-on: ubuntu-latest
+        outputs:
+            version: ${{ steps.channel.outputs.version }}
+            channel: ${{ steps.channel.outputs.channel }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+                  cache-dependency-path: cli/package-lock.json
+
+            - name: Assert tag matches cli/package.json version
+              run: |
+                  TAG="${GITHUB_REF_NAME#cli-v}"
+                  PKG="$(node -p "require('./package.json').version")"
+                  if [ "$TAG" != "$PKG" ]; then
+                      echo "::error::Tag ${GITHUB_REF_NAME} (=${TAG}) does not match cli/package.json version ${PKG}."
+                      echo "Set cli/package.json to the release version before tagging (see RELEASING.md)."
+                      exit 1
+                  fi
+                  echo "Version OK: ${PKG}"
+
+            - name: Determine dist-tag (channel)
+              id: channel
+              run: |
+                  V="${GITHUB_REF_NAME#cli-v}"
+                  if echo "$V" | grep -q -- '-alpha'; then
+                      CH=alpha
+                  elif echo "$V" | grep -q -- '-beta'; then
+                      CH=beta
+                  elif echo "$V" | grep -q -- '-'; then
+                      CH=next
+                  else
+                      CH=latest
+                  fi
+                  echo "version=$V" >> "$GITHUB_OUTPUT"
+                  echo "channel=$CH" >> "$GITHUB_OUTPUT"
+                  echo "Publishing cli ${V} to dist-tag '${CH}'."
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Smoke test
+              run: node cli.js --help
+
+    publish-prerelease:
+        name: publish ${{ needs.verify.outputs.channel }}
+        needs: verify
+        if: needs.verify.outputs.channel != 'latest'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write # OIDC token for npm trusted publishing
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+                  cache-dependency-path: cli/package-lock.json
+                  registry-url: 'https://registry.npmjs.org'
+
+            - name: Install dependencies
+              run: npm ci
+
+            # OIDC trusted publishing needs a recent npm; the runner ships v10.
+            - name: Upgrade npm for OIDC trusted publishing
+              run: npm install -g npm@latest
+
+            - name: Publish (${{ needs.verify.outputs.channel }})
+              run: npm publish --tag "${{ needs.verify.outputs.channel }}" --provenance --access public
+
+    publish-production:
+        name: publish latest (gated)
+        needs: verify
+        if: needs.verify.outputs.channel == 'latest'
+        runs-on: ubuntu-latest
+        environment: production # required-reviewer gate; approve in the Actions UI
+        permissions:
+            contents: read
+            id-token: write # OIDC token for npm trusted publishing
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+                  cache-dependency-path: cli/package-lock.json
+                  registry-url: 'https://registry.npmjs.org'
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Upgrade npm for OIDC trusted publishing
+              run: npm install -g npm@latest
+
+            - name: Publish (latest)
+              run: npm publish --tag latest --provenance --access public

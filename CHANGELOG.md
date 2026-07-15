@@ -7,6 +7,7 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ## How to read this file
 
+- **This file is the collapsed, production changelog** — one section per version published to the `latest` dist-tag. Granular per-build notes for `alpha`/`beta` prereleases live in [`PRERELEASES.md`](./PRERELEASES.md); the release process is documented in [`RELEASING.md`](./RELEASING.md).
 - **Every released version has a section.** Newest first.
 - **Changes that require action in an existing project are listed under `### Migration`** — copy-paste ready, small enough to hand to an AI coding agent. Items outside that block are drop-in.
 - **Scaffold-only changes** (files under `cli/scaffold/`) affect *new* projects created with `appx-core create`. Existing projects own their copies of those files and apply the migration by hand.

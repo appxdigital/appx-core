@@ -1,0 +1,71 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build-test:
+        name: build & test (${{ matrix.db }})
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                db: [mysql, postgres]
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build
+              run: npm run build
+
+            # The optional CLI `create` end-to-end test shells out to a db
+            # client to CREATE DATABASE on the container; it self-skips when
+            # the client is absent. Install it so that path is exercised too.
+            - name: Install database client
+              run: |
+                  sudo apt-get update
+                  if [ "${{ matrix.db }}" = "mysql" ]; then
+                      sudo apt-get install -y default-mysql-client
+                  else
+                      sudo apt-get install -y postgresql-client
+                  fi
+
+            # testcontainers uses the Docker daemon preinstalled on the runner.
+            - name: Test
+              run: npm test
+              env:
+                  DB_PROVIDER: ${{ matrix.db }}
+
+    cli-smoke:
+        name: cli smoke
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+                  cache-dependency-path: cli/package-lock.json
+
+            - name: Install CLI dependencies
+              run: npm ci
+              working-directory: cli
+
+            - name: Smoke test
+              run: node cli.js --help
+              working-directory: cli
