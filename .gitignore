@@ -9,3 +9,6 @@ node_modules
 test/fixtures/.runtime/
 dist-test/
 coverage/
+
+# Downloaded CI run logs (gh run view / web download)
+logs_*.zip
