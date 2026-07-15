@@ -80,6 +80,12 @@ jobs:
             - name: Build
               run: npm run build
 
+            # The create-parity test spawns cli/cli.js, which needs the CLI's
+            # own dependencies (separate package.json / node_modules).
+            - name: Install CLI dependencies
+              run: npm ci
+              working-directory: cli
+
             - name: Test (mysql)
               run: npm test
               env:

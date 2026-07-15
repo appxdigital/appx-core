@@ -49,6 +49,12 @@ jobs:
                       sudo apt-get install -y postgresql-client
                   fi
 
+            # The create-parity test spawns cli/cli.js, which needs the CLI's
+            # own dependencies (it has a separate package.json / node_modules).
+            - name: Install CLI dependencies
+              run: npm ci
+              working-directory: cli
+
             # testcontainers uses the Docker daemon preinstalled on the runner.
             - name: Test
               run: npm test
