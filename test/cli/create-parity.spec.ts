@@ -137,10 +137,23 @@ describe('§5 — cli/cli.js create produces the committed fixture (parity)', ()
         // it may not accept the typed answer cleanly. We send the literal
         // string anyway; on failure, document and fall back to a less
         // ambitious test.
+        // Isolate the subprocess from the parent's DB environment. cli.js runs
+        // `prisma migrate dev`, and Prisma prioritizes a DATABASE_URL present in
+        // the environment over the project's own .env. If the parent's
+        // DATABASE_URL (appx_proxy / appx_fixture — set by globalSetup and other
+        // specs) leaked in, migrate dev would RESET that shared database and
+        // break other suites. Strip them so the scaffold's generated .env
+        // (pointing at the isolated appx_parity) is authoritative.
+        const childEnv: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: '0', CI: '1' };
+        delete childEnv.DATABASE_URL;
+        delete childEnv.APPX_PROXY_DB_URL;
+        delete childEnv.APPX_FIXTURE_DB_URL;
+        delete childEnv.APPX_PARITY_DB_URL;
+
         const proc = spawn('node', [CLI_PATH, 'create'], {
             cwd: tmpdir,
             stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, FORCE_COLOR: '0', CI: '1' },
+            env: childEnv,
         });
 
         let stdout = '';

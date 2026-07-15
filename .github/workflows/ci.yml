@@ -55,6 +55,13 @@ jobs:
               run: npm ci
               working-directory: cli
 
+            # cli.js create makes an initial git commit; the runner has no git
+            # identity by default, which would fail that commit (exit 128).
+            - name: Configure git identity
+              run: |
+                  git config --global user.email "ci@appx-core.test"
+                  git config --global user.name "appx-core CI"
+
             # testcontainers uses the Docker daemon preinstalled on the runner.
             - name: Test
               run: npm test

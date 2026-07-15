@@ -89,9 +89,13 @@ export async function startDbContainer(provider: DbProvider): Promise<{
 
     // Postgres' default 'appx' user is the DB owner / has SUPERUSER in
     // testcontainers' image, so it can create databases. No separate root.
+    // Each CREATE DATABASE gets its own -c: psql runs all statements in a
+    // single -c string as one implicit transaction, and CREATE DATABASE cannot
+    // run inside a transaction block. Separate -c flags execute independently.
     const res = await c.exec([
-        'psql', '-U', 'appx', '-d', 'postgres', '-c',
-        'CREATE DATABASE appx_fixture OWNER appx; CREATE DATABASE appx_parity OWNER appx;',
+        'psql', '-U', 'appx', '-d', 'postgres',
+        '-c', 'CREATE DATABASE appx_fixture OWNER appx;',
+        '-c', 'CREATE DATABASE appx_parity OWNER appx;',
     ]);
     if (res.exitCode !== 0) {
         throw new Error(`Failed to bootstrap databases: ${res.output}`);
