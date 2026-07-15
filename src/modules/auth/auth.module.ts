@@ -6,7 +6,7 @@ import {LocalStrategy} from './local.strategy';
 import {PassportModule} from '@nestjs/passport';
 import {SessionSerializer} from './session/session-serializer';
 import {ConfigModule, ConfigService} from "@nestjs/config";
-import {JwtModule} from "@nestjs/jwt";
+import {JwtModule, JwtSignOptions} from "@nestjs/jwt";
 import {JwtAuthGuard} from "./jwt-auth.guard";
 import {AuthenticatedGuard} from "./authenticated.guard";
 import {JwtStrategy} from "./jwt.strategy";
@@ -19,7 +19,7 @@ import {RefreshTokenStrategy} from "./refresh-token.strategy";
             imports: [ConfigModule],
             useFactory: async (config: ConfigService) => ({
                 secret: config.get<string>('JWT_SECRET'),
-                signOptions: {expiresIn: config.get<string>('JWT_EXPIRES_IN', '60m')},
+                signOptions: {expiresIn: config.get<JwtSignOptions['expiresIn']>('JWT_EXPIRES_IN', '60m')},
             }),
             inject: [ConfigService],
         }),],
