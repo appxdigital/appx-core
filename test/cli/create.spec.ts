@@ -140,7 +140,12 @@ describe('cli/cli.js — scaffold template contract', () => {
  */
 describe('cli/cli.js create — subprocess end-to-end', () => {
     const fixtureUrl = process.env.APPX_FIXTURE_DB_URL;
-    const itOrSkip = fixtureUrl ? test : test.skip;
+    // Only run this subprocess E2E on mysql. On postgres the dbProvider list
+    // prompt must be *typed* ('postgresql'), which piped stdin can't drive
+    // without a TTY, so the subprocess hangs. The create-parity spec already
+    // exercises the full create flow on mysql.
+    const isMysql = (process.env.DB_PROVIDER || 'mysql').toLowerCase().startsWith('mysql');
+    const itOrSkip = fixtureUrl && isMysql ? test : test.skip;
 
     itOrSkip('drives prompts via stdin, produces a complete project skeleton', async () => {
         // 1. Create a one-off empty database on the running container.
