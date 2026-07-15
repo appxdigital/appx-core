@@ -137,7 +137,20 @@ export function writeFixtureEnv(databaseUrl: string, dbProvider: 'mysql' | 'post
  * Push the fixture's schema.prisma to the live test DB and generate clients.
  * Uses prisma db push (no migrations dir) so tests stay schema-only.
  */
-export function pushFixturePrisma(): void {
+export function pushFixturePrisma(dbProvider: 'mysql' | 'postgres'): void {
+    // The fixture schema is committed with the scaffold default
+    // `provider = "mysql"`. Align the datasource provider with the chosen test
+    // DB so the same fixture runs against postgres too (its `@db.Text` /
+    // `@db.VarChar` native types are valid in both). Only the datasource line
+    // matches — the generator `provider = "..."` values are different strings
+    // and are left untouched.
+    const schemaPath = path.join(FIXTURE_DIR, 'prisma', 'schema.prisma');
+    const wanted = dbProvider === 'postgres' ? 'postgresql' : 'mysql';
+    const schema = fs
+        .readFileSync(schemaPath, 'utf8')
+        .replace(/provider\s*=\s*"(?:mysql|postgresql)"/, `provider = "${wanted}"`);
+    fs.writeFileSync(schemaPath, schema);
+
     sh(
         'npx prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss',
         FIXTURE_DIR,

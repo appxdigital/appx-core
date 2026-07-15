@@ -118,7 +118,7 @@ export default async function globalSetup(): Promise<void> {
             pristineAppModule,
         );
 
-        pushFixturePrisma();
+        pushFixturePrisma(provider);
         runFixtureGenerate();
         buildFixtureApp();
     }
