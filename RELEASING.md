@@ -64,7 +64,24 @@ tests on mysql and postgres, plus a CLI smoke check).
 ## Cutting a release
 
 The tag must match `package.json`'s version exactly, or the release job fails
-fast (a guard against mistagging). Use `npm version` to keep them in lockstep.
+fast (a guard against mistagging). Convenience scripts keep them in lockstep and
+create the tag for you — they **do not push**, so pushing stays a deliberate
+step:
+
+| Script                     | Bumps            | Tag           | dist-tag        |
+| -------------------------- | ---------------- | ------------- | --------------- |
+| `npm run release:beta`     | library beta     | `v…-beta.N`   | `beta`          |
+| `npm run release:alpha`    | library alpha    | `v…-alpha.N`  | `alpha`         |
+| `npm run release:patch`    | library patch    | `vX.Y.Z`      | `latest` (gated)|
+| `npm run release:minor`    | library minor    | `vX.Y.0`      | `latest` (gated)|
+| `npm run release:cli:beta` | CLI beta         | `cli-v…-beta.N` | `beta`        |
+| `npm run release:cli:patch`| CLI patch        | `cli-vX.Y.Z`  | `latest` (gated)|
+
+Each prints the exact `git push origin HEAD --follow-tags` to run once you're
+ready to publish. For an explicit version (e.g. the first beta of a version
+already in `package.json`): `node scripts/release.mjs lib X.Y.Z-beta.0`.
+
+The manual steps below show what those scripts do under the hood.
 
 ### Beta (test in projects first)
 
@@ -137,7 +154,8 @@ git push origin main --follow-tags
 
 ## Manual fallback
 
-If CI is unavailable, the historical manual paths still exist
-(`npm run npm:publish` at the root for the library, `cd cli && npm run
-npm:publish` for the CLI) — but they go straight to `latest` with no gate and no
-provenance, so prefer the tag-driven flow.
+If CI is unavailable, you can still publish by hand: `rimraf dist && npm run
+build && npm publish --tag <dist-tag> --access public` for the library, and
+`cd cli && npm publish --tag <dist-tag> --access public` for the CLI. This
+bypasses the tests, the approval gate, and provenance, so prefer the tag-driven
+flow.

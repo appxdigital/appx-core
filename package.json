@@ -6,12 +6,21 @@
     "types": "dist/index.d.ts",
     "scripts": {
         "build": "tsc",
-        "npm:publish": "rimraf dist && npm run build && npm publish --access=public",
+        "build:cli": "npm --prefix cli ci",
+        "build:all": "npm run build && npm run build:cli",
         "db-pull": "npx prisma db pull && prisma-case-format --table-case pascal --field-case camel --enum-case pascal --file prisma/schema.prisma",
         "test": "jest",
         "test:mysql": "DB_PROVIDER=mysql jest",
         "test:postgres": "DB_PROVIDER=postgres jest",
-        "test:all": "DB_PROVIDER=mysql jest && DB_PROVIDER=postgres jest"
+        "test:all": "DB_PROVIDER=mysql jest && DB_PROVIDER=postgres jest",
+        "release:beta": "node scripts/release.mjs lib prerelease beta",
+        "release:alpha": "node scripts/release.mjs lib prerelease alpha",
+        "release:patch": "node scripts/release.mjs lib patch",
+        "release:minor": "node scripts/release.mjs lib minor",
+        "release:cli:beta": "node scripts/release.mjs cli prerelease beta",
+        "release:cli:alpha": "node scripts/release.mjs cli prerelease alpha",
+        "release:cli:patch": "node scripts/release.mjs cli patch",
+        "release:cli:minor": "node scripts/release.mjs cli minor"
     },
     "keywords": [],
     "author": "",
