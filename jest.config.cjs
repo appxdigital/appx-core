@@ -35,6 +35,9 @@ module.exports = {
     },
     globalSetup: '<rootDir>/test/jest.global-setup.ts',
     globalTeardown: '<rootDir>/test/jest.global-teardown.ts',
+    // Deterministic order; keeps the heavy create-parity E2E last so it can't
+    // perturb the shared-container HTTP specs. See the sequencer for details.
+    testSequencer: '<rootDir>/test/helpers/test-sequencer.cjs',
     testTimeout: 120_000,   // first run pulls images; container boot ~30s
     // Sequential execution: every spec talks to the same DB pair (appx_proxy,
     // appx_fixture). Parallel workers would race on shared state — see the
