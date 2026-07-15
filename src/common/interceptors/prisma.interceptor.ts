@@ -37,14 +37,20 @@ export class PrismaInterceptor implements NestInterceptor {
             }, () => {
                 const useTransaction = this.reflector.get<boolean>('useTransaction', context.getHandler()) ?? this.defaultUseTransaction === 'true';
                 if (useTransaction) {
+                    // Run the handler inside the transaction and CAPTURE its result,
+                    // but do not emit the response yet: the client must not see a
+                    // success response until the transaction has actually committed.
+                    // Emitting inside the transaction (before it commits) races the
+                    // commit — an immediate read-after-write can miss the row.
+                    let handlerResult: any;
                     this.prismaService
                         .$transaction(async (transactionClient: PrismaClient) => {
                             RequestContext.currentContext.req.prisma = transactionClient;
-                            await new Promise((resolve, reject) => {
+                            handlerResult = await new Promise((resolve, reject) => {
+                                let captured: any;
                                 next
                                     .handle()
                                     .pipe(
-                                        tap(() => {}),
                                         catchError((err) => {
                                             const handledError = handleError(err);
                                             reject(handledError);
@@ -52,19 +58,24 @@ export class PrismaInterceptor implements NestInterceptor {
                                         }),
                                     )
                                     .subscribe({
-                                        next: (result) => observer.next(result),
+                                        next: (result) => {
+                                            captured = result;
+                                        },
                                         complete: () => {
                                             delete RequestContext.currentContext.req.prisma;
-                                            observer.complete();
-                                            resolve(null);
+                                            resolve(captured);
                                         },
                                         error: (err) => {
                                             delete RequestContext.currentContext.req.prisma;
-                                            observer.error(err);
                                             reject(err);
                                         },
                                     });
                             });
+                        })
+                        .then(() => {
+                            // The transaction has committed — now it is safe to respond.
+                            observer.next(handlerResult);
+                            observer.complete();
                         })
                         .catch((err: Error) => {
                             delete RequestContext.currentContext.req.prisma;
