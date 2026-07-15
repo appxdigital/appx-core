@@ -68,18 +68,25 @@ fast (a guard against mistagging). Convenience scripts keep them in lockstep and
 create the tag for you — they **do not push**, so pushing stays a deliberate
 step:
 
-| Script                     | Bumps            | Tag           | dist-tag        |
-| -------------------------- | ---------------- | ------------- | --------------- |
-| `npm run release:beta`     | library beta     | `v…-beta.N`   | `beta`          |
-| `npm run release:alpha`    | library alpha    | `v…-alpha.N`  | `alpha`         |
-| `npm run release:patch`    | library patch    | `vX.Y.Z`      | `latest` (gated)|
-| `npm run release:minor`    | library minor    | `vX.Y.0`      | `latest` (gated)|
-| `npm run release:cli:beta` | CLI beta         | `cli-v…-beta.N` | `beta`        |
-| `npm run release:cli:patch`| CLI patch        | `cli-vX.Y.Z`  | `latest` (gated)|
+There are two per package — a **test build** and a **production release**:
 
-Each prints the exact `git push origin HEAD --follow-tags` to run once you're
-ready to publish. For an explicit version (e.g. the first beta of a version
-already in `package.json`): `node scripts/release.mjs lib X.Y.Z-beta.0`.
+| Script                          | What it does                          | Tag             | Goes to           |
+| ------------------------------- | ------------------------------------- | --------------- | ----------------- |
+| `npm run release:beta`          | library test build (`…-beta.N`)       | `v…-beta.N`     | `beta` channel    |
+| `npm run release:production`    | promote library to everyone           | `vX.Y.Z`        | `latest` (gated)  |
+| `npm run release:cli:beta`      | CLI test build (`…-beta.N`)           | `cli-v…-beta.N` | `beta` channel    |
+| `npm run release:cli:production`| promote CLI to everyone               | `cli-vX.Y.Z`    | `latest` (gated)  |
+
+`release:beta` publishes only to people who opt in with `@beta`; `release:production`
+is what everyone gets by default, and it pauses for your approval before going
+live. Each command bumps the version, commits, and creates the tag, then prints
+the exact `git push origin HEAD --follow-tags` for you to run when ready — they
+never push on their own.
+
+Rarer cases go through the underlying script directly:
+`node scripts/release.mjs lib alpha` (alpha channel), `… lib minor` (a feature
+bump), or `… lib X.Y.Z-beta.0` (an explicit version — e.g. the first beta of a
+version already sitting in `package.json`).
 
 The manual steps below show what those scripts do under the hood.
 

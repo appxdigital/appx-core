@@ -29,8 +29,10 @@ if (!t || !bump) {
     process.exit(1);
 }
 
-if (execSync('git status --porcelain').toString().trim()) {
-    console.error('Working tree is not clean — commit or stash before releasing.');
+// Only tracked modifications block a release; stray untracked files (e.g. a
+// downloaded log) are irrelevant since the version commit stages tracked files.
+if (execSync('git status --porcelain --untracked-files=no').toString().trim()) {
+    console.error('Working tree has uncommitted tracked changes — commit or stash before releasing.');
     process.exit(1);
 }
 
