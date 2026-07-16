@@ -110,6 +110,21 @@ AppX Core is designed as a **base layer** on top of NestJS:
 npm install -g @appxdigital/appx-core-cli
 ```
 
+**Release channels.** AppX Core publishes both packages on two npm dist-tags:
+
+- **`latest`** — stable releases. This is what the commands above install.
+- **`beta`** — prereleases, for trying upcoming changes before they're promoted. Opt in explicitly with the `@beta` tag (a caret range such as `^0.1.x` never resolves to a prerelease on its own):
+
+```bash
+npm install -g @appxdigital/appx-core-cli@beta   # CLI prerelease
+```
+
+`appx-core create` scaffolds a project that depends on the **stable** library. To test a library prerelease in that project, install it there:
+
+```bash
+npm install @appxdigital/appx-core@beta          # inside your project
+```
+
 ### 2) Create a New Project
 
 ```bash
@@ -119,10 +134,13 @@ cd <your-project>
 
 ### 3) Configure Environment
 
-Create a `.env` file at the project root:
+`appx-core create` **already writes a `.env`** at the project root, with secure
+random secrets generated for you. You don't need to create it by hand — just
+open it and set your database connection (and `CORS_ORIGIN` for production). The
+generated file looks like this:
 
 ```bash
-## DataBase Configurations ##
+## Database ##
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USER=root
@@ -131,21 +149,35 @@ DB_NAME=generic
 DB_PROVIDER=mysql
 DB_URL="${DB_PROVIDER}://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 
-## Project configurations ##
+## App ##
 APP_PORT=3000
 USE_TRANSACTION=true
+CORS_ORIGIN=http://localhost:3000   # your front-end origin; set to your real domain in production
 
 ## Sessions ##
-SESSION_SECRET="change-me"
-SESSION_COOKIE_NAME="session_nestjs-project"
+SESSION_SECRET=<64-char random hex — generated for you>
+SESSION_COOKIE_NAME=session_nestjs-project
 SESSION_TTL=86400
 
 ## JWT ##
 JWT_EXPIRES_IN=10d
 JWT_REFRESH_EXPIRES_IN=1y
-JWT_SECRET="change-me"
-JWT_REFRESH_SECRET="change-me"
+JWT_SECRET=<random — generated for you>
+JWT_REFRESH_SECRET=<random — generated for you>
 ```
+
+> **Keep the generated secrets — don't replace them with placeholders like `change-me`.**
+> `SESSION_SECRET` must be **at least 32 characters** or the app throws at
+> startup (`buildCoreSessionOptions` — there is no insecure fallback).
+>
+> **`NODE_ENV`** must be set in the runtime environment. The `start` scripts set
+> it to `development`; set it explicitly in production. Env files resolve as
+> `.env.${NODE_ENV}` first, then `.env` (via `coreEnvFilePath()`), so a plain
+> `.env` works for development and you can add `.env.production` for prod.
+
+Baseline HTTP hardening (a whitelisting `ValidationPipe`, CORS, and Helmet) is
+applied for you by `setupCoreSecurity(app, …)` in `src/main.ts`; `helmet` is a
+peer dependency the scaffold already includes.
 
 ### 4) Define Data Models
 
