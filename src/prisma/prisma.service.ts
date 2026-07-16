@@ -267,6 +267,35 @@ export class PrismaService {
             omitFields.forEach((field) => {
                 delete args.select[field];
             });
+            // Omission must also apply to nested relation selections. Without this,
+            // a caller reads an omitted field on a RELATED model by nesting the
+            // request (e.g. `select: { rel: { select: { secret: true } } }`) — the
+            // top-level delete above only covers this model's own fields.
+            for (const key of Object.keys(args.select)) {
+                const relation = this.getRelation(modelName, key);
+                if (!relation) {
+                    continue; // scalar field (`true`) or `_count` — nothing to recurse
+                }
+                const relatedOmit = this.getFieldsToOmit(relation.model, userRole);
+                const value = args.select[key];
+                if (value === true) {
+                    // `rel: true` returns every scalar of the related model — narrow
+                    // it to the readable ones.
+                    args.select[key] = {
+                        select: this.buildSelectFields(relation.model, relatedOmit, null, null, userRole),
+                    };
+                } else if (value && typeof value === 'object') {
+                    if (value.select || value.include) {
+                        // Recurse — strips the related model's omitted fields (and
+                        // deeper) while preserving any where/orderBy/take on `value`.
+                        args.select[key] = this.applyFieldOmission(relation.model, userRole, value);
+                    } else {
+                        // Relation args with no explicit projection (e.g. `{ where }`)
+                        // — inject a select that excludes omitted fields.
+                        value.select = this.buildSelectFields(relation.model, relatedOmit, null, null, userRole);
+                    }
+                }
+            }
         } else if (args.include) {
             this.debug(`Found included model '${modelName}', generating select fields`);
             args.select = this.buildSelectFields(
