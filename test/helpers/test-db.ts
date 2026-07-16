@@ -1,16 +1,7 @@
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
 import { MySqlContainer, StartedMySqlContainer } from '@testcontainers/mysql';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 
 export type DbProvider = 'mysql' | 'postgres';
-
-export const TEST_ROOT = path.resolve(__dirname, '..');
-export const RUNTIME_DIR = path.join(TEST_ROOT, 'fixtures', '.runtime');
-export const SCHEMA_TEMPLATE = path.join(TEST_ROOT, 'fixtures', 'prisma', 'schema.prisma.template');
-export const RUNTIME_SCHEMA = path.join(RUNTIME_DIR, 'schema.prisma');
-export const CLIENT_OUTPUT = path.join(RUNTIME_DIR, 'client');
 
 export function chosenProvider(): DbProvider {
     const v = (process.env.DB_PROVIDER || 'mysql').toLowerCase();
@@ -18,10 +9,6 @@ export function chosenProvider(): DbProvider {
         throw new Error(`Unsupported DB_PROVIDER: ${v} (expected mysql|postgres)`);
     }
     return v === 'postgresql' ? 'postgres' : (v as DbProvider);
-}
-
-export function prismaProvider(provider: DbProvider): string {
-    return provider === 'postgres' ? 'postgresql' : 'mysql';
 }
 
 /**
@@ -119,57 +106,4 @@ export async function startDbContainer(provider: DbProvider): Promise<{
         },
         stop: async () => { await c.stop({ timeout: 10_000 }); },
     };
-}
-
-/**
- * Render the schema template against the chosen provider + output dir.
- * Output path is relative-to-schema for Prisma's generator block.
- */
-export function renderSchema(provider: DbProvider): void {
-    fs.mkdirSync(RUNTIME_DIR, { recursive: true });
-    const template = fs.readFileSync(SCHEMA_TEMPLATE, 'utf8');
-    const relativeOutput = path.relative(RUNTIME_DIR, CLIENT_OUTPUT).replace(/\\/g, '/');
-    const rendered = template
-        .replace(/\{\{DB_PROVIDER\}\}/g, prismaProvider(provider))
-        .replace(/\{\{CLIENT_OUTPUT\}\}/g, './' + relativeOutput);
-    fs.writeFileSync(RUNTIME_SCHEMA, rendered, 'utf8');
-}
-
-export function runPrisma(args: string[], env: NodeJS.ProcessEnv = {}): void {
-    execSync(`npx prisma ${args.join(' ')}`, {
-        stdio: 'inherit',
-        env: { ...process.env, ...env },
-        cwd: path.resolve(TEST_ROOT, '..'),
-    });
-}
-
-/**
- * Push the rendered schema to the running DB and generate a client.
- * `prisma db push --skip-generate` then `prisma generate` so we can debug
- * generation failures separately.
- */
-export function pushAndGenerate(databaseUrl: string): void {
-    runPrisma(
-        ['db', 'push', '--schema', RUNTIME_SCHEMA, '--skip-generate', '--accept-data-loss'],
-        { DATABASE_URL: databaseUrl },
-    );
-    runPrisma(
-        ['generate', '--schema', RUNTIME_SCHEMA],
-        { DATABASE_URL: databaseUrl },
-    );
-}
-
-/**
- * Dynamically import the generated Prisma client (path varies by run).
- */
-export async function loadGeneratedClient(): Promise<any> {
-    const indexPath = path.join(CLIENT_OUTPUT, 'index.js');
-    if (!fs.existsSync(indexPath)) {
-        throw new Error(
-            `Generated Prisma client not found at ${indexPath}. ` +
-            `Did jest.global-setup run? Try \`npx prisma generate --schema ${RUNTIME_SCHEMA}\`.`,
-        );
-    }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require(indexPath);
 }

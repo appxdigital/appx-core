@@ -1,12 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    chosenProvider,
-    pushAndGenerate,
-    renderSchema,
-    RUNTIME_DIR,
-    startDbContainer,
-} from './helpers/test-db';
+import { chosenProvider, startDbContainer } from './helpers/test-db';
 import {
     buildFramework,
     ensureFixtureInstalled,
@@ -23,26 +17,19 @@ declare global {
 }
 
 /**
- * Boots one DB container shared by every test in the run, then prepares two
- * separate environments:
+ * Boots one DB container shared by every test in the run, then prepares the
+ * scaffold-app fixture (a real consumer project under test/fixtures/scaffold-app/
+ * that depends on @appxdigital/appx-core via file:../../..). Its rich schema is
+ * pushed to two databases on the container:
+ *   - appx_fixture — the booted HTTP app (test/http/*.spec.ts)
+ *   - appx_abac    — the isolated Prisma-proxy / ABAC harness (test/prisma-proxy
+ *                    .spec.ts + test/abac/*.spec.ts), reusing the fixture client
  *
- *   (A) The "proxy harness" — directly uses src/prisma/prisma.service.ts
- *       against the container. Used by prisma-proxy.spec.ts.
+ * Setup steps: start container → build framework dist/ → ensureFixtureInstalled
+ * → write live .env → push fixture schema (to appx_fixture + appx_abac) → run
+ * appx-core generate → build the fixture app.
  *
- *   (B) The "scaffold-app fixture" — a real consumer project under
- *       test/fixtures/scaffold-app/ that depends on @appxdigital/appx-core
- *       via file:../../.. Used by http-*.spec.ts.
- *
- * Setup steps:
- *   1. Start DB container.
- *   2. Render + push test/fixtures/prisma/schema.prisma (for A).
- *   3. Build framework dist/.
- *   4. ensureFixtureInstalled() — caches by package.json hash; always re-syncs dist/.
- *   5. Write live .env into fixture pointing at the container.
- *   6. Push fixture prisma schema + run appx-core generate.
- *
- * Disable fixture setup with APPX_SKIP_FIXTURE=1 (useful when iterating on
- * only the proxy-harness tests).
+ * Disable fixture setup with APPX_SKIP_FIXTURE=1.
  */
 export default async function globalSetup(): Promise<void> {
     const provider = chosenProvider();
@@ -59,17 +46,6 @@ export default async function globalSetup(): Promise<void> {
     // inquirer prompts. Pack them into a single env var (URL doesn't carry
     // dbName cleanly when the password might contain `@` or similar).
     process.env.APPX_PARITY_CREDS = JSON.stringify(parityCreds);
-
-    // (A) — proxy harness schema/client (uses appx_proxy database)
-    renderSchema(provider);
-    pushAndGenerate(proxyUrl);
-
-    fs.mkdirSync(RUNTIME_DIR, { recursive: true });
-    fs.writeFileSync(
-        path.join(RUNTIME_DIR, 'container.json'),
-        JSON.stringify({ provider, proxyUrl, fixtureUrl }),
-        'utf8',
-    );
 
     // (B) — fixture (uses appx_fixture database)
     if (process.env.APPX_SKIP_FIXTURE !== '1') {
