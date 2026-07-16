@@ -22,11 +22,12 @@ export async function seedAbac(raw: any): Promise<SeededAbac> {
     const T2 = await raw.tenant.create({ data: { name: 'Initech' } });
 
     // Pinned ids; managers created before their reports (self-relation FK).
-    const alice = await raw.user.create({ data: { id: 1, email: 'alice@t.io', role: 'USER', tenantId: T1.id } });
-    const bob = await raw.user.create({ data: { id: 2, email: 'bob@t.io', role: 'USER', tenantId: T1.id, managerId: alice.id } });
-    const carol = await raw.user.create({ data: { id: 3, email: 'carol@t.io', role: 'USER', tenantId: T1.id, managerId: alice.id } });
-    const dave = await raw.user.create({ data: { id: 4, email: 'dave@t.io', role: 'USER', tenantId: T2.id } });
-    const root = await raw.user.create({ data: { id: 99, email: 'root@t.io', role: 'ADMIN' } });
+    // `password` is set (and @Role(none)) so omission / BYPASS_OMISSION is testable.
+    const alice = await raw.user.create({ data: { id: 1, email: 'alice@t.io', password: 'hash-alice', role: 'USER', tenantId: T1.id } });
+    const bob = await raw.user.create({ data: { id: 2, email: 'bob@t.io', password: 'hash-bob', role: 'USER', tenantId: T1.id, managerId: alice.id } });
+    const carol = await raw.user.create({ data: { id: 3, email: 'carol@t.io', password: 'hash-carol', role: 'USER', tenantId: T1.id, managerId: alice.id } });
+    const dave = await raw.user.create({ data: { id: 4, email: 'dave@t.io', password: 'hash-dave', role: 'USER', tenantId: T2.id } });
+    const root = await raw.user.create({ data: { id: 99, email: 'root@t.io', password: 'hash-root', role: 'ADMIN' } });
 
     // 1:1 profiles — carol intentionally has none.
     const pAlice = await raw.userProfile.create({ data: { userId: alice.id, bio: 'founder', billingInfo: 'card-A' } });

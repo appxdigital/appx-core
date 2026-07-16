@@ -1,197 +1,174 @@
 /**
- * Prisma proxy / ABAC engine — behaviour tests against a real database.
- * Runs against whichever provider DB_PROVIDER selects (default: mysql).
+ * Prisma proxy / ABAC engine — core behaviour tests.
  *
- * Each describe-block covers a distinct invariant of the access-control proxy.
+ * Converged onto the rich schema (Tenant/User/Project/ProjectMember/Task/
+ * Comment + additions) via the shared ABAC harness, so the proxy is exercised
+ * against the same schema real consumers use rather than a toy Post/Category
+ * one. Relation-condition breadth lives in test/abac/relations.spec.ts; this
+ * file pins the engine invariants (blacklist, filtering, omission, bypass,
+ * exposed-models, create enforcement, count fallback).
  */
-import { PrismaService } from '../src/prisma/prisma.service';
-import { buildTestModule, resetDb, asUser } from './helpers/test-module';
-import { testPermissions } from './fixtures/permissions';
+import { buildAbacModule, withConfig, asUser } from './abac/helpers';
+import { abacPermissions } from './abac/permissions';
+import { seedAbac, resetAbac, SeededAbac } from './abac/seed';
+import { PermissionPlaceholder } from '../src/common/config/permissionsConfigTypes';
+import type { PrismaService } from '../src/prisma/prisma.service';
+
+const $UID = PermissionPlaceholder.USER_ID;
 
 let prisma: PrismaService;
 let rawClient: any;
+let close: () => Promise<void>;
+let s: SeededAbac;
 
 beforeAll(async () => {
-    const built = await buildTestModule(testPermissions);
-    prisma = built.prisma;
-    rawClient = built.rawClient;
+    ({ prisma, rawClient, close } = await buildAbacModule(abacPermissions));
 });
 
 afterAll(async () => {
-    if (rawClient) await rawClient.$disconnect();
+    if (close) await close();
 });
 
 beforeEach(async () => {
-    await resetDb(rawClient);
+    await resetAbac(rawClient);
+    s = await seedAbac(rawClient);
 });
-
-async function seed() {
-    const tenantA = await rawClient.tenant.create({ data: { name: 'Tenant A' } });
-    const tenantB = await rawClient.tenant.create({ data: { name: 'Tenant B' } });
-
-    const alice = await rawClient.user.create({
-        data: { email: 'alice@a.com', password: 'argon2-hash-A', role: 'USER', tenantId: tenantA.id },
-    });
-    const bob = await rawClient.user.create({
-        data: { email: 'bob@a.com', password: 'argon2-hash-B', role: 'USER', tenantId: tenantA.id },
-    });
-    const root = await rawClient.user.create({
-        data: { email: 'root@a.com', password: 'argon2-hash-R', role: 'ADMIN', tenantId: tenantA.id },
-    });
-
-    const tech = await rawClient.category.create({ data: { name: 'tech' } });
-
-    await rawClient.post.create({ data: { title: 'Alice post 1', authorId: alice.id, categoryId: tech.id } });
-    await rawClient.post.create({ data: { title: 'Alice post 2', authorId: alice.id } });
-    await rawClient.post.create({ data: { title: 'Bob post 1',   authorId: bob.id,   categoryId: tech.id } });
-
-    return { tenantA, tenantB, alice, bob, root, tech };
-}
 
 describe('blacklisted Prisma methods', () => {
     test('findUnique throws and suggests findFirst', async () => {
-        await asUser({ id: 1, role: 'ADMIN' }, async () => {
-            await expect((prisma.model as any).user.findUnique({ where: { id: 1 } }))
+        await asUser({ id: 99, role: 'ADMIN' }, async () => {
+            await expect((prisma.model as any).project.findUnique({ where: { id: s.projects.p1.id } }))
                 .rejects.toThrow(/findUnique.*not.*allowed|findFirst/i);
         });
     });
 
     test('delete throws and suggests deleteMany', async () => {
-        await asUser({ id: 1, role: 'ADMIN' }, async () => {
-            await expect((prisma.model as any).user.delete({ where: { id: 1 } }))
+        await asUser({ id: 99, role: 'ADMIN' }, async () => {
+            await expect((prisma.model as any).project.delete({ where: { id: s.projects.p1.id } }))
                 .rejects.toThrow(/delete.*not.*allowed|deleteMany/i);
         });
     });
 
     test('update throws and suggests updateMany', async () => {
-        await asUser({ id: 1, role: 'ADMIN' }, async () => {
-            await expect((prisma.model as any).user.update({ where: { id: 1 }, data: { email: 'x@x.com' } }))
+        await asUser({ id: 99, role: 'ADMIN' }, async () => {
+            await expect((prisma.model as any).project.update({ where: { id: s.projects.p1.id }, data: { name: 'x' } }))
                 .rejects.toThrow(/update.*not.*allowed|updateMany/i);
         });
     });
 });
 
-describe('ABAC where-filtering on reads (USER_ID placeholder)', () => {
-    test('USER findMany on Post only returns own posts', async () => {
-        const { alice } = await seed();
-        const posts = (await asUser({ id: alice.id, role: 'USER' }, () =>
-            prisma.model.post.findMany({}),
-        )) as any[];
-        expect(posts).toHaveLength(2);
-        expect(posts.every((p: any) => p.authorId === alice.id)).toBe(true);
+describe('ABAC where-filtering on reads', () => {
+    test('USER findMany returns only own projects (conditions { ownerId: $UID })', async () => {
+        await withConfig(
+            { Project: { USER: { findMany: { conditions: { ownerId: $UID } } } } },
+            async (p) => {
+                const rows = (await asUser({ id: s.users.alice.id, role: 'USER' }, () => p.model.project.findMany({}))) as any[];
+                expect(rows).toHaveLength(2); // p1, p2
+                expect(rows.every((r) => r.ownerId === s.users.alice.id)).toBe(true);
+            },
+        );
     });
 
-    test('ADMIN findMany on Post returns everyone\'s posts', async () => {
-        await seed();
-        const posts = (await asUser({ id: 999, role: 'ADMIN' }, () =>
-            prisma.model.post.findMany({}),
-        )) as any[];
-        expect(posts.length).toBeGreaterThanOrEqual(3);
+    test('ADMIN findMany returns every project', async () => {
+        const rows = (await asUser({ id: 99, role: 'ADMIN' }, () => prisma.model.project.findMany({}))) as any[];
+        expect(rows.length).toBe(4);
     });
 
-    test('USER findMany on User only returns self', async () => {
-        const { alice } = await seed();
-        const users = (await asUser({ id: alice.id, role: 'USER' }, () =>
-            prisma.model.user.findMany({}),
-        )) as any[];
-        expect(users).toHaveLength(1);
-        expect(users[0].id).toBe(alice.id);
+    test('USER findMany on User (conditions { id: $UID }) returns only self', async () => {
+        await withConfig(
+            { User: { USER: { findMany: { conditions: { id: $UID } } } } },
+            async (p) => {
+                const rows = (await asUser({ id: s.users.alice.id, role: 'USER' }, () => p.model.user.findMany({}))) as any[];
+                expect(rows).toHaveLength(1);
+                expect(rows[0].id).toBe(s.users.alice.id);
+            },
+        );
     });
 
-    test('GUEST (no role) request on Post throws 403', async () => {
-        await seed();
-        await expect(
-            asUser(null, () => prisma.model.post.findMany({})),
-        ).rejects.toThrow(/permissions|Forbidden|403/i);
+    test('GUEST (unauthenticated) is default-denied → 403', async () => {
+        await expect(asUser(null, () => prisma.model.project.findMany({}))).rejects.toThrow(/permissions|Forbidden|403/i);
     });
 });
 
-describe('field-level omission (@Role(ADMIN) annotation on User.password)', () => {
-    test('USER read of self does NOT include password', async () => {
-        const { alice } = await seed();
-        const u = await asUser({ id: alice.id, role: 'USER' }, () =>
-            prisma.model.user.findFirst({ where: { id: alice.id } }),
-        );
-        expect(u).toBeTruthy();
-        expect((u as any).password).toBeUndefined();
+describe('field-level omission (@Role(ADMIN) on Project.secretApiKey)', () => {
+    test('USER read does NOT include secretApiKey', async () => {
+        const p1 = (await asUser({ id: s.users.alice.id, role: 'USER' }, () =>
+            prisma.model.project.findFirst({ where: { id: s.projects.p1.id } }),
+        )) as any;
+        expect(p1).toBeTruthy();
+        expect(p1.secretApiKey).toBeUndefined();
     });
 
-    test('ADMIN read DOES include password', async () => {
-        const { alice } = await seed();
-        const u = await asUser({ id: 999, role: 'ADMIN' }, () =>
-            prisma.model.user.findFirst({ where: { id: alice.id } }),
-        );
-        expect((u as any).password).toBe('argon2-hash-A');
+    test('ADMIN read DOES include secretApiKey', async () => {
+        const p1 = (await asUser({ id: 99, role: 'ADMIN' }, () =>
+            prisma.model.project.findFirst({ where: { id: s.projects.p1.id } }),
+        )) as any;
+        expect(p1.secretApiKey).toBe('sk-A');
     });
 });
 
 describe('BYPASS_FILTERING / BYPASS_OMISSION escape hatches', () => {
     test('BYPASS_FILTERING lets unauthenticated lookup-by-email work (auth use case)', async () => {
-        const { alice } = await seed();
         const u = (await asUser(null, () =>
-            (prisma.user as any).findFirst({ where: { email: alice.email } }, { BYPASS_FILTERING: true }),
+            (prisma.user as any).findFirst({ where: { email: s.users.alice.email } }, { BYPASS_FILTERING: true }),
         )) as any;
         expect(u).toBeTruthy();
-        expect(u.id).toBe(alice.id);
+        expect(u.id).toBe(s.users.alice.id);
     });
 
-    test('BYPASS_OMISSION lets auth see password field even as USER role', async () => {
-        const { alice } = await seed();
-        const u = await asUser({ id: alice.id, role: 'USER' }, () =>
+    test('BYPASS_OMISSION reveals an omitted field (auth password lookup)', async () => {
+        // `prisma.user` is one of the hardcoded direct accessors that accept
+        // BYPASS options; password is @Role(none) and normally omitted.
+        const u = (await asUser({ id: s.users.alice.id, role: 'USER' }, () =>
             (prisma.user as any).findFirst(
-                { where: { id: alice.id } },
+                { where: { id: s.users.alice.id } },
                 { BYPASS_FILTERING: true, BYPASS_OMISSION: true },
             ),
-        );
-        expect((u as any).password).toBe('argon2-hash-A');
+        )) as any;
+        expect(u.password).toBe('hash-alice');
     });
 });
 
 describe('withExposedModels', () => {
     test('exposed model is treated as ALL during the callback', async () => {
-        const { alice } = await seed();
-        const users = (await asUser(
-            { id: 999, role: 'USER' },                         // USER role normally can\'t read other users
-            () => prisma.model.user.findMany({}),
-            ['user'],                                          // expose User -> bypass filtering
+        const rows = (await asUser(
+            { id: 99, role: 'USER' }, // USER normally can't see all projects
+            () => prisma.model.project.findMany({}),
+            ['project'], // expose Project -> bypass filtering
         )) as any[];
-        expect(users.length).toBeGreaterThanOrEqual(3);
-        expect(users.find((u: any) => u.id === alice.id)).toBeTruthy();
+        expect(rows.length).toBe(4);
     });
 });
 
 describe('conditions on create are enforced', () => {
-    test('USER cannot create a Post attributed to ANOTHER user (condition { authorId: $USER_ID })', async () => {
-        const { alice, bob } = await seed();
-        // Acting as alice, set authorId=bob. The create condition requires
-        // authorId === $USER_ID, so the proxy must reject this before insert.
-        await expect(
-            asUser({ id: alice.id, role: 'USER' }, () =>
-                prisma.model.post.create({ data: { title: 'forged', authorId: bob.id } }),
-            ),
-        ).rejects.toThrow(/not allowed to create/i);
+    const CREATE_OWN = { Comment: { USER: { create: { conditions: { authorId: $UID } } } } };
 
-        const forged = await asUser({ id: alice.id, role: 'ADMIN' }, () =>
-            prisma.model.post.findMany({ where: { title: 'forged' } }),
-        );
-        expect(forged.length).toBe(0);   // nothing was inserted
+    test('USER cannot create a Comment attributed to ANOTHER user', async () => {
+        await withConfig(CREATE_OWN, async (p) => {
+            await expect(
+                asUser({ id: s.users.alice.id, role: 'USER' }, () =>
+                    p.model.comment.create({ data: { body: 'forged', taskId: s.tasks.t1.id, authorId: s.users.bob.id } }),
+                ),
+            ).rejects.toThrow(/not allowed to create/i);
+        });
+        const forged = await rawClient.comment.findMany({ where: { body: 'forged' } });
+        expect(forged.length).toBe(0); // nothing inserted
     });
 
-    test('USER can create a Post attributed to themselves', async () => {
-        const { alice } = await seed();
-        const post = (await asUser({ id: alice.id, role: 'USER' }, () =>
-            prisma.model.post.create({ data: { title: 'mine', authorId: alice.id } }),
-        )) as any;
-        expect(post.authorId).toBe(alice.id);
+    test('USER can create a Comment attributed to themselves', async () => {
+        await withConfig(CREATE_OWN, async (p) => {
+            const c = (await asUser({ id: s.users.alice.id, role: 'USER' }, () =>
+                p.model.comment.create({ data: { body: 'mine', taskId: s.tasks.t1.id, authorId: s.users.alice.id } }),
+            )) as any;
+            expect(c.authorId).toBe(s.users.alice.id);
+        });
     });
 });
 
 describe('count fallback to read permission', () => {
-    test('count on Post for USER honours the findMany conditions', async () => {
-        const { alice } = await seed();
-        const n = await asUser({ id: alice.id, role: 'USER' }, () =>
-            (prisma.model.post as any).count(),
-        );
-        expect(n).toBe(2);
+    test('count honours the findMany conditions (Comment { authorId: $UID })', async () => {
+        // Base Comment.USER = { authorId: $UID }; alice authored only c1.
+        const n = await asUser({ id: s.users.alice.id, role: 'USER' }, () => (prisma.model.comment as any).count());
+        expect(n).toBe(1);
     });
 });
