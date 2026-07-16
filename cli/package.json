@@ -10,6 +10,15 @@
     "keywords": [],
     "author": "",
     "license": "ISC",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/appxdigital/appx-core.git",
+        "directory": "cli"
+    },
+    "homepage": "https://github.com/appxdigital/appx-core#readme",
+    "bugs": {
+        "url": "https://github.com/appxdigital/appx-core/issues"
+    },
     "bin": {
         "appx-core": "./cli.js"
     },
