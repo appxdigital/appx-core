@@ -4,6 +4,10 @@
   <img src="./public/appx-core-logo.png" alt="AppX Core Logo" width="220" />
 </p>
 
+[![CI](https://github.com/appxdigital/appx-core/actions/workflows/ci.yml/badge.svg)](https://github.com/appxdigital/appx-core/actions/workflows/ci.yml)
+[![Release](https://github.com/appxdigital/appx-core/actions/workflows/release.yml/badge.svg)](https://github.com/appxdigital/appx-core/actions/workflows/release.yml)
+[![Release CLI](https://github.com/appxdigital/appx-core/actions/workflows/release-cli.yml/badge.svg)](https://github.com/appxdigital/appx-core/actions/workflows/release-cli.yml)
+
 **AppX Core** is a production-oriented backend foundation that accelerates the delivery of secure, data-access-controlled APIs with an integrated admin backoffice. It scaffolds a native **NestJS** application and extends it with opinionated building blocks for authentication, authorization (ABAC-first), CRUD acceleration, and administration through **AdminJS**.
 
 Built and maintained by **AppX** (appx-digital.com).
