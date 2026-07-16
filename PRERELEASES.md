@@ -23,6 +23,14 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.6] — unreleased
+
+**Packaging.** The npm tarball now ships `CHANGELOG.md`, `PRERELEASES.md`, and
+`RELEASING.md` (previously only `dist/` + `README.md`). Migration steps are now
+readable from inside an installed `node_modules/@appxdigital/appx-core`, so an
+upgrading project (or an AI agent) can apply them without cloning the repo. No
+code change.
+
 ## [0.1.121-beta.5] — unreleased
 
 **Library.** Field-level access control (`/// @Role(...)`) now applies to
