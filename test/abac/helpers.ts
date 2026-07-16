@@ -33,21 +33,19 @@ export function newRawClient(): any {
     return new PrismaClient({ datasourceUrl: abacUrl() });
 }
 
-function deepMerge(base: any, delta: any): any {
-    if (delta === undefined) return base;
-    if (
-        base === null ||
-        delta === null ||
-        typeof base !== 'object' ||
-        typeof delta !== 'object' ||
-        Array.isArray(base) ||
-        Array.isArray(delta)
-    ) {
-        return delta;
-    }
+/**
+ * Merge a per-test permissions delta onto the base. Model and role maps are
+ * merged (untouched models/actions keep their base rules), but an overridden
+ * action's value is REPLACED wholesale — a delta's `conditions` are
+ * authoritative, never merged into the base condition (which would AND them).
+ */
+function mergeConfig(base: any, delta: any): any {
     const out: any = { ...base };
-    for (const k of Object.keys(delta)) {
-        out[k] = k in base ? deepMerge(base[k], delta[k]) : delta[k];
+    for (const model of Object.keys(delta || {})) {
+        out[model] = { ...(base?.[model] || {}) };
+        for (const role of Object.keys(delta[model] || {})) {
+            out[model][role] = { ...(base?.[model]?.[role] || {}), ...delta[model][role] };
+        }
     }
     return out;
 }
@@ -73,7 +71,7 @@ export async function buildAbacModule(
  * needs; everything else falls back to the base.
  */
 export async function withConfig<T>(delta: any, fn: (prisma: PrismaService) => Promise<T>): Promise<T> {
-    const merged = deepMerge(abacPermissions, delta);
+    const merged = mergeConfig(abacPermissions, delta);
     const { prisma, close } = await buildAbacModule(merged);
     try {
         return await fn(prisma);

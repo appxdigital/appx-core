@@ -72,10 +72,11 @@ describe('§1 ABAC relation matrix', () => {
             );
         });
 
-        test('1.1.4 — GUEST (no matching role rule) is default-denied → empty', async () => {
+        test('1.1.4 — a role with no rule for the model is default-denied (403 throw)', async () => {
             await withConfig({}, async (prisma) => {
-                const rows = await asUser({ role: 'GUEST' }, () => prisma.model.project.findMany({}));
-                expect(rows).toEqual([]);
+                await expect(
+                    asUser({ role: 'GUEST' }, () => prisma.model.project.findMany({})),
+                ).rejects.toThrow(/No permissions found/i);
             });
         });
 
