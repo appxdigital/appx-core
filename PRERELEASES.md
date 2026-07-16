@@ -23,6 +23,20 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.5] — unreleased
+
+**Library.** Field-level access control (`/// @Role(...)`) now applies to
+**nested** relation selections, not just top-level fields. Previously a query
+that selected a restricted field *through* a relation
+(`select: { relation: { select: { restrictedField: true } } }`) received that
+field; the data-access proxy now omits it at every depth, for both `select` and
+`include`, while preserving any `where` / `orderBy` you set on the relation.
+
+- Exercise reads that pull fields through relations (nested `select` / `include`,
+  including multi-level) and confirm the values you expect still come back — a
+  field annotated `@Role(<roles>)` should be absent for roles not listed.
+- No API change; regenerate is not required.
+
 ## [0.1.121-beta.0] — unreleased
 
 First prerelease of the `0.1.121` hardening set. Testing target before this is
