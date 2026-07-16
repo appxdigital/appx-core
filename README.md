@@ -37,6 +37,7 @@ Built and maintained by **AppX** (appx-digital.com).
 - [Permissions](#permissions)
   - [Permissions Configuration Shape](#permissions-configuration-shape)
   - [Rules](#rules)
+  - [Reading Related Models](#reading-related-models)
   - [Action Aliases and Fallbacks](#action-aliases-and-fallbacks)
   - [Custom Controller Actions](#custom-controller-actions)
   - [Temporarily Exposing Models](#temporarily-exposing-models)
@@ -323,6 +324,32 @@ deleteMany: {
   },
 },
 ```
+
+### Reading Related Models
+
+When a query pulls in a relation (`include: { author: true }`, or the equivalent `select`), that related model's **own** read permissions are enforced too — a relation is never a way around ABAC. How this plays out depends on the relation's cardinality.
+
+**To-one relations (`belongsTo`, 1:1)** are filtered with *inner-join* semantics: the related model's read `conditions` are applied to the **parent** row.
+
+- If the related model has **no** read rule for the caller's role, including the relation raises a `403` (`Missing permissions on model X`). Grant a read rule on every model you expose through an `include`.
+- If the related model has a **conditional** read rule and the specific related row does not satisfy it, the **whole parent row is dropped** from the result (`findFirst` returns `null`; `findMany` omits it) — the parent is *not* returned with the relation set to `null`. Put plainly: you cannot see a row whose related record you are not allowed to see.
+
+**To-many relations (`hasMany`, many-to-many)** are filtered in place: the parent row is kept and the child list is narrowed to the rows the caller may read (which can be empty).
+
+Example — `Comment.author` points at `User`, and a `User` is only self-readable:
+
+```ts
+User: {
+  USER: { findMany: { conditions: { id: PermissionPlaceholder.USER_ID } } },
+},
+Comment: {
+  USER: { findMany: { conditions: { authorId: PermissionPlaceholder.USER_ID } } },
+},
+```
+
+`comment.findFirst({ where: { id }, include: { author: true } })` returns the comment only when the caller is also its author (a `User` row they are allowed to read); otherwise the comment itself is filtered out. This is intentional and fails closed.
+
+> **Why not return the parent with the relation nulled?** Prisma does not allow a `where` filter on a to-one relation inside `include` / `select`, so the condition is applied to the parent instead. Masking the relation while keeping the parent would require an extra query per included relation; the framework favors the single-query, fail-closed behavior.
 
 ### Action Aliases and Fallbacks
 
