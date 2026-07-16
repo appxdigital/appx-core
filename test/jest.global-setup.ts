@@ -12,6 +12,7 @@ import {
     ensureFixtureInstalled,
     writeFixtureEnv,
     pushFixturePrisma,
+    pushFixtureSchemaTo,
     runFixtureGenerate,
     buildFixtureApp,
 } from './helpers/fixture-app';
@@ -48,11 +49,12 @@ export default async function globalSetup(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log(`\n[appx-core test] booting ${provider} container…`);
 
-    const { proxyUrl, fixtureUrl, parityRootUrl, parityCreds, stop } = await startDbContainer(provider);
+    const { proxyUrl, fixtureUrl, parityRootUrl, abacUrl, parityCreds, stop } = await startDbContainer(provider);
     process.env.DATABASE_URL = proxyUrl;
     process.env.APPX_PROXY_DB_URL = proxyUrl;
     process.env.APPX_FIXTURE_DB_URL = fixtureUrl;
     process.env.APPX_PARITY_DB_URL = parityRootUrl;
+    process.env.APPX_ABAC_DB_URL = abacUrl;
     // The cli/create-parity test needs the individual fields to feed into
     // inquirer prompts. Pack them into a single env var (URL doesn't carry
     // dbName cleanly when the password might contain `@` or similar).
@@ -119,6 +121,8 @@ export default async function globalSetup(): Promise<void> {
         );
 
         pushFixturePrisma(provider);
+        // Stand up the isolated ABAC matrix DB (appx_abac) with the same rich schema.
+        pushFixtureSchemaTo(abacUrl);
         runFixtureGenerate();
         buildFixtureApp();
     }

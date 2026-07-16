@@ -40,6 +40,7 @@ export async function startDbContainer(provider: DbProvider): Promise<{
     proxyUrl: string;
     fixtureUrl: string;
     parityRootUrl: string;
+    abacUrl: string;
     parityCreds: { host: string; port: string; user: string; password: string; dbName: string; provider: 'mysql' | 'postgresql' };
     stop: () => Promise<void>;
 }> {
@@ -59,6 +60,7 @@ export async function startDbContainer(provider: DbProvider): Promise<{
             'mysql', '-uroot', '-pappx_root_pw', '-e',
             "CREATE DATABASE appx_fixture; " +
             "CREATE DATABASE appx_parity; " +
+            "CREATE DATABASE appx_abac; " +
             "GRANT ALL PRIVILEGES ON *.* TO 'appx'@'%' WITH GRANT OPTION; " +
             "FLUSH PRIVILEGES;",
         ]);
@@ -73,6 +75,7 @@ export async function startDbContainer(provider: DbProvider): Promise<{
             proxyUrl: baseUri,
             fixtureUrl: baseUri.replace(/\/appx_proxy(\?|$)/, '/appx_fixture$1'),
             parityRootUrl: `mysql://appx:appx_pw@${host}:${port}/appx_parity`,
+            abacUrl: `mysql://appx:appx_pw@${host}:${port}/appx_abac`,
             parityCreds: {
                 host, port, user: 'appx', password: 'appx_pw',
                 dbName: 'appx_parity', provider: 'mysql',
@@ -96,6 +99,7 @@ export async function startDbContainer(provider: DbProvider): Promise<{
         'psql', '-U', 'appx', '-d', 'postgres',
         '-c', 'CREATE DATABASE appx_fixture OWNER appx;',
         '-c', 'CREATE DATABASE appx_parity OWNER appx;',
+        '-c', 'CREATE DATABASE appx_abac OWNER appx;',
     ]);
     if (res.exitCode !== 0) {
         throw new Error(`Failed to bootstrap databases: ${res.output}`);
@@ -108,6 +112,7 @@ export async function startDbContainer(provider: DbProvider): Promise<{
         proxyUrl: baseUri,
         fixtureUrl: baseUri.replace(/\/appx_proxy(\?|$)/, '/appx_fixture$1'),
         parityRootUrl: `postgresql://appx:appx_pw@${host}:${port}/appx_parity`,
+        abacUrl: `postgresql://appx:appx_pw@${host}:${port}/appx_abac`,
         parityCreds: {
             host, port, user: 'appx', password: 'appx_pw',
             dbName: 'appx_parity', provider: 'postgresql',

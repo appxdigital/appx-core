@@ -50,6 +50,15 @@ model User {
   // Authored content
   comments       Comment[]
   assignedTasks  Task[]              @relation("AssigneeTasks")
+  reviewedTasks  Task[]              @relation("ReviewerTasks")
+
+  // 1:1 profile (optional — some users have none)
+  profile        UserProfile?
+
+  // Self-relation: manager hierarchy
+  managerId      Int?
+  manager        User?               @relation("UserHierarchy", fields: [managerId], references: [id])
+  reports        User[]              @relation("UserHierarchy")
 }
 
 model Session {
@@ -87,6 +96,9 @@ model Project {
   owner        User            @relation(fields: [ownerId], references: [id])
   members      ProjectMember[]
   tasks        Task[]
+  status       String          @default("active")
+  // Implicit M:N — Prisma manages the hidden join table
+  tags         Tag[]
   // Sensitive field — only ADMIN can read it (proxy field omission)
   secretApiKey String?         /// @Role(ADMIN)
   createdAt    DateTime        @default(now())
@@ -113,6 +125,9 @@ model Task {
   // Optional belongsTo — exercises the proxy's null-allowed code path
   assigneeId Int?
   assignee   User?     @relation("AssigneeTasks", fields: [assigneeId], references: [id])
+  // Second named relation to User — disambiguation the proxy must respect
+  reviewerId Int?
+  reviewer   User?     @relation("ReviewerTasks", fields: [reviewerId], references: [id])
   comments   Comment[]
   createdAt  DateTime  @default(now())
 }
@@ -124,5 +139,25 @@ model Comment {
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   authorId  Int
   author    User     @relation(fields: [authorId], references: [id])
+  // Self-relation: threaded replies
+  parentId  Int?
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
   createdAt DateTime @default(now())
+}
+
+// 1:1 — exercises @unique FK + the proxy's belongsTo branch at cardinality 1
+model UserProfile {
+  id          Int     @id @default(autoincrement())
+  userId      Int     @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio         String
+  billingInfo String? /// @Role(ADMIN)
+}
+
+// Implicit M:N — no join model declared; Prisma manages the hidden table
+model Tag {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  projects Project[]
 }
