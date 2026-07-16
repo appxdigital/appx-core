@@ -19,11 +19,11 @@ jobs:
             matrix:
                 db: [mysql, postgres]
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v5
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@v5
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: npm
 
             # The runner's bundled npm 10 can crash with "Exit handler never
@@ -72,11 +72,11 @@ jobs:
         name: cli smoke
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v5
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@v5
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: npm
                   cache-dependency-path: cli/package-lock.json
 

@@ -38,11 +38,11 @@ jobs:
             version: ${{ steps.channel.outputs.version }}
             channel: ${{ steps.channel.outputs.channel }}
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v5
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@v5
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: npm
                   cache-dependency-path: cli/package-lock.json
 
@@ -92,11 +92,11 @@ jobs:
             contents: read
             id-token: write # OIDC token for npm trusted publishing
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v5
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@v5
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: npm
                   cache-dependency-path: cli/package-lock.json
                   registry-url: 'https://registry.npmjs.org'
@@ -121,11 +121,11 @@ jobs:
             contents: read
             id-token: write # OIDC token for npm trusted publishing
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v5
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@v5
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: npm
                   cache-dependency-path: cli/package-lock.json
                   registry-url: 'https://registry.npmjs.org'
