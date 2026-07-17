@@ -77,6 +77,8 @@ So a minimal USER config often needs just `findMany`, `create`, `update`, `delet
 - **`restrictedFields: ['x', 'y']` on a permission action** — strips those keys from the incoming request body for that role+action (e.g. stop a role from setting `role`/`id`). Silent strip, not a `400`.
 - **`setUserIdField: 'ownerId'`** — the framework sets that field to the caller's id server-side on create (so a client can't forge ownership). Applied after `restrictedFields`, so it can't be clobbered.
 
+> For the generated request-body DTOs — their structure, and the full set of ways to **remove or restrict a writable field** (`OmitType`, `/// @NoWrite`, `restrictedFields`) — see **[dtos.md](./dtos.md)**.
+
 ---
 
 ## Decorators
