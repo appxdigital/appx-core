@@ -146,6 +146,9 @@ export class PrismaService {
                                             // Conditions can't be pushed into a WHERE on insert, so
                                             // validate the incoming data satisfies them before insert.
                                             await this.enforceCreateConditions(String(propKey), userRole, params, user, methodKey.toString());
+                                            // Authorize any nested relation writes (create/connect) in
+                                            // the payload; reject every other nested operator.
+                                            await this.enforceNestedWrites(String(propKey), params.data, user, userRole);
                                         } else {
                                             params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
                                         }
@@ -604,6 +607,103 @@ export class PrismaService {
                     `Not allowed to create ${modelName}: the record does not satisfy the '${action}' permission conditions for role ${userRole}.`,
                 );
             }
+        }
+    }
+
+    /**
+     * Recursively authorizes nested relation writes in a `create` payload. Only
+     * an explicit allowlist of operators is permitted, each checked against ABAC;
+     * every other operator is rejected (fail closed).
+     *
+     * Runs on the create path only — `updateMany` / `createMany` (what update /
+     * createMany resolve to) accept scalar data, so nested relation writes reach
+     * Prisma solely via `create()`.
+     *
+     *   - `create` → the child must satisfy the related model's `create` rule
+     *     (recurses, so deeper nesting is authorized too).
+     *   - `connect` → the target must satisfy the related model's `connect` rule.
+     *     `connect` is a DEDICATED action: being allowed to READ a record does not
+     *     authorize associating it.
+     */
+    private async enforceNestedWrites(modelName: string, data: any, user: any, userRole: string): Promise<void> {
+        if (!data || typeof data !== 'object') return;
+        const rows = Array.isArray(data) ? data : [data];
+        for (const row of rows) {
+            if (!row || typeof row !== 'object') continue;
+            for (const key of Object.keys(row)) {
+                const relation = this.getRelation(modelName, key);
+                if (!relation) continue; // scalar / FK field — not a relation nav key
+                const ops = row[key];
+                if (!ops || typeof ops !== 'object') continue;
+                await this.enforceNestedRelationOps(relation.model, key, ops, user, userRole, modelName);
+            }
+        }
+    }
+
+    /** Authorizes each operator inside one relation's nested-write object. */
+    private async enforceNestedRelationOps(
+        relatedModel: string,
+        field: string,
+        ops: any,
+        user: any,
+        userRole: string,
+        parentModel: string,
+    ): Promise<void> {
+        const ALLOWED = ['create', 'connect'];
+        for (const op of Object.keys(ops)) {
+            if (!ALLOWED.includes(op)) {
+                throw new ForbiddenException(
+                    `Nested '${op}' on relation '${field}' of ${parentModel} is not supported through the data-access proxy. ` +
+                        `Only ${ALLOWED.join(' / ')} are permitted; perform other nested writes in an explicit endpoint with its own authorization.`,
+                );
+            }
+            const value = ops[op];
+            const items = Array.isArray(value) ? value : [value];
+            if (op === 'create') {
+                for (const child of items) {
+                    await this.enforceCreateConditions(relatedModel, userRole, {data: child}, user, 'create');
+                    await this.enforceNestedWrites(relatedModel, child, user, userRole);
+                }
+            } else {
+                for (const target of items) {
+                    await this.assertConnectAllowed(relatedModel, target, user, userRole, field);
+                }
+            }
+        }
+    }
+
+    /** A `connect` requires an explicit `connect` permission on the target model. */
+    private async assertConnectAllowed(
+        relatedModel: string,
+        where: any,
+        user: any,
+        userRole: string,
+        field: string,
+    ): Promise<void> {
+        const normalizedName = relatedModel.toLowerCase().trim();
+        const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
+        if (exposedModels.includes(normalizedName)) return;
+
+        const connectPerm = this.normalizedPermissionsConfig[normalizedName]?.[userRole]?.['connect'];
+        if (!connectPerm) {
+            throw new ForbiddenException(
+                `Not allowed to connect ${relatedModel} (via '${field}'): role ${userRole} has no 'connect' permission on ${relatedModel}.`,
+            );
+        }
+        if (connectPerm === 'ALL') return;
+
+        const conditions = (connectPerm as any).conditions;
+        const resolved = conditions
+            ? PrismaService._buildConditions(Array.isArray(conditions) ? {AND: conditions} : conditions, user)
+            : {};
+
+        const delegate = relatedModel.charAt(0).toLowerCase() + relatedModel.slice(1);
+        const client: any = RequestContext.currentContext?.req.prisma || this.rawClient;
+        const found = await client[delegate].findFirst({where: {AND: [where || {}, resolved]}});
+        if (!found) {
+            throw new ForbiddenException(
+                `Not allowed to connect ${relatedModel} (via '${field}'): the target does not satisfy the 'connect' permission conditions for role ${userRole}.`,
+            );
         }
     }
 
