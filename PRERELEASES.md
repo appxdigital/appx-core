@@ -23,6 +23,25 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.8] — unreleased
+
+**Library.**
+
+- **Single-record data-access methods now have an honest typed contract.**
+  `prisma.model.*` re-aliases the methods that can't carry ABAC conditions, in
+  both the types and the runtime dispatch: `findUnique`→`findFirst`,
+  `findUniqueOrThrow`→`findFirstOrThrow`, `update`→`updateMany`,
+  `delete`→`deleteMany`. A mismatched call now fails at compile time instead of
+  the old runtime throw. **Breaking (types only):** `update()`/`delete()` return
+  `{ count }` and `findUnique()` takes a non-unique `where` with a nullable
+  return — adjust the call sites the compiler flags. A `*Many` permission action
+  now inherits its singular rule (`updateMany`→`update`, `deleteMany`→`delete`,
+  `createMany`→`create`), so a config can declare just `update`/`delete`/`create`.
+- **`@ExposeModels(...models)`** — expose models on a route WITHOUT a permission
+  action, for public / GUEST endpoints that must read an otherwise-restricted
+  model without adding a `GUEST` rule for it. `@Permission(action, models)` keeps
+  working unchanged. Exposed-model matching is case-insensitive.
+
 ## [0.1.121-beta.7] — unreleased
 
 **Library.** `createMany` now inherits the `create` permission when not declared
