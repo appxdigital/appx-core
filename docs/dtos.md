@@ -140,6 +140,22 @@ POST /projects
 
 **Keep `forbidNonWhitelisted: true` on** so a disallowed operator (e.g. `set`) **fails loud** with a `400`. Never run `whitelist` in strip-only mode on writes — it would silently drop the payload.
 
+### Nesting depth: one level over HTTP CRUD
+
+The generated nested-write DTOs go **one level deep**. A nested `create` DTO contains the related model's **scalar fields only** (plus its `connect`) — it does **not** expose that model's *own* relations. This is deliberate: it keeps the generated DTOs free of circular references.
+
+Consequence for CRUD requests:
+
+- **One level works:** `project.create` with `tasks: { create: [...] }` or `tags: { connect: [...] }`. ✅
+- **Two+ levels are rejected with `400`:** e.g. `project.create` → `tasks: { create: [{ title, comments: { create: [...] } }] }`. The inner `comments` key is not on the (scalar-only) task nested-create DTO, so `forbidNonWhitelisted` rejects it. This fails **loud**, never silently.
+
+Note the two layers behave differently on purpose:
+
+- **The proxy enforcement is fully recursive** — it authorizes nested `create`/`connect` at *any* depth (each level checked against that model's `create` / `connect` rule). So deep nesting is safe wherever it can reach the proxy.
+- **The generated DTOs cap the HTTP surface at one level.** Deep nesting simply isn't expressible through generic CRUD.
+
+**To do multi-level nested writes, use an explicit controller/service method** that calls `prismaService.model.<x>.create(...)` with the deep payload — the proxy still enforces the `create`/`connect` allowlist recursively there. Do not try to widen the generated DTOs to accept deeper nesting.
+
 ---
 
 ## After changing the schema

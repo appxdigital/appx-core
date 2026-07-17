@@ -38,6 +38,10 @@ Let the generated resolvers serve the data (they go through `PrismaService`); a 
 
 You can `select: { _count: ... }`, but ABAC conditions are **not** applied inside a `_count` sub-selection. Don't rely on `_count` to reflect only rows the caller may see.
 
+### Nested writes over HTTP CRUD are one level deep
+
+Generated CRUD accepts nested `create`/`connect` **one level deep only** — a `project.create` may nest tasks/tags, but not a task that itself nests comments (the second level `400`s under `forbidNonWhitelisted`). The proxy's authorization is recursive; the *DTO* surface is the cap, kept one level to avoid circular DTOs. For multi-level nested writes use an explicit endpoint that calls `prismaService.model.*.create(...)`. See [dtos.md](./dtos.md#nesting-depth-one-level-over-http-crud).
+
 ---
 
 ## Sharp edges to know about

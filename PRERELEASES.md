@@ -31,6 +31,15 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.11] — unreleased
+
+**Docs.** No code change. Documented that nested writes over HTTP CRUD are
+**one level deep** (a nested `create` DTO exposes the related model's scalars +
+`connect`, not its own relations, to avoid circular DTOs). The proxy's
+authorization is recursive; the DTO surface is the cap — deeper nesting `400`s,
+and multi-level nested writes belong in an explicit endpoint. See `docs/dtos.md`
+and `docs/limitations.md`.
+
 ## [0.1.121-beta.10] — unreleased
 
 **Library.** **Nested relation writes on generated CRUD are now an explicit,
