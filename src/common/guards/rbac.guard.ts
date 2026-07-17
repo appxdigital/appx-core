@@ -41,7 +41,13 @@ export class RbacGuard implements CanActivate {
                 `No permissions defined for role ${user.role} on model ${model}`,
             );
         }
-        const permission = rolePermissions[action];
+        // `createMany` inherits the `create` rule when not defined explicitly —
+        // mirrors the data-access proxy, which validates each batched row against
+        // the `create` permission. Lets a config declare just `create`.
+        let permission = rolePermissions[action];
+        if (!permission && action === 'createMany') {
+            permission = rolePermissions['create'];
+        }
         if (!permission) {
             throw new ForbiddenException(
                 `Action ${action} not allowed for role ${user.role} on model ${model}`,

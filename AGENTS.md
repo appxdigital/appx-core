@@ -120,8 +120,9 @@ Used by `AuthService`, `SessionSerializer`, `CorePrismaSessionStore`, and AdminJ
 `selectPermission` (in `prisma.service.ts`) implements aliases so configs stay compact:
 - `count` falls back to `findMany` then `findFirst`
 - `findFirst` / `findUnique`-shape reads fall back to `findMany`
+- `createMany` falls back to `create` (in both the data-access proxy and `RbacGuard`)
 
-This is convenient but means a single `findMany: 'ALL'` entry implicitly grants `count` and `findFirst`.
+This is convenient but means a single `findMany: 'ALL'` entry implicitly grants `count` and `findFirst`, and a single `create` entry implicitly grants `createMany`. The `createMany → create` fallback is **one-directional**: declaring only `createMany` does not enable `create`, so make `create` the canonical key.
 
 ---
 
