@@ -1,6 +1,6 @@
 import {ForbiddenException, HttpException, HttpStatus, Inject, Injectable} from '@nestjs/common';
 import {Prisma, PrismaClient} from '@prisma/client';
-import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
+import {PermissionsConfigType, SINGULAR_ACTION} from '../common/config/permissionsConfigTypes';
 import {RequestContext} from "nestjs-request-context";
 import type {PrismaClient as RuntimeClient} from '.prisma/client';
 // @ts-ignore
@@ -19,8 +19,36 @@ export type CorePrismaOptions = {
     BYPASS_FILTERING?: boolean;
 };
 
-// Exclude findUnique, findUniqueOrThrow, delete and update because they are not compatible with permission filtering
-export type CorePrismaModel<M extends ModelKey> = Exclude<RuntimeClient[M], 'findUnique' | 'findUniqueOrThrow' | 'delete' | 'update'>;
+/** Look up a delegate method type without constraining the delegate `D`. */
+type MethodOf<D, K extends string> = K extends keyof D ? D[K] : never;
+
+/**
+ * Re-aligns a Prisma model delegate `D` to the proxy's real contract. Single-
+ * record methods that require a unique `where` can't carry the injected ABAC
+ * conditions, so each is re-aliased to its filter-compatible equivalent and the
+ * proxy transparently redirects the call at runtime:
+ *   - `findUnique` takes `findFirst`'s params/return; `findUniqueOrThrow` takes
+ *     `findFirstOrThrow`'s.
+ *   - `update` takes `updateMany`'s params and returns its result
+ *     (`BatchPayload`); `delete` takes `deleteMany`'s.
+ */
+export type ProxiedDelegate<D> = Omit<D, 'findUnique' | 'findUniqueOrThrow' | 'update' | 'delete'> & {
+    findUnique: MethodOf<D, 'findFirst'>;
+    findUniqueOrThrow: MethodOf<D, 'findFirstOrThrow'>;
+    update: MethodOf<D, 'updateMany'>;
+    delete: MethodOf<D, 'deleteMany'>;
+};
+
+// The proxied delegate for a model key `M` (kept key-based for existing callers).
+export type CorePrismaModel<M extends ModelKey> = ProxiedDelegate<RuntimeClient[M]>;
+
+/**
+ * Applies {@link ProxiedDelegate} across every model delegate on a Prisma
+ * client, leaving non-delegate members (`$transaction`, `$connect`, …) intact.
+ */
+export type CorePrismaClient<C> = {
+    [K in keyof C]: C[K] extends { findMany: (...args: any[]) => any } ? ProxiedDelegate<C[K]> : C[K];
+};
 
 @Injectable()
 export class PrismaService {
@@ -93,17 +121,19 @@ export class PrismaService {
                                 const contextModel = RequestContext.currentContext?.req.prisma?.[propKey] || model;
                                 return async (params: any = {}, options?: CorePrismaOptions) => {
 
-                                    // Blacklisted methods, should not be used to ensure permission filtering is applied
-                                    let blacklist: {[key: string]: string} = {
+                                    // Single-record methods can't carry the injected ABAC where-
+                                    // conditions, so redirect them to their filter-compatible
+                                    // equivalents. The proxied types remove/re-alias these, so this
+                                    // matches what a typed caller can express: update() runs
+                                    // updateMany, delete() runs deleteMany, and a findUnique lookup
+                                    // becomes a findFirst with conditions applied.
+                                    const redirect: {[key: string]: string} = {
                                         findUnique: 'findFirst',
                                         findUniqueOrThrow: 'findFirstOrThrow',
                                         delete: 'deleteMany',
                                         update: 'updateMany',
                                     };
-
-                                    if (blacklist[methodKey.toString()]) {
-                                        throw new Error(`The method ${methodKey.toString()} is not compatible with permission filtering and is not allowed. Please use ${blacklist[methodKey.toString()]}} instead.`);
-                                    }
+                                    methodKey = redirect[methodKey.toString()] ?? methodKey;
 
                                     // delete, deleteMany, update and updateMany methods should not apply field omission because they are not selecting fields
                                     if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'create', 'createMany'].includes(methodKey.toString())) {
@@ -162,16 +192,16 @@ export class PrismaService {
         throw new Error(`Model ${model.toString()} not found in PrismaClient.`);
     }
 
-    get model(): RuntimeClient {
+    get model(): CorePrismaClient<RuntimeClient> {
         return new Proxy(this.prismaClient, {
-            get: (target: RuntimeClient, prop: ModelKey): CorePrismaModel<ModelKey> => {
+            get: (target: RuntimeClient, prop: ModelKey) => {
                 if (prop in target) {
                     return target[prop];
                 } else {
                     throw new Error(`Model ${String(prop)} does not exist on PrismaClient`);
                 }
             },
-        });
+        }) as unknown as CorePrismaClient<RuntimeClient>;
     }
 
     get user(): CorePrismaModel<'user'> {
@@ -901,6 +931,15 @@ export class PrismaService {
                 this.debug(`Using 'findFirst' permissions for '${action}' action on model '${modelName}' and role ${userRole}`, 'info');
                 actionPermissions = permissions['findFirst'];
             }
+        }
+
+        // A `*Many` action inherits the singular rule when not set explicitly
+        // (updateMany → update, deleteMany → delete). `update()` / `delete()`
+        // redirect to their `*Many` form, so this is what makes a config that
+        // declares only `update` / `delete` apply to them.
+        if (!actionPermissions && SINGULAR_ACTION[action] && permissions[SINGULAR_ACTION[action]]) {
+            this.debug(`Using '${SINGULAR_ACTION[action]}' permissions for '${action}' action on model '${modelName}' and role ${userRole}`, 'info');
+            actionPermissions = permissions[SINGULAR_ACTION[action]];
         }
 
         return actionPermissions;

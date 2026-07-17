@@ -8,6 +8,19 @@ export const PermissionPlaceholder: {
     USER_ID: '$USER_ID',
 };
 
+/**
+ * Batch (`*Many`) actions inherit the singular rule when not declared
+ * explicitly, so a config can define just `create` / `update` / `delete`.
+ * One-directional: the singular is canonical (declaring only the `*Many`
+ * variant does not enable the singular). Consumed by the Prisma proxy
+ * (`selectPermission`) and the `RbacGuard`.
+ */
+export const SINGULAR_ACTION: Record<string, string> = {
+    createMany: 'create',
+    updateMany: 'update',
+    deleteMany: 'delete',
+};
+
 /** Detect delegate keys on an arbitrary Prisma client type C */
 type DelegateKeyOf<C> = {
     [K in keyof C]:

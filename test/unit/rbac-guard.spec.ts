@@ -40,4 +40,24 @@ describe('RbacGuard — create/createMany fallback', () => {
         const guard = new RbacGuard(reflector('createMany'), config);
         await expect(guard.canActivate(ctx('USER', 'Post'))).rejects.toThrow(/not allowed/i);
     });
+
+    test('updateMany inherits `update`; deleteMany inherits `delete`', async () => {
+        const config: any = { Post: { USER: { update: 'ALL', delete: 'ALL' } } };
+        await expect(
+            new RbacGuard(reflector('updateMany'), config).canActivate(ctx('USER', 'Post')),
+        ).resolves.toBe(true);
+        await expect(
+            new RbacGuard(reflector('deleteMany'), config).canActivate(ctx('USER', 'Post')),
+        ).resolves.toBe(true);
+    });
+
+    test('one-directional: `update`/`delete` are NOT enabled by a *Many-only config', async () => {
+        const config: any = { Post: { USER: { updateMany: 'ALL', deleteMany: 'ALL' } } };
+        await expect(
+            new RbacGuard(reflector('update'), config).canActivate(ctx('USER', 'Post')),
+        ).rejects.toThrow(/not allowed/i);
+        await expect(
+            new RbacGuard(reflector('delete'), config).canActivate(ctx('USER', 'Post')),
+        ).rejects.toThrow(/not allowed/i);
+    });
 });

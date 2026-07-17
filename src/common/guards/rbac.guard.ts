@@ -8,7 +8,7 @@ import {
 import {Reflector} from '@nestjs/core';
 import {PERMISSION_METADATA_KEY} from '../decorators/permission.decorator';
 import {PERMISSIONS_CONFIG_TOKEN} from '../config/permissions.config.provider';
-import {PermissionsConfigType, RolePermissions} from "../config/permissionsConfigTypes";
+import {PermissionsConfigType, RolePermissions, SINGULAR_ACTION} from "../config/permissionsConfigTypes";
 
 @Injectable()
 export class RbacGuard implements CanActivate {
@@ -41,12 +41,12 @@ export class RbacGuard implements CanActivate {
                 `No permissions defined for role ${user.role} on model ${model}`,
             );
         }
-        // `createMany` inherits the `create` rule when not defined explicitly —
-        // mirrors the data-access proxy, which validates each batched row against
-        // the `create` permission. Lets a config declare just `create`.
+        // A `*Many` action inherits its singular rule when not defined explicitly
+        // (createMany → create, updateMany → update, deleteMany → delete) — mirrors
+        // the data-access proxy, so a config can declare just the singular form.
         let permission = rolePermissions[action];
-        if (!permission && action === 'createMany') {
-            permission = rolePermissions['create'];
+        if (!permission && SINGULAR_ACTION[action as string]) {
+            permission = rolePermissions[SINGULAR_ACTION[action as string] as keyof RolePermissions];
         }
         if (!permission) {
             throw new ForbiddenException(

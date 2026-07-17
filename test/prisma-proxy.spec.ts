@@ -34,25 +34,25 @@ beforeEach(async () => {
     s = await seedAbac(rawClient);
 });
 
-describe('blacklisted Prisma methods', () => {
-    test('findUnique throws and suggests findFirst', async () => {
+describe('single-record methods redirect to their filter-compatible form', () => {
+    test('findUnique() runs as findFirst (conditions apply)', async () => {
         await asUser({ id: 99, role: 'ADMIN' }, async () => {
-            await expect((prisma.model as any).project.findUnique({ where: { id: s.projects.p1.id } }))
-                .rejects.toThrow(/findUnique.*not.*allowed|findFirst/i);
+            const row: any = await (prisma.model as any).project.findUnique({ where: { id: s.projects.p1.id } });
+            expect(row?.id).toBe(s.projects.p1.id);
         });
     });
 
-    test('delete throws and suggests deleteMany', async () => {
+    test('update() runs as updateMany (returns a count)', async () => {
         await asUser({ id: 99, role: 'ADMIN' }, async () => {
-            await expect((prisma.model as any).project.delete({ where: { id: s.projects.p1.id } }))
-                .rejects.toThrow(/delete.*not.*allowed|deleteMany/i);
+            const res: any = await prisma.model.project.update({ where: { id: s.projects.p1.id }, data: { name: 'x' } });
+            expect(res).toEqual({ count: 1 });
         });
     });
 
-    test('update throws and suggests updateMany', async () => {
+    test('delete() runs as deleteMany (returns a count)', async () => {
         await asUser({ id: 99, role: 'ADMIN' }, async () => {
-            await expect((prisma.model as any).project.update({ where: { id: s.projects.p1.id }, data: { name: 'x' } }))
-                .rejects.toThrow(/update.*not.*allowed|updateMany/i);
+            const res: any = await prisma.model.project.delete({ where: { id: s.projects.p1.id } });
+            expect(res).toEqual({ count: 1 });
         });
     });
 });
