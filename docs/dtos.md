@@ -117,14 +117,28 @@ You can combine this with `OmitType`/`PickType` — extend the transformed base,
 
 ## Relations & nested writes
 
-The generated DTOs **do not include relation fields**, only scalar foreign keys. That is deliberate: generic CRUD endpoints are for **flat** writes.
+Generated **create** DTOs expose each relation as a nested-write member that accepts an explicit allowlist of operators — **`create` and `connect` only** — each authorized by ABAC. Other operators (`set`, `disconnect`, `update`, `upsert`, `delete`, …) are deliberately **not** emitted, so the validation pipe rejects them; the proxy rejects them defensively too. Both layers fail closed.
 
-**Do not try to make CRUD accept nested relation writes** (`{ tasks: { create: [...] } }`, `connect`, `set`, …) by re-adding relation keys. Two reasons:
+- **`create`** — creates the related record(s). Authorized against the related model's **`create`** rule (recursively, so deeper nesting is checked too). The back-reference foreign key is set automatically by the parent write and is omitted from the nested DTO.
+- **`connect`** — links existing record(s) by their unique fields. Authorized against the related model's dedicated **`connect`** permission — see [permissions.md](./permissions.md). A `connect` rule is **required**; being able to *read* a record does not authorize associating it. No `connect` rule ⇒ the connect is refused.
 
-1. Under the validation pipe, unknown relation keys are either rejected (`forbidNonWhitelisted`) or — if you ever run `whitelist` in strip mode without `forbidNonWhitelisted` — **silently dropped**, causing silent data loss on writes. Always keep `forbidNonWhitelisted` on so bad input **fails loud**.
-2. Nested writes are **not authorized by ABAC** — a nested `create`/`connect` never passes through the proxy's create-enforcement, so it bypasses the create rules for the related model. Exposing them via generic CRUD is a mass-assignment / authorization risk.
+So a nested write succeeds only when it is an allowed operator **and** the caller passes the related model's rule.
 
-For legitimate nested writes, add an **explicit controller/service method** where you apply the right authorization yourself, rather than routing them through the generic CRUD body.
+**Only `create()` carries nested writes.** `update` resolves to `updateMany`, whose payload is scalar-only (a Prisma constraint), so nested writes are not available on update — do the update and the relation change as separate operations, or in an explicit endpoint.
+
+Example — create a project with a new task and connect existing tags:
+
+```jsonc
+POST /projects
+{
+  "name": "Alpha",
+  "ownerId": 1,
+  "tasks": { "create": [{ "title": "kickoff" }] },  // requires Task.create rule
+  "tags":  { "connect": [{ "id": 7 }] }             // requires Tag.connect rule
+}
+```
+
+**Keep `forbidNonWhitelisted: true` on** so a disallowed operator (e.g. `set`) **fails loud** with a `400`. Never run `whitelist` in strip-only mode on writes — it would silently drop the payload.
 
 ---
 

@@ -55,8 +55,24 @@ Shape: `PermissionsConfig[Model][Role][action]`, where each `action` value is ei
 | `create`, `createMany` | inserts |
 | `updateMany` | updates (also what `update()` resolves to — see [data-access.md](./data-access.md)) |
 | `deleteMany` | deletes (also what `delete()` resolves to) |
+| `connect` | associating an existing record as a nested-write relation target — see below |
 
 > `aggregate` is **not** a supported permission action yet — see [limitations.md](./limitations.md).
+
+### The `connect` action
+
+When a `create` payload nests `{ relation: { connect: {...} } }` (linking an existing record), the framework checks the **target model's `connect` rule** — a **dedicated** action, separate from reads. This exists because *being able to see a record is not permission to associate it* (seeing a team ≠ being allowed to join it).
+
+```ts
+Team: {
+  USER: {
+    findMany: { conditions: { ... } },        // who can SEE a team
+    connect:  { conditions: { ownerId: $UID } } // who can ATTACH a team to something they're creating
+  },
+}
+```
+
+The `connect` rule's conditions are evaluated against the candidate record. **Default-deny, no fallback:** if the target model has no `connect` rule, the connect is refused. See [dtos.md](./dtos.md#relations--nested-writes) for the nested-write allowlist (`create` / `connect` only).
 
 ### Action fallback chains
 
