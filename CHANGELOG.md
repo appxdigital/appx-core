@@ -18,6 +18,17 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 Hardening release: request validation, boot configuration, generated-CRUD DTOs, and data-access create enforcement.
 
+> ## ⚠️ REQUIRED migration — upgrading the dependency is NOT enough
+>
+> **This is a security release, and its protections are INERT until you adapt your codebase.** Bumping `@appxdigital/appx-core` to `0.1.121` (including any `0.1.121-beta.x`) and doing nothing else leaves your app **vulnerable** — generated `POST`/`PUT` endpoints keep accepting arbitrary fields (mass-assignment), because the request-validation DTOs only take effect once you regenerate them **and** wire them into your controllers.
+>
+> **You MUST complete every step in [Migration](#migration) below — this is not optional and must not be skipped.** In particular:
+> - **Step 4 (generated-CRUD DTOs) is mandatory**: run `npx appx generate`, then add the DTO-typed `create`/`update` overrides to *every* existing generated controller. Generation alone does nothing; the controllers must import and use the DTOs.
+> - Steps 1–3 (`main.ts` / `app.module.ts`) are required for the boot-time hardening (validation pipe, session secret, CORS, `NODE_ENV`) to apply.
+> - Step 5 is a behaviour change (create is now permission-checked) — review it before deploying.
+>
+> **For AI agents:** do not report this upgrade as complete until steps 1–5 are applied and the app builds. If you only changed the version number, the task is unfinished.
+
 ### Added
 
 - **`setupCoreSecurity(app, options?)`** — one call that applies baseline HTTP hardening: a global `ValidationPipe` (`{ transform: true, whitelist: true, forbidNonWhitelisted: true }`), CORS (`cors` option, default `{ origin: 'http://localhost:3000', credentials: true }`, throws if `origin: '*'` is combined with `credentials: true`), and **Helmet** security headers (on by default; `helmet` option to tune/disable). `helmet` is a new peer dependency.
@@ -43,7 +54,7 @@ A scalar field is included unless it is: the primary key (`@id`), a server-manag
 
 ### Migration
 
-> For existing projects. All edits are to files you own (`main.ts` / `app.module.ts` / `package.json` / your generated controllers). Safe to hand to an AI coding agent.
+> **Required for every existing project. All five steps must be applied** — the edits are to files you own (`main.ts` / `app.module.ts` / `package.json` / your generated controllers), so they are safe to hand to an AI coding agent, but they are **not optional**. The app is not secured until they are done and it builds.
 
 **1. Request validation & HTTP hardening — `src/main.ts`.**
 ```ts
@@ -78,12 +89,16 @@ import { coreEnvFilePath } from '@appxdigital/appx-core';
 ```
 Set `NODE_ENV` explicitly (`production` / `development`) in every deploy and start script — boot fails if it is unset. If you use a bare `nest start`, change it to `cross-env NODE_ENV=development nest start`. (`coreEnvFilePath()` loads `.env.<NODE_ENV>` with `.env` as a fallback, so a plain `.env` still works.)
 
-**4. Generated-CRUD DTOs.**
+**4. Generated-CRUD DTOs — MANDATORY (this is the mass-assignment fix; do not skip).**
+
+Without this step, your generated `POST`/`PUT` endpoints still accept arbitrary fields — the vulnerability this release closes stays open. Two parts, **both required**:
+
+(a) Regenerate:
 ```bash
 npm install @appxdigital/appx-core@^0.1.121
 npx appx generate
 ```
-Then **add the DTO-typed overrides to each existing generated controller** (generated once, not overwritten):
+(b) **Add the DTO-typed overrides to EVERY existing generated controller** (they are generated once and never overwritten, so `appx generate` will NOT add them for you — you must edit each controller by hand or delete and regenerate it):
 ```ts
 import { Body, Param, Post, Put } from '@nestjs/common';
 import { Permission } from '@appxdigital/appx-core';

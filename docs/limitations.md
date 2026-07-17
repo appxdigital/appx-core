@@ -13,14 +13,14 @@ Read this before using any method or surface not explicitly covered in [permissi
 - Need a count? Use `count(...)` — it **is** supported and falls back to your `findMany` rule.
 - Need a genuine aggregate behind trusted access? Compute it inside a `withExposedModels(...)` block (or a bypass) with your own authorization, and never expose it to untrusted roles until aggregate ABAC lands.
 
-### GraphQL
+### GraphQL — writes and `aggregate`
 
-The GraphQL surface is **marked "not fully ready"** and should not be treated as a hardened production API yet:
+GraphQL currently supports **read queries only** (`findAll<Model>s` / `findFirst<Model>` / `findOne<Model>`), with ABAC applied. See **[graphql.md](./graphql.md)** for how to use it, including nested queries.
 
-- **Mutations are disabled** — only the `findAll` / `findOne` / `findFirst` / `aggregate` **queries** are wired (and `aggregate` carries the caveat above).
-- Query resolvers route through the proxy, so **row-level ABAC applies**, but they carry **no `@Permission` guard** — the action-name check that REST routes get is absent. A hand-written resolver that touches the raw client bypasses ABAC entirely; always go through `prismaService.model.*`.
-- **Field omission governs the output projection only.** The generated GraphQL input types expose every scalar column for `where` / `orderBy`, so a field that is omitted from results is still **filterable and sortable**. Do not treat an omitted field as unqueryable — control GraphQL read access at the **model** level (don't expose the model to a role that shouldn't touch the field at all).
-- Introspection is enabled outside production by default, and there is no query depth/complexity limit — fine for internal use, review before public exposure.
+- **Mutations (create / update / delete) are not available yet** — use the REST CRUD endpoints for writes.
+- **`aggregate` is not ready** — same caveat as REST above.
+
+Let the generated resolvers serve the data (they go through `PrismaService`); a custom resolver that reaches the raw Prisma client would not get ABAC.
 
 ---
 

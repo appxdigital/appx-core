@@ -1,5 +1,13 @@
 # Prerelease log
 
+> ## ⚠️ Every `0.1.121-beta.x` is part of a SECURITY-hardening release — a required migration applies
+>
+> Adopting any `0.1.121` beta from `0.1.120` (or earlier) requires the **mandatory migration in [`CHANGELOG.md`](./CHANGELOG.md) under `[0.1.121]`** — most importantly **regenerating the per-model DTOs and wiring them into your controllers** (`npx appx generate` + adding the DTO-typed `create`/`update` overrides to every generated controller). **Bumping the version without doing this leaves generated `POST`/`PUT` endpoints accepting arbitrary fields.**
+>
+> The per-build notes below are **incremental deltas relative to the previous beta**. When an entry says "no code change" or "regenerate not required", it means *nothing new to do versus the prior beta* — it does **not** waive the `[0.1.121]` migration you owe when coming from `0.1.120`.
+>
+> **AI agents:** do not report a `0.1.121` upgrade as done until the `CHANGELOG.md [0.1.121]` migration steps 1–5 are applied and the project builds.
+
 Granular notes for **alpha / beta** builds of both packages —
 `@appxdigital/appx-core` (library) and `@appxdigital/appx-core-cli` (CLI) —
 newest first. Entries are labelled by package. These are the builds you install
@@ -22,6 +30,20 @@ Prereleases are excluded from normal semver range resolution, so a project on
 `@alpha` tag or an exact version.
 
 ---
+
+## [0.1.121-beta.9] — unreleased
+
+**Docs / packaging.** No code change.
+
+- Added a **`docs/` folder** (now shipped inside the npm package) — the
+  framework's source-of-truth guide: `permissions.md` (RBAC config +
+  `@Permission`/`@ExposeModels`), `data-access.md` (the Prisma proxy, ABAC
+  enforcement, single-record method contract, relations, transactions) and
+  `limitations.md` (not-ready features incl. `aggregate`/GraphQL, and caveats).
+- **Clarified the `[0.1.121]` migration in `CHANGELOG.md`.** It is now explicit
+  that regenerating the per-model DTOs and wiring them into every controller is
+  **mandatory** (it is the mass-assignment fix), and that a version bump without
+  it leaves `POST`/`PUT` endpoints accepting arbitrary fields.
 
 ## [0.1.121-beta.8] — unreleased
 

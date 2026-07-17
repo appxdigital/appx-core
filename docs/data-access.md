@@ -58,7 +58,6 @@ Use `findMany` / `findFirst` / `findFirstOrThrow` / `updateMany` / `deleteMany` 
 A column annotated `/// @Role(ADMIN)` is returned only to roles in the list; for others the proxy drops it from the `select` so it comes back `undefined`. `/// @Role(none)` hides it from everyone (e.g. `password`).
 
 - Omission applies to nested relations too: `include: { owner: true }` won't leak `owner`'s `@Role`-restricted fields to an unauthorized role.
-- Omission affects the **output projection only**. It does **not** stop a field from being used in `where` / `orderBy`. Do not assume an omitted field is unqueryable — if that matters, don't expose the model to that role at all. (Especially relevant for the GraphQL surface — see [limitations.md](./limitations.md).)
 
 ---
 

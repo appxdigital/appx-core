@@ -6,7 +6,8 @@ Authoritative usage documentation for `@appxdigital/appx-core`. **This folder is
 
 - **[permissions.md](./permissions.md)** — the authorization model: the `@Permission` and `@ExposeModels` decorators, the `permissions.config.ts` shape, roles/actions, row-level `conditions`, field-level control, action fallbacks, and the `GUEST` (unauthenticated) flow.
 - **[data-access.md](./data-access.md)** — how you talk to the database: the Prisma proxy (`prisma.model.*`), how ABAC filtering and field omission are enforced on every call, the redirected single-record methods, relation behaviour, bypass hatches, and transactions.
-- **[limitations.md](./limitations.md)** — **known limitations and features that are NOT ready for use** (e.g. `aggregate`, GraphQL mutations). Read this before relying on any method not covered in the two guides above.
+- **[graphql.md](./graphql.md)** — the **read-only** GraphQL API generated from your schema: queries, nested selections, and how ABAC filters them.
+- **[limitations.md](./limitations.md)** — **known limitations and features that are NOT ready for use** (e.g. `aggregate`, GraphQL writes). Read this before relying on any method not covered in the guides above.
 
 ## The one-paragraph mental model
 
