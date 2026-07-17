@@ -31,6 +31,24 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.10] — unreleased
+
+**Library.** **Nested relation writes on generated CRUD are now an explicit,
+permission-gated allowlist.** A `create` body may nest **`create`** and
+**`connect`** on its relations; both are authorized by ABAC (`create` → the
+related model's `create` rule, recursively; `connect` → the related model's new
+dedicated **`connect`** permission — a `connect` rule is required, because being
+able to *read* a record does not authorize associating it). Every other nested
+operator (`set` / `disconnect` / `update` / `upsert` / `delete` / …) is rejected
+at both the DTO layer (not emitted → `400`) and the proxy (throws). Nested
+writes are available on **`create` only** (`update` resolves to `updateMany`,
+which is scalar-only).
+
+- **Behaviour restriction — review on upgrade.** If a project used other nested
+  operators through CRUD, or connected models without a `connect` rule, those
+  requests now fail. Add `connect` rules where needed; move unsupported nested
+  writes to explicit endpoints. Keep `forbidNonWhitelisted: true` (fail loud).
+
 ## [0.1.121-beta.9] — unreleased
 
 **Docs / packaging.** No code change.
