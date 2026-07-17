@@ -7,7 +7,7 @@ import {catchError, tap} from 'rxjs/operators';
 import {Observable, throwError} from 'rxjs';
 import {PrismaClient} from '@prisma/client';
 import {handleError} from "../utils/error-handler";
-import {PERMISSION_METADATA_KEY} from "../decorators/permission.decorator";
+import {EXPOSE_MODELS_METADATA_KEY, PERMISSION_METADATA_KEY} from "../decorators/permission.decorator";
 
 @Injectable()
 export class PrismaInterceptor implements NestInterceptor {
@@ -28,12 +28,16 @@ export class PrismaInterceptor implements NestInterceptor {
                 ? context.getArgByIndex(2)  // GraphQL context
                 : context.switchToHttp().getRequest();  // HTTP context
 
-        // Attach expose_models metadata if needed
+        // Attach expose_models metadata if needed. Models can come from
+        // @Permission(action, models) or the standalone @ExposeModels(...); both
+        // are merged so a route can expose models with or without a permission.
         const permissionMetadata = this.reflector.get(PERMISSION_METADATA_KEY, context.getHandler()) || {};
+        const standaloneExposed = this.reflector.get<string[]>(EXPOSE_MODELS_METADATA_KEY, context.getHandler()) || [];
+        const exposedModels = [...(permissionMetadata['expose_models'] || []), ...standaloneExposed];
 
         return new Observable((observer) => {
             CorePrismaContext.run({
-                exposedModels: permissionMetadata['expose_models'] || [],
+                exposedModels,
             }, () => {
                 const useTransaction = this.reflector.get<boolean>('useTransaction', context.getHandler()) ?? this.defaultUseTransaction === 'true';
                 if (useTransaction) {
