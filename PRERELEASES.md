@@ -23,6 +23,17 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.7] — unreleased
+
+**Library.** `createMany` now inherits the `create` permission when not declared
+explicitly — in both the data-access proxy and the `RbacGuard`. A
+`permissions.config.ts` can declare a single `create` rule and have it cover
+`createMany` too (mirrors the existing `findMany → count/findFirst` fallback).
+One-directional: declaring only `createMany` does **not** enable `create`.
+
+- If you previously duplicated `create` and `createMany`, the `createMany` entry
+  is now redundant (harmless to keep). No action required.
+
 ## [0.1.121-beta.6] — unreleased
 
 **Packaging.** The npm tarball now ships `CHANGELOG.md`, `PRERELEASES.md`, and
