@@ -601,7 +601,8 @@ export class PrismaService {
         const rows = Array.isArray(data) ? data : [data ?? {}];
 
         for (const row of rows) {
-            const ok = await this.matchesCreateConditions(resolved, row || {}, modelName);
+            const effectiveRow = this.resolveConnectForeignKeys(modelName, row || {});
+            const ok = await this.matchesCreateConditions(resolved, effectiveRow, modelName);
             if (!ok) {
                 throw new ForbiddenException(
                     `Not allowed to create ${modelName}: the record does not satisfy the '${action}' permission conditions for role ${userRole}.`,
@@ -743,6 +744,32 @@ export class PrismaService {
         } catch {
             // Dev diagnostic only — never let it affect the create.
         }
+    }
+
+    /**
+     * A view of a create `row` where a belongsTo relation given via `connect`
+     * (`owner: { connect: { id } }`) is also surfaced as its scalar FK (`ownerId`),
+     * so scalar-FK create conditions match either payload form. Metadata-driven
+     * (`referencingColumn`/`foreignKey`); resolvable only when the connect targets
+     * the referenced column. Explicit scalar wins; row is not mutated.
+     */
+    private resolveConnectForeignKeys(modelName: string, row: any): any {
+        if (!row || typeof row !== 'object') return row;
+        let effective = row;
+        for (const key of Object.keys(row)) {
+            const relation = this.getRelation(modelName, key);
+            if (!relation || relation.relation !== 'belongsTo') continue;
+            if (!relation.referencingColumn || !relation.foreignKey) continue;
+            if (row[relation.referencingColumn] !== undefined) continue; // explicit scalar wins
+
+            const connectWhere = row[key]?.connect;
+            const fk = connectWhere?.[relation.foreignKey];
+            if (fk === undefined) continue;
+
+            if (effective === row) effective = {...row};
+            effective[relation.referencingColumn] = fk;
+        }
+        return effective;
     }
 
     /** Recursively evaluates a (placeholder-resolved) condition object against a to-be-created row. */
