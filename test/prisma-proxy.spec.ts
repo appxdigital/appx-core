@@ -141,7 +141,14 @@ describe('withExposedModels', () => {
 });
 
 describe('conditions on create are enforced', () => {
-    const CREATE_OWN = { Comment: { USER: { create: { conditions: { authorId: $UID } } } } };
+    // Under Option A the comment's FK references (taskId, authorId) are each
+    // authorized by the target's connect rule; grant them so the create-condition
+    // (own-scalar authorId self-check) is what these tests exercise.
+    const CREATE_OWN = {
+        Comment: { USER: { create: { conditions: { authorId: $UID } } } },
+        Task: { USER: { connect: 'ALL' } },
+        User: { USER: { connect: 'ALL' } },
+    };
 
     test('USER cannot create a Comment attributed to ANOTHER user', async () => {
         await withConfig(CREATE_OWN, async (p) => {

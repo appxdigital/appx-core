@@ -439,9 +439,16 @@ describe('§1 ABAC relation matrix', () => {
             expect(fresh.name).toBe('Alpha');
         });
 
-        test('1.5.4 — create is enforced against conditions (CRIT-2 fixed → throws, no row)', async () => {
+        test('1.5.4 — create FK associations are enforced (cross-tenant attach denied, no row)', async () => {
+            // Under Option A the "may attach a project you own" rule lives on
+            // Project.connect (create conditions no longer reach across relations).
+            // dave owns p4, not p1, so attaching p1 is denied by the connect rule.
             await withConfig(
-                { ProjectMember: { USER: { create: { conditions: { project: { ownerId: $UID } } } } } },
+                {
+                    ProjectMember: { USER: { create: 'ALL' } },
+                    Project: { USER: { connect: { conditions: { ownerId: $UID } } } },
+                    User: { USER: { connect: 'ALL' } },
+                },
                 async (prisma) => {
                     await expect(
                         asUser(s.users.dave, () =>
@@ -449,7 +456,7 @@ describe('§1 ABAC relation matrix', () => {
                                 data: { projectId: s.projects.p1.id, userId: s.users.dave.id, role: 'manager' },
                             }),
                         ),
-                    ).rejects.toThrow(/not allowed to create/i);
+                    ).rejects.toThrow(/does not satisfy the 'connect' permission/i);
                 },
             );
             const leaked = await raw.projectMember.findFirst({

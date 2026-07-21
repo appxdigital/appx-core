@@ -22,6 +22,7 @@ export const PermissionsConfig: PermissionsConfigType = {
       findFirst: 'ALL',
       findMany: 'ALL',
       create: 'ALL',
+      connect: 'ALL',
       updateMany: 'ALL',
       deleteMany: 'ALL',
     },
@@ -29,6 +30,11 @@ export const PermissionsConfig: PermissionsConfigType = {
       // Can only see + edit themselves
       findFirst: { conditions: { id: PermissionPlaceholder.USER_ID } },
       findMany: { conditions: { id: PermissionPlaceholder.USER_ID } },
+      // A USER may be referenced as a relation target (project owner, task
+      // assignee/reviewer, comment author, membership). Which USER is allowed is
+      // constrained per-relation by the referencing model's create rule +
+      // `setUserIdField`, so the connect rule itself is open.
+      connect: 'ALL',
       updateMany: {
         conditions: { id: PermissionPlaceholder.USER_ID },
         // Even on self, USER cannot mutate role or move to another tenant
@@ -45,6 +51,7 @@ export const PermissionsConfig: PermissionsConfigType = {
       findFirst: 'ALL',
       findMany: 'ALL',
       create: 'ALL',
+      connect: 'ALL',
       updateMany: 'ALL',
       deleteMany: 'ALL',
     },
@@ -56,21 +63,23 @@ export const PermissionsConfig: PermissionsConfigType = {
 
   // -------- Project --------
   // Exercises OR + list-relation `some` + tighter rules for write actions
-  // (only owner can update/delete, but any member can read).
-  // The `create` rule pins `conditions` is silently
-  // ignored on create today, so a USER can post a Project with any ownerId.
-  // `setUserIdField` is the only mitigation the framework provides.
+  // (only owner can update/delete, but any member can read). `create` pins the
+  // owner to the caller (own-scalar condition + `setUserIdField`); `connect`
+  // governs attaching an existing project as a relation target (task/membership).
   Project: {
     ADMIN: {
       findFirst: 'ALL',
       findMany: 'ALL',
       create: 'ALL',
+      connect: 'ALL',
       updateMany: 'ALL',
       deleteMany: 'ALL',
     },
     USER: {
       findFirst: { conditions: ProjectAccessCondition },
       findMany: { conditions: ProjectAccessCondition },
+      // Attaching a project (as a task's or membership's parent) requires access to it.
+      connect: { conditions: ProjectAccessCondition },
       updateMany: { conditions: { ownerId: PermissionPlaceholder.USER_ID } },
       deleteMany: { conditions: { ownerId: PermissionPlaceholder.USER_ID } },
       create: {
@@ -88,14 +97,16 @@ export const PermissionsConfig: PermissionsConfigType = {
       findFirst: 'ALL',
       findMany: 'ALL',
       create: 'ALL',
+      connect: 'ALL',
       updateMany: 'ALL',
       deleteMany: 'ALL',
     },
     USER: {
       findMany: { conditions: { project: ProjectAccessCondition } },
       findFirst: { conditions: { project: ProjectAccessCondition } },
-      // Only project owner can add/remove members
-      create: { conditions: { project: { ownerId: PermissionPlaceholder.USER_ID } } },
+      // Creating a membership is authorized by its FK references: the project
+      // via Project.connect (access) and the user via User.connect.
+      create: 'ALL',
       deleteMany: { conditions: { project: { ownerId: PermissionPlaceholder.USER_ID } } },
     },
   },
@@ -109,14 +120,18 @@ export const PermissionsConfig: PermissionsConfigType = {
       findFirst: 'ALL',
       findMany: 'ALL',
       create: 'ALL',
+      connect: 'ALL',
       updateMany: 'ALL',
       deleteMany: 'ALL',
     },
     USER: {
       findFirst: { conditions: { project: ProjectAccessCondition } },
       findMany: { conditions: { project: ProjectAccessCondition } },
+      // Attaching a task (as a comment's parent) requires access to its project.
+      connect: { conditions: { project: ProjectAccessCondition } },
       updateMany: { conditions: { project: ProjectAccessCondition } },
-      create: { conditions: { project: ProjectAccessCondition } },
+      // The task's project is authorized via Project.connect (its projectId FK).
+      create: 'ALL',
       deleteMany: { conditions: { project: { ownerId: PermissionPlaceholder.USER_ID } } },
     },
   },
@@ -129,6 +144,7 @@ export const PermissionsConfig: PermissionsConfigType = {
       findFirst: 'ALL',
       findMany: 'ALL',
       create: 'ALL',
+      connect: 'ALL',
       updateMany: 'ALL',
       deleteMany: 'ALL',
     },
@@ -137,8 +153,9 @@ export const PermissionsConfig: PermissionsConfigType = {
       findMany: { conditions: { task: { project: ProjectAccessCondition } } },
       updateMany: { conditions: { authorId: PermissionPlaceholder.USER_ID } },
       deleteMany: { conditions: { authorId: PermissionPlaceholder.USER_ID } },
+      // author is forced to the caller (setUserIdField); the comment's task is
+      // authorized via Task.connect (its taskId FK).
       create: {
-        conditions: { task: { project: ProjectAccessCondition } },
         setUserIdField: 'authorId',
       },
     },

@@ -13,8 +13,13 @@ import { PermissionPlaceholder } from '../../src/common/config/permissionsConfig
 
 const $UID = PermissionPlaceholder.USER_ID;
 
-// Base delta: let a USER create a project they own.
-const projectCreate = { Project: { USER: { create: { conditions: { ownerId: $UID } } } } };
+// Base delta: let a USER create a project they own. `ownerId` is a raw foreign
+// key, so it is authorized against `User.connect` (Option A — every FK reference
+// is checked); grant it here so these tests stay focused on the nested operators.
+const projectCreate = {
+    Project: { USER: { create: { conditions: { ownerId: $UID } } } },
+    User: { USER: { connect: 'ALL' } },
+};
 
 describe('nested relation writes (create-path allowlist)', () => {
     let raw: any;

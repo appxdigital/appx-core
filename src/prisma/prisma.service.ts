@@ -258,6 +258,10 @@ export class PrismaService {
                         model: field.type,
                         relation: field.isList ? 'hasMany' : 'belongsTo',
                         isRequired: field.isRequired,
+                        // Disambiguates multiple relations between the same two models
+                        // (e.g. Task.assignee / Task.reviewer, self-relations) so the
+                        // inverse (back-reference) side can be paired reliably.
+                        relationName: field.relationName,
                     }
                     if (!field.isList && field.relationToFields && field.relationFromFields) {
                         relationFields[field_name].foreignKey = field.relationToFields[0];
@@ -568,6 +572,7 @@ export class PrismaService {
         params: any,
         user: any,
         action: string,
+        trustedFk?: string,
     ): Promise<void> {
         const normalizedName = modelName.toLowerCase().trim();
 
@@ -602,7 +607,7 @@ export class PrismaService {
 
         for (const row of rows) {
             const effectiveRow = this.resolveConnectForeignKeys(modelName, row || {});
-            const ok = await this.matchesCreateConditions(resolved, effectiveRow, modelName);
+            const ok = await this.matchesCreateConditions(resolved, effectiveRow, modelName, trustedFk);
             if (!ok) {
                 throw new ForbiddenException(
                     `Not allowed to create ${modelName}: the record does not satisfy the '${action}' permission conditions for role ${userRole}.`,
@@ -612,31 +617,47 @@ export class PrismaService {
     }
 
     /**
-     * Recursively authorizes nested relation writes in a `create` payload. Only
-     * an explicit allowlist of operators is permitted, each checked against ABAC;
-     * every other operator is rejected (fail closed).
+     * Authorizes every relation a `create` payload establishes. Relationship
+     * authorization lives entirely in the `connect` action — create conditions
+     * judge a model's own scalar fields only.
      *
      * Runs on the create path only — `updateMany` / `createMany` (what update /
-     * createMany resolve to) accept scalar data, so nested relation writes reach
-     * Prisma solely via `create()`.
+     * createMany resolve to) accept scalar data, so relation writes reach Prisma
+     * solely via `create()`.
      *
-     *   - `create` → the child must satisfy the related model's `create` rule
-     *     (recurses, so deeper nesting is authorized too).
-     *   - `connect` → the target must satisfy the related model's `connect` rule.
-     *     `connect` is a DEDICATED action: being allowed to READ a record does not
-     *     authorize associating it.
+     *   - A raw scalar foreign key (`courseId: 7`) → the target's `connect` rule.
+     *   - `relation: { connect }` → the target's `connect` rule. `connect` is a
+     *     DEDICATED action: being allowed to READ a record does not authorize
+     *     associating it.
+     *   - `relation: { create }` → the target's `create` rule (recurses, so deeper
+     *     nesting is authorized too). Every other nested operator is rejected.
+     *
+     * The one exception is `trustedFk`: the scalar FK that points back to the row
+     * we're nested under. Prisma fills it at write time and the parent already
+     * authorized itself, so it is not re-checked.
      */
-    private async enforceNestedWrites(modelName: string, data: any, user: any, userRole: string): Promise<void> {
+    private async enforceNestedWrites(modelName: string, data: any, user: any, userRole: string, trustedFk?: string): Promise<void> {
         if (!data || typeof data !== 'object') return;
         const rows = Array.isArray(data) ? data : [data];
         for (const row of rows) {
             if (!row || typeof row !== 'object') continue;
             for (const key of Object.keys(row)) {
                 const relation = this.getRelation(modelName, key);
-                if (!relation) continue; // scalar / FK field — not a relation nav key
-                const ops = row[key];
-                if (!ops || typeof ops !== 'object') continue;
-                await this.enforceNestedRelationOps(relation.model, key, ops, user, userRole, modelName);
+                if (relation) {
+                    const ops = row[key];
+                    if (!ops || typeof ops !== 'object') continue; // e.g. an explicit `null` disconnect-by-omission
+                    await this.enforceNestedRelationOps(relation.model, key, ops, user, userRole, modelName, relation.relationName);
+                    continue;
+                }
+                // A plain scalar that happens to be a belongsTo foreign key still
+                // establishes an association — authorize it against the target's
+                // `connect` rule, exactly as the `connect` form would be.
+                const fk = this.foreignKeyColumn(modelName, key);
+                if (!fk) continue; // ordinary scalar
+                if (key === trustedFk) continue; // back-reference to the nesting parent — trusted
+                const value = row[key];
+                if (value === undefined || value === null) continue;
+                await this.assertConnectAllowed(fk.model, {[fk.foreignKey]: value}, user, userRole, key);
             }
         }
     }
@@ -649,8 +670,12 @@ export class PrismaService {
         user: any,
         userRole: string,
         parentModel: string,
+        parentRelationName?: string,
     ): Promise<void> {
         const ALLOWED = ['create', 'connect'];
+        // The child's FK back to the parent it's nested under is filled by Prisma
+        // and trusted; skip it when authorizing the child's own relations.
+        const backFk = this.backReferenceFk(relatedModel, parentModel, parentRelationName);
         for (const op of Object.keys(ops)) {
             if (!ALLOWED.includes(op)) {
                 throw new ForbiddenException(
@@ -662,8 +687,8 @@ export class PrismaService {
             const items = Array.isArray(value) ? value : [value];
             if (op === 'create') {
                 for (const child of items) {
-                    await this.enforceCreateConditions(relatedModel, userRole, {data: child}, user, 'create');
-                    await this.enforceNestedWrites(relatedModel, child, user, userRole);
+                    await this.enforceCreateConditions(relatedModel, userRole, {data: child}, user, 'create', backFk);
+                    await this.enforceNestedWrites(relatedModel, child, user, userRole, backFk);
                 }
             } else {
                 for (const target of items) {
@@ -671,6 +696,33 @@ export class PrismaService {
                 }
             }
         }
+    }
+
+    /** If `column` is the scalar FK backing a belongsTo relation, returns that relation's target. */
+    private foreignKeyColumn(modelName: string, column: string): {model: string, foreignKey: string, relationName?: string} | null {
+        const rels = this.fieldConfigs[modelName.toLowerCase()]?.relationFields || {};
+        for (const key of Object.keys(rels)) {
+            const r = rels[key];
+            if (r.relation === 'belongsTo' && r.referencingColumn === column && r.foreignKey) {
+                return {model: r.model, foreignKey: r.foreignKey, relationName: r.relationName};
+            }
+        }
+        return null;
+    }
+
+    /** The child's scalar FK column pointing back to the parent it's nested under (trusted). */
+    private backReferenceFk(childModel: string, parentModel: string, parentRelationName?: string): string | undefined {
+        const rels = this.fieldConfigs[childModel.toLowerCase()]?.relationFields || {};
+        const candidates = Object.keys(rels)
+            .map(key => rels[key])
+            .filter((r: any) => r.relation === 'belongsTo' && r.referencingColumn && r.model.toLowerCase() === parentModel.toLowerCase());
+        // Prisma pairs the two sides of a relation by `relationName`; use it to
+        // disambiguate when the child has several relations to the same parent.
+        if (parentRelationName) {
+            const exact = candidates.find((r: any) => r.relationName === parentRelationName);
+            if (exact) return exact.referencingColumn;
+        }
+        return candidates.length === 1 ? candidates[0].referencingColumn : undefined;
     }
 
     /** A `connect` requires an explicit `connect` permission on the target model. */
@@ -772,34 +824,38 @@ export class PrismaService {
         return effective;
     }
 
-    /** Recursively evaluates a (placeholder-resolved) condition object against a to-be-created row. */
-    private async matchesCreateConditions(cond: any, row: any, modelName: string): Promise<boolean> {
+    /**
+     * Evaluates a (placeholder-resolved) create condition against a to-be-created
+     * row. Create conditions judge the model's OWN scalar fields only — a clause
+     * that reaches into a relation is not a create concern (relationships are
+     * authorized by the target's `connect` rule) and is skipped here; the config
+     * validator rejects such clauses at boot. `trustedFk` (the back-reference to a
+     * same-request nesting parent) is likewise skipped — its value doesn't exist yet.
+     */
+    private async matchesCreateConditions(cond: any, row: any, modelName: string, trustedFk?: string): Promise<boolean> {
         for (const key of Object.keys(cond)) {
             const val = cond[key];
 
             if (key === 'AND') {
                 const arr = Array.isArray(val) ? val : [val];
-                for (const c of arr) if (!(await this.matchesCreateConditions(c, row, modelName))) return false;
+                for (const c of arr) if (!(await this.matchesCreateConditions(c, row, modelName, trustedFk))) return false;
                 continue;
             }
             if (key === 'OR') {
                 const arr = Array.isArray(val) ? val : [val];
                 let any = false;
-                for (const c of arr) if (await this.matchesCreateConditions(c, row, modelName)) { any = true; break; }
+                for (const c of arr) if (await this.matchesCreateConditions(c, row, modelName, trustedFk)) { any = true; break; }
                 if (!any) return false;
                 continue;
             }
             if (key === 'NOT') {
                 const arr = Array.isArray(val) ? val : [val];
-                for (const c of arr) if (await this.matchesCreateConditions(c, row, modelName)) return false;
+                for (const c of arr) if (await this.matchesCreateConditions(c, row, modelName, trustedFk)) return false;
                 continue;
             }
 
-            const relation = this.getRelation(modelName, key);
-            if (relation) {
-                if (!(await this.matchesCreateRelation(relation, key, val, row, modelName))) return false;
-                continue;
-            }
+            if (key === trustedFk) continue; // parent link, filled by Prisma — trusted
+            if (this.getRelation(modelName, key)) continue; // relation clause — authorized via `connect`, not here
 
             if (!this.matchesCreateScalar(row[key], val, key, modelName)) return false;
         }
@@ -829,30 +885,6 @@ export class PrismaService {
             }
         }
         return true;
-    }
-
-    /** Verifies the parent referenced by a belongsTo condition exists and satisfies the nested condition. */
-    private async matchesCreateRelation(relation: any, field: string, nestedCond: any, row: any, modelName: string): Promise<boolean> {
-        if (relation.relation !== 'belongsTo' || !relation.referencingColumn) {
-            throw new ForbiddenException(
-                `create on ${modelName}: unsupported relation condition on '${field}' — a new row has no related '${field}' yet to match. Constrain the scalar foreign key instead.`,
-            );
-        }
-        const fkValue = row[relation.referencingColumn];
-        if (fkValue === undefined || fkValue === null) return false;
-
-        const delegate = relation.model.charAt(0).toLowerCase() + relation.model.slice(1);
-        // Use the request's transaction client if present (to see rows created
-        // earlier in the same request), else the raw client. Either way, access
-        // filtering on the parent is intentionally NOT re-applied — we check
-        // only the condition.
-        const client: any = RequestContext.currentContext?.req.prisma || this.rawClient;
-
-        const found = await client[delegate].findFirst({
-            where: {AND: [{[relation.foreignKey]: fkValue}, nestedCond]},
-            select: {[relation.foreignKey]: true},
-        });
-        return !!found;
     }
 
     /**
@@ -1026,6 +1058,7 @@ export class PrismaService {
         relation: string,
         foreignKey?: string,
         referencingColumn?: string,
+        relationName?: string,
         isRequired: boolean
     }
     getRelation(parentModel: string, relatedField: string, throwOnNotFound = false): {
@@ -1033,6 +1066,7 @@ export class PrismaService {
         relation: string,
         foreignKey?: string,
         referencingColumn?: string,
+        relationName?: string,
         isRequired: boolean
     } | null {
         parentModel = parentModel.toLowerCase();

@@ -78,8 +78,10 @@ describe('create conditions vs the relation `connect` form', () => {
                 // here the author is supplied via `connect`, not the scalar.
                 Comment: { USER: { create: { conditions: { authorId: $UID } } } },
                 Task: { USER: { create: 'ALL' } },
-                // The comment's author is attached via `connect`.
+                // The comment's author is attached via `connect`, and the task's
+                // project via a raw FK — both authorized by the target's connect rule.
                 User: { USER: { connect: 'ALL' } },
+                Project: { USER: { connect: 'ALL' } },
             },
             async (prisma) => {
                 const res: any = await asUser(s.users.alice, () =>
@@ -107,6 +109,7 @@ describe('create conditions vs the relation `connect` form', () => {
                 Comment: { USER: { create: { conditions: { authorId: $UID } } } },
                 Task: { USER: { create: 'ALL' } },
                 User: { USER: { connect: 'ALL' } },
+                Project: { USER: { connect: 'ALL' } },
             },
             async (prisma) => {
                 await expect(
