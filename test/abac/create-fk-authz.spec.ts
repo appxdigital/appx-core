@@ -185,9 +185,13 @@ describe('create foreign-key authorization (Option A — connect required)', () 
         };
         await withConfig(cfg, async (prisma) => {
             // reviewer = self → allowed (assigneeId back-FK trusted, reviewerId self passes)
+            // Explicit id above the pinned seed range: the seed inserts users with
+            // explicit ids, which does not advance postgres' serial sequence, so a
+            // sequence-assigned id would collide with alice (id=1).
             const ok: any = await asUser(s.users.alice, () =>
                 prisma.model.user.create({
                     data: {
+                        id: 9001,
                         email: 'nested-ok@t.io',
                         assignedTasks: { create: [{ title: 'x', projectId: s.projects.p1.id, reviewerId: s.users.alice.id }] },
                     },
@@ -200,6 +204,7 @@ describe('create foreign-key authorization (Option A — connect required)', () 
                 asUser(s.users.alice, () =>
                     prisma.model.user.create({
                         data: {
+                            id: 9002,
                             email: 'nested-bad@t.io',
                             assignedTasks: { create: [{ title: 'y', projectId: s.projects.p1.id, reviewerId: s.users.bob.id }] },
                         },
