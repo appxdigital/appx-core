@@ -134,6 +134,33 @@ describe('validatePermissionsConfig (Option A)', () => {
         expect(issues[0]).toMatchObject({ level: 'error', role: 'USER' });
     });
 
+    test('a relation-scoped connect on the source satisfies a required FK (no destination rule needed)', () => {
+        const issues = validatePermissionsConfig(
+            {
+                // Task.project is required; authorize it on the relation instead of Project.connect.
+                Task: { USER: { create: 'ALL', relations: { project: { connect: 'ALL' } } } },
+            },
+            relations,
+        );
+        // assignee (optional User) still warns; project (required) is satisfied → no error.
+        expect(issues.filter((i) => i.level === 'error')).toEqual([]);
+        expect(codes(issues)).toEqual(['missing-connect-optional']);
+    });
+
+    test('WARNING: a relations key that is not a real relation of the model', () => {
+        const issues = validatePermissionsConfig(
+            {
+                Project: {
+                    USER: { create: 'ALL', relations: { notARelation: { connect: 'ALL' } } },
+                },
+                User: { USER: { connect: 'ALL' } },
+            },
+            relations,
+        );
+        expect(codes(issues)).toEqual(['unknown-relation']);
+        expect(issues[0]).toMatchObject({ level: 'warning', model: 'Project', role: 'USER' });
+    });
+
     test('case-insensitive model matching for the connect lookup', () => {
         const issues = validatePermissionsConfig(
             {

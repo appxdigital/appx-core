@@ -691,7 +691,7 @@ export class PrismaService {
                 if (key === trustedFk) continue; // back-reference to the nesting parent — trusted
                 const value = row[key];
                 if (value === undefined || value === null) continue;
-                await this.assertConnectAllowed(fk.model, {[fk.foreignKey]: value}, user, userRole, key);
+                await this.assertConnectAllowed(modelName, fk.field, fk.model, {[fk.foreignKey]: value}, user, userRole);
             }
         }
     }
@@ -726,19 +726,19 @@ export class PrismaService {
                 }
             } else {
                 for (const target of items) {
-                    await this.assertConnectAllowed(relatedModel, target, user, userRole, field);
+                    await this.assertConnectAllowed(parentModel, field, relatedModel, target, user, userRole);
                 }
             }
         }
     }
 
-    /** If `column` is the scalar FK backing a belongsTo relation, returns that relation's target. */
-    private foreignKeyColumn(modelName: string, column: string): {model: string, foreignKey: string, relationName?: string} | null {
+    /** If `column` is the scalar FK backing a belongsTo relation, returns that relation's field + target. */
+    private foreignKeyColumn(modelName: string, column: string): {field: string, model: string, foreignKey: string} | null {
         const rels = this.fieldConfigs[modelName.toLowerCase()]?.relationFields || {};
         for (const key of Object.keys(rels)) {
             const r = rels[key];
             if (r.relation === 'belongsTo' && r.referencingColumn === column && r.foreignKey) {
-                return {model: r.model, foreignKey: r.foreignKey, relationName: r.relationName};
+                return {field: key, model: r.model, foreignKey: r.foreignKey};
             }
         }
         return null;
@@ -759,34 +759,53 @@ export class PrismaService {
         return candidates.length === 1 ? candidates[0].referencingColumn : undefined;
     }
 
-    /** A `connect` requires an explicit `connect` permission on the target model. */
+    /**
+     * Authorizes attaching `relatedModel` (identified by `where`) through the
+     * `field` relation on `sourceModel`. Two rules can apply, evaluated against
+     * the candidate target row:
+     *   - a relation-scoped rule on the source (`sourceModel[role].relations[field].connect`)
+     *   - the target model's own rule (`relatedModel[role].connect`)
+     * When both exist they are ANDed (the relation rule can only strengthen).
+     * When only one exists it stands alone; when neither exists, default-deny.
+     */
     private async assertConnectAllowed(
+        sourceModel: string,
+        field: string,
         relatedModel: string,
         where: any,
         user: any,
         userRole: string,
-        field: string,
     ): Promise<void> {
         const normalizedName = relatedModel.toLowerCase().trim();
         const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
         if (exposedModels.includes(normalizedName)) return;
 
-        const connectPerm = this.normalizedPermissionsConfig[normalizedName]?.[userRole]?.['connect'];
-        if (!connectPerm) {
+        const relationRule = this.normalizedPermissionsConfig[sourceModel.toLowerCase().trim()]?.[userRole]?.['relations']?.[field]?.connect;
+        const targetRule = this.normalizedPermissionsConfig[normalizedName]?.[userRole]?.['connect'];
+
+        if (relationRule === undefined && targetRule === undefined) {
             throw new ForbiddenException(
-                `Not allowed to connect ${relatedModel} (via '${field}'): role ${userRole} has no 'connect' permission on ${relatedModel}.`,
+                `Not allowed to connect ${relatedModel} (via '${field}'): role ${userRole} has no 'connect' permission. ` +
+                    `Declare it on ${relatedModel}.${userRole}.connect, or scope it to this relation with ${sourceModel}.${userRole}.relations.${field}.connect.`,
             );
         }
-        if (connectPerm === 'ALL') return;
 
-        const conditions = (connectPerm as any).conditions;
-        const resolved = conditions
-            ? PrismaService._buildConditions(Array.isArray(conditions) ? {AND: conditions} : conditions, user)
-            : {};
+        // Collect the conditions each applicable rule imposes; an 'ALL' or
+        // condition-less rule constrains nothing. The target must satisfy every
+        // collected condition (AND — the relation rule strengthens the target's).
+        const conditionSets: any[] = [];
+        for (const rule of [relationRule, targetRule]) {
+            if (rule === undefined || rule === 'ALL') continue;
+            const conditions = (rule as any).conditions;
+            if (conditions) {
+                conditionSets.push(PrismaService._buildConditions(Array.isArray(conditions) ? {AND: conditions} : conditions, user));
+            }
+        }
+        if (conditionSets.length === 0) return; // every applicable rule is unconditional
 
         const delegate = relatedModel.charAt(0).toLowerCase() + relatedModel.slice(1);
         const client: any = RequestContext.currentContext?.req.prisma || this.rawClient;
-        const found = await client[delegate].findFirst({where: {AND: [where || {}, resolved]}});
+        const found = await client[delegate].findFirst({where: {AND: [where || {}, ...conditionSets]}});
         if (!found) {
             throw new ForbiddenException(
                 `Not allowed to connect ${relatedModel} (via '${field}'): the target does not satisfy the 'connect' permission conditions for role ${userRole}.`,

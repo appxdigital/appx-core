@@ -74,7 +74,7 @@ describe('nested relation writes (create-path allowlist)', () => {
                         data: { name: 'WithTag', ownerId: s.users.alice.id, tags: { connect: [{ id: s.tags.urgent.id }] } },
                     }),
                 ),
-            ).rejects.toThrow(/no 'connect' permission on Tag/i);
+            ).rejects.toThrow(/connect Tag[\s\S]*no 'connect' permission/i);
         });
     });
 

@@ -31,7 +31,8 @@ export type IssueLevel = 'error' | 'warning';
 export type IssueCode =
     | 'relation-in-create-condition'
     | 'missing-connect-required'
-    | 'missing-connect-optional';
+    | 'missing-connect-optional'
+    | 'unknown-relation';
 
 export interface ValidationIssue {
     level: IssueLevel;
@@ -84,6 +85,10 @@ export function validatePermissionsConfig(
         const rules = byModel[targetModel.toLowerCase()]?.[role];
         return !!rules && rules.connect !== undefined && rules.connect !== null;
     };
+    // A relation-scoped connect on the source (creating) model authorizes that
+    // relation on its own — the target model then needs no connect rule.
+    const hasRelationConnect = (sourceRules: any, field: string): boolean =>
+        !!sourceRules?.relations?.[field]?.connect;
     const canCreate = (rules: any): boolean =>
         !!rules && (rules.create !== undefined || rules.createMany !== undefined);
 
@@ -113,14 +118,14 @@ export function validatePermissionsConfig(
             }
 
             for (const r of belongsTo) {
-                if (hasConnectRule(r.model, role)) continue;
+                if (hasRelationConnect(rules, r.field) || hasConnectRule(r.model, role)) continue;
                 if (r.isRequired) {
                     issues.push({
                         level: 'error',
                         code: 'missing-connect-required',
                         model: modelKey,
                         role,
-                        message: `${modelKey}.${role} can create, but its required foreign key '${r.referencingColumn}' → ${r.model} has no 'connect' rule for ${role}. Every create sets it, so the create is always denied. Declare '${r.model}.${role}.connect' (or 'ALL').`,
+                        message: `${modelKey}.${role} can create, but its required foreign key '${r.referencingColumn}' → ${r.model} has no 'connect' rule for ${role}. Every create sets it, so the create is always denied. Declare '${r.model}.${role}.connect' (or 'ALL'), or scope it to this relation with '${modelKey}.${role}.relations.${r.field}.connect'.`,
                     });
                 } else {
                     issues.push({
@@ -128,8 +133,25 @@ export function validatePermissionsConfig(
                         code: 'missing-connect-optional',
                         model: modelKey,
                         role,
-                        message: `${modelKey}.${role} can create and its optional foreign key '${r.referencingColumn}' → ${r.model} has no 'connect' rule for ${role}. A payload that sets it is denied. Declare '${r.model}.${role}.connect' if that association is expected.`,
+                        message: `${modelKey}.${role} can create and its optional foreign key '${r.referencingColumn}' → ${r.model} has no 'connect' rule for ${role}. A payload that sets it is denied. Declare '${r.model}.${role}.connect' or '${modelKey}.${role}.relations.${r.field}.connect' if that association is expected.`,
                     });
+                }
+            }
+
+            // A `relations` key that doesn't name a real relation of this model is
+            // almost certainly a typo — it silently does nothing.
+            const relationsMap = rules.relations;
+            if (relationsMap && typeof relationsMap === 'object') {
+                for (const relField of Object.keys(relationsMap)) {
+                    if (!relationFieldNames.has(relField)) {
+                        issues.push({
+                            level: 'warning',
+                            code: 'unknown-relation',
+                            model: modelKey,
+                            role,
+                            message: `${modelKey}.${role}.relations.${relField} does not name a relation of ${modelKey} — it has no effect. Check the field name.`,
+                        });
+                    }
                 }
             }
         }

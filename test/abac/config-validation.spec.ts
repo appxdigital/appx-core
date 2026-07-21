@@ -30,4 +30,14 @@ describe('permissions config boot validation', () => {
         expect(built.prisma).toBeDefined();
         await built.close();
     });
+
+    test('a relation-scoped connect lets a required FK boot without a destination rule', async () => {
+        // Project.ownerId is required and User has NO connect rule — but the
+        // source declares relations.owner.connect, which satisfies the requirement.
+        const built = await buildAbacModule({
+            Project: { USER: { create: 'ALL', relations: { owner: { connect: 'ALL' } } } },
+        } as any);
+        expect(built.prisma).toBeDefined();
+        await built.close();
+    });
 });

@@ -106,11 +106,26 @@ export interface ActionPermission<
     restrictedFields?: string[];
 }
 
+/**
+ * A relation-scoped `connect` rule, declared on the SOURCE model and keyed by
+ * the relation field. It authorizes attaching a target through *that specific
+ * relation* (e.g. who may be a class's `teacher`). When the target model also
+ * declares a `connect` rule, the two are ANDed (the relation rule can only
+ * strengthen, never weaken, the target's rule). When only the relation rule
+ * exists, it stands alone — the target model then needs no `connect` rule.
+ */
+export interface RelationConnectRule {
+    connect: 'ALL' | { conditions?: unknown | unknown[] };
+}
+export type RelationConnectMap = { [relationField: string]: RelationConnectRule };
+
 export type RolePermissions<
     M extends ModelKey<RuntimeClient> = ModelKey<RuntimeClient>
 > =
     {
         [A in MethodsWithWhere<RuntimeClient, M>]?: 'ALL' | ActionPermission<M, A>;
+    } & {
+        relations?: RelationConnectMap;
     } & {
     [custom: string]: 'ALL' | {
         conditions?: unknown | unknown[];
