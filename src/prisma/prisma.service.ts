@@ -180,11 +180,16 @@ export class PrismaService {
                                             // Conditions can't be pushed into a WHERE on insert, so
                                             // validate the incoming data satisfies them before insert.
                                             await this.enforceCreateConditions(String(propKey), userRole, params, user, methodKey.toString());
-                                            // Authorize any nested relation writes (create/connect) in
-                                            // the payload; reject every other nested operator.
+                                            // Authorize any relation the write establishes (nested
+                                            // create/connect, or a raw foreign key).
                                             await this.enforceNestedWrites(String(propKey), params.data, user, userRole);
                                         } else {
                                             params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
+                                            // An update can re-point a foreign key (scalar column);
+                                            // authorize those changes with the same connect rules as create.
+                                            if (['update', 'updateMany'].includes(methodKey.toString())) {
+                                                await this.enforceNestedWrites(String(propKey), params.data, user, userRole);
+                                            }
                                         }
                                     } else {
                                         this.debug(`Skipping permission filtering for ${String(propKey)}.${String(methodKey)}()`);
@@ -651,13 +656,13 @@ export class PrismaService {
     }
 
     /**
-     * Authorizes every relation a `create` payload establishes. Relationship
-     * authorization lives entirely in the `connect` action — create conditions
-     * judge a model's own scalar fields only.
+     * Authorizes every relation a write establishes. Relationship authorization
+     * lives entirely in the `connect` action — create conditions judge a model's
+     * own scalar fields only.
      *
-     * Runs on the create path only — `updateMany` / `createMany` (what update /
-     * createMany resolve to) accept scalar data, so relation writes reach Prisma
-     * solely via `create()`.
+     * Runs on create AND update: a `create` can nest relation writes or set raw
+     * FKs; an `updateMany` (scalar-only) can re-point a raw FK. Both go through
+     * the same `connect` authorization.
      *
      *   - A raw scalar foreign key (`courseId: 7`) → the target's `connect` rule.
      *   - `relation: { connect }` → the target's `connect` rule. `connect` is a
@@ -689,7 +694,8 @@ export class PrismaService {
                 const fk = this.foreignKeyColumn(modelName, key);
                 if (!fk) continue; // ordinary scalar
                 if (key === trustedFk) continue; // back-reference to the nesting parent — trusted
-                const value = row[key];
+                let value = row[key];
+                if (value && typeof value === 'object' && 'set' in value) value = (value as any).set; // update form: { set: x }
                 if (value === undefined || value === null) continue;
                 await this.assertConnectAllowed(modelName, fk.field, fk.model, {[fk.foreignKey]: value}, user, userRole);
             }

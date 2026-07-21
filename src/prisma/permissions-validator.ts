@@ -91,6 +91,8 @@ export function validatePermissionsConfig(
         !!sourceRules?.relations?.[field]?.connect;
     const canCreate = (rules: any): boolean =>
         !!rules && (rules.create !== undefined || rules.createMany !== undefined);
+    const canUpdate = (rules: any): boolean =>
+        !!rules && (rules.update !== undefined || rules.updateMany !== undefined);
 
     for (const modelKey of Object.keys(config || {})) {
         const roles = config[modelKey] || {};
@@ -100,7 +102,9 @@ export function validatePermissionsConfig(
 
         for (const role of Object.keys(roles)) {
             const rules = roles[role];
-            if (!canCreate(rules)) continue;
+            const creatable = canCreate(rules);
+            const updatable = canUpdate(rules);
+            if (!creatable && !updatable) continue;
 
             const createRule = rules.create ?? rules.createMany;
             const conditions =
@@ -117,9 +121,12 @@ export function validatePermissionsConfig(
                 }
             }
 
+            // A required FK is ALWAYS set by a create → hard error. Everything
+            // else (optional on create, or any FK set on an update) is a warning:
+            // the write only fails if the payload actually sets it.
             for (const r of belongsTo) {
                 if (hasRelationConnect(rules, r.field) || hasConnectRule(r.model, role)) continue;
-                if (r.isRequired) {
+                if (creatable && r.isRequired) {
                     issues.push({
                         level: 'error',
                         code: 'missing-connect-required',
@@ -133,7 +140,7 @@ export function validatePermissionsConfig(
                         code: 'missing-connect-optional',
                         model: modelKey,
                         role,
-                        message: `${modelKey}.${role} can create and its optional foreign key '${r.referencingColumn}' → ${r.model} has no 'connect' rule for ${role}. A payload that sets it is denied. Declare '${r.model}.${role}.connect' or '${modelKey}.${role}.relations.${r.field}.connect' if that association is expected.`,
+                        message: `${modelKey}.${role} can write ${modelKey} and its foreign key '${r.referencingColumn}' → ${r.model} has no 'connect' rule for ${role}. A create or update that sets it is denied. Declare '${r.model}.${role}.connect' or '${modelKey}.${role}.relations.${r.field}.connect' if that association is expected.`,
                     });
                 }
             }

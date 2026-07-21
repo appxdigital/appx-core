@@ -76,6 +76,50 @@ describe('relation-scoped connect rules', () => {
         });
     });
 
+    test('the same relation rule is enforced on UPDATE, not just create', async () => {
+        // Re-pointing a task's assignee via updateMany must satisfy the relation rule too.
+        await withConfig(
+            {
+                Task: {
+                    USER: {
+                        create: 'ALL',
+                        updateMany: 'ALL',
+                        relations: { assignee: { connect: { conditions: { role: 'USER' } } } },
+                    },
+                },
+            },
+            async (prisma) => {
+                // set assignee to a USER → allowed
+                const okRes: any = await asUser(s.users.alice, () =>
+                    prisma.model.task.updateMany({ where: { id: s.tasks.t1.id }, data: { assigneeId: s.users.bob.id } }),
+                );
+                expect(okRes.count).toBe(1);
+
+                // set assignee to an ADMIN → denied by the relation rule
+                await expect(
+                    asUser(s.users.alice, () =>
+                        prisma.model.task.updateMany({ where: { id: s.tasks.t1.id }, data: { assigneeId: s.users.root.id } }),
+                    ),
+                ).rejects.toThrow(/does not satisfy the 'connect' permission/i);
+            },
+        );
+        // the denied update did not take effect
+        expect((await raw.task.findUnique({ where: { id: s.tasks.t1.id } })).assigneeId).toBe(s.users.bob.id);
+    });
+
+    test('update FK authorization also handles the Prisma `{ set: x }` form', async () => {
+        await withConfig(
+            { Task: { USER: { create: 'ALL', updateMany: 'ALL', relations: { assignee: { connect: { conditions: { role: 'USER' } } } } } } },
+            async (prisma) => {
+                await expect(
+                    asUser(s.users.alice, () =>
+                        prisma.model.task.updateMany({ where: { id: s.tasks.t1.id }, data: { assigneeId: { set: s.users.root.id } } }),
+                    ),
+                ).rejects.toThrow(/does not satisfy the 'connect' permission/i);
+            },
+        );
+    });
+
     test('the relation rule stands alone when the target model has no connect rule', async () => {
         // No User block at all → User has no `connect` rule; the relation rule on
         // Task.assignee is the only thing authorizing the association.
