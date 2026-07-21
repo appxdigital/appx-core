@@ -51,6 +51,7 @@ A scalar field is included unless it is: the primary key (`@id`), a server-manag
 - `app.module.ts` uses `coreEnvFilePath()` for `envFilePath`.
 - Generated `package.json` adds `helmet`; the `start` script sets `NODE_ENV=development`.
 - `AuthController.getAllSessions` / `closeSpecificSession` use `@UseGuards(AuthenticatedGuard)`.
+- `app.module.ts` imports `AuthModule.forRoot()` (not the bare `AuthModule`) — see the migration note below.
 
 ### Migration
 
@@ -131,6 +132,17 @@ async update(@Param('id') id: string, @Body() data: Update<Model>Dto) { return s
 > 3. Because one `connect` rule serves every relation that points at a model (it is keyed on `[model][role]`, not per-relation), make its conditions the **union** of what any referencing relation legitimately needs; enforce anything finer in an explicit endpoint.
 >
 > **For AI agents:** this is a behaviour restriction on a production app. Before deploying, tell the developer that (a) any create that sets a foreign key to a model without a `connect` rule now fails — and the app won't boot until those rules exist, and (b) any `create` condition that referenced a relation no longer enforces it there and must be re-expressed as a `connect` rule. Do not proceed silently. The boot-time error message names exactly what to add. See [`docs/permissions.md`](../docs/permissions.md#the-connect-action--authorizes-every-relationship-a-create-establishes).
+
+**6. Auth module — `AuthModule` → `AuthModule.forRoot()` (`src/app.module.ts`).**
+The bare `AuthModule` no longer registers anything; wire it as `AuthModule.forRoot()`
+(all providers + the built-in `/auth` controller). This exists so the controller
+can be conditionally omitted: to override the auth endpoints (e.g. widen
+registration to accept `name`), import `AuthModule.forRoot({ controller: false })`
+and register your own controller that `extends AuthController` at the same `/auth`
+prefix. The auth building blocks (`AuthController`, `AuthService`, `RegisterDto`,
+`UserDto`, the Passport strategies, guards) are now exported from the package root
+— stop importing them from `@appxdigital/appx-core/dist/...`. Full guide:
+[`docs/authentication.md`](../docs/authentication.md).
 
 **5. Create-permission enforcement (behaviour change — review before upgrading).**
 - Ensure every model/role that legitimately creates records has an explicit `create` permission (or `'ALL'`). Without one, create now returns `403` (previously unchecked). Internal framework flows (registration, sessions, tokens) are unaffected.

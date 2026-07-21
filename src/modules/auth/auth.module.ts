@@ -12,8 +12,10 @@ import {AuthenticatedGuard} from "./authenticated.guard";
 import {JwtStrategy} from "./jwt.strategy";
 import {RefreshTokenStrategy} from "./refresh-token.strategy";
 
-// Shared so the static @Module (default: registers AuthController) and the
-// forRoot() hook (optionally skips it) provide identical wiring.
+// All wiring lives in forRoot() so the controller can be conditionally omitted.
+// The @Module() decorator is intentionally empty: NestJS *extends* (concatenates)
+// the decorator's metadata onto a DynamicModule, so a controller declared there
+// could never be removed by forRoot({ controller: false }).
 const authImports = [
     ConfigModule,
     UserModule,
@@ -31,19 +33,19 @@ const authProviders = [AuthService, LocalStrategy, SessionSerializer, JwtStrateg
 const authExports = [AuthService, JwtAuthGuard, AuthenticatedGuard, JwtModule];
 
 @Global()
-@Module({
-    imports: authImports,
-    providers: authProviders,
-    controllers: [AuthController],
-    exports: authExports,
-})
+@Module({})
 export class AuthModule {
     /**
-     * For overriding the auth endpoints. `AuthModule.forRoot({ controller: false })`
-     * imports every auth provider globally (AuthService, Jwt, Passport, strategies,
-     * guards) but does NOT register the built-in `AuthController` — so you can
-     * register your OWN controller (e.g. one that `extends AuthController`) at the
-     * same `/auth` prefix with no duplicate route. See docs/authentication.md.
+     * Wires the auth module. **Always use `AuthModule.forRoot()`** — importing the
+     * bare `AuthModule` registers nothing (all wiring is here so the controller
+     * can be conditionally omitted).
+     *
+     * `AuthModule.forRoot()` registers the built-in `AuthController` (default).
+     * `AuthModule.forRoot({ controller: false })` registers every auth provider
+     * globally (AuthService, Jwt, Passport, strategies, guards) but NOT the
+     * controller — so you can register your OWN controller (e.g. one that
+     * `extends AuthController`) at the same `/auth` prefix with no duplicate
+     * route. See docs/authentication.md.
      */
     static forRoot(options?: {controller?: boolean}): DynamicModule {
         return {

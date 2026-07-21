@@ -19,7 +19,7 @@ import {AdminConfig} from './config/admin.config';
         AppxCoreModule.forRoot(PermissionsConfig),
         AppxCoreAdminModule.forRoot(AdminConfig, PermissionsConfig),
         RequestContextModule,
-        AuthModule,
+        AuthModule.forRoot(),
     ],
     controllers: [AppController],
     providers: [

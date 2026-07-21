@@ -31,6 +31,20 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.16] — unreleased
+
+**Fix — `AuthModule.forRoot({ controller: false })` now actually omits the
+controller.** In beta.15 the controller was also declared on the static `@Module()`,
+and NestJS *extends* (does not replace) that metadata with `forRoot()`'s — so
+`AuthController` stayed registered and overriding `/auth/register` produced a
+duplicate route (the base `RegisterDto` won → extra fields like `name` were
+rejected). All wiring now lives in `forRoot()`.
+
+- **Migration:** import **`AuthModule.forRoot()`**, not the bare `AuthModule` (which
+  now registers nothing). The scaffold is updated. `forRoot({ controller: false })`
+  omits the built-in controller so your own can take over `/auth`. Regression
+  test added (`test/unit/auth-module.spec.ts`).
+
 ## [0.1.121-beta.15] — unreleased
 
 **Library / docs. Additive — no behaviour change.** Auth is now extensible from

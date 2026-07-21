@@ -10,7 +10,10 @@ framework class).
 
 ## What `AuthModule` provides
 
-Importing `AuthModule` registers, under the `/auth` prefix:
+**Always wire it as `AuthModule.forRoot()`** — importing the bare `AuthModule`
+registers nothing (all wiring lives in `forRoot()` so the controller can be
+conditionally omitted; see the override section). `AuthModule.forRoot()` registers,
+under the `/auth` prefix:
 
 | Route | Guard | Body |
 |---|---|---|
@@ -80,11 +83,13 @@ export class AppModule {}
 export class MyAuthModule {}
 ```
 
-> **Why `forRoot({ controller: false })`?** If you import the plain `AuthModule`
-> *and* register your own `/auth` controller, you get two handlers for the same
-> routes. Skipping the built-in controller — while keeping its providers — is what
-> lets your controller take over cleanly. (Importing the plain `AuthModule` is
-> still correct when you're *not* overriding the controller.)
+> **Why `forRoot({ controller: false })`?** If the built-in controller *and* your
+> own `/auth` controller are both registered, you get two handlers for the same
+> routes (Express runs the first-registered, so the base `RegisterDto` would win
+> and reject your extra fields). `forRoot({ controller: false })` drops the built-in
+> controller while keeping every provider global, so your controller takes over
+> cleanly. Use plain `AuthModule.forRoot()` (no options) when you're *not*
+> overriding the controller.
 
 ---
 
