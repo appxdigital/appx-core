@@ -83,7 +83,34 @@ The `connect` rule's conditions are evaluated against the candidate record. **De
 
 > **Boot validation.** Because a raw FK now needs a `connect` rule, the framework validates the config against the schema **at startup**. If a model a role can `create` has a **required** foreign key whose target lacks a `connect` rule for that role, the app **refuses to boot** (it would always `403`). An **optional** FK in the same situation logs a warning. A `create` condition that references a relation is also a boot error. Fix the config or the app won't start. See [dtos.md](./dtos.md#relations--nested-writes) for the nested-write allowlist (`create` / `connect` only).
 
-> **One `connect` rule per target model.** `connect` is keyed on `[model][role]`, so it can't vary by *which* relation references the model — e.g. "attach a project as a task's parent" and "attach a project for a membership" share one `Project.connect` rule. Make it the union of what any referencing relation needs, and enforce anything finer in an explicit endpoint.
+### Two places to declare a `connect` rule
+
+The rule above lives on the **target** model (`Target.connect`) and governs *every* reference to that model. When that's too coarse — e.g. "a class's **teacher** must be a teacher, but a comment's **author** is anyone" — declare a **relation-scoped** rule on the **source** model, keyed by the relation field:
+
+```ts
+Class: {
+  ADMIN: {
+    create: 'ALL',
+    relations: {
+      teacher: { connect: { conditions: { role: 'TEACHER' } } },  // who may be THIS class's teacher
+    },
+  },
+},
+User: {
+  ADMIN: { connect: 'ALL' },   // a user is referenceable elsewhere (author, assignee, …)
+},
+```
+
+The relation-scoped rule applies however the relation is supplied — `teacherId: 5` or `teacher: { connect: { id: 5 } }`. How the two rules combine:
+
+| `Source[role].relations[field].connect` | `Target[role].connect` | Result |
+|---|---|---|
+| present | present | target must satisfy **both** (ANDed — the relation rule only *strengthens*, never weakens, the target rule) |
+| present | absent | target must satisfy the **relation** rule; the target model needs no `connect` rule |
+| absent | present | target must satisfy the **target** rule (the default) |
+| absent | absent | default-deny (boot error for a required FK) |
+
+So a relation-scoped rule can (a) add restrictions on top of the target's rule, or (b) stand alone — if you'd rather not give the target a broad `connect` (no `User.connect: 'ALL'`), put the rule on each relation that references it instead. A relation rule can never *loosen* the target's rule; both must pass when both exist.
 
 ### Action fallback chains
 

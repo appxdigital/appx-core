@@ -31,6 +31,19 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.13] — unreleased
+
+**Library.** **Relation-scoped `connect` rules.** A `connect` rule can now be
+declared on the **source** model, keyed by the relation field
+(`relations: { teacher: { connect: { conditions: {...} } } }`), to constrain who
+may be attached *through that relation* — something the per-target-model
+`connect` rule can't express (e.g. "a class's teacher must be a teacher"). When
+both the relation rule and the target's `connect` rule exist they are **ANDed**
+(the relation rule only strengthens); when only the relation rule exists it
+stands alone, so the target model needs no `connect` rule. The boot validator
+accepts either placement. Additive and backward-compatible — no `relations` block
+means unchanged behaviour. See `docs/permissions.md`.
+
 ## [0.1.121-beta.12] — unreleased
 
 **Library.** **Relationship authorization moved entirely to the `connect` action, with boot-time config validation.** Two fixes from an adopter report plus the model change:
