@@ -6,6 +6,21 @@ export * from './graphql/graphql.module';
 export * from './graphql/generic.resolver';
 export * from './tasks/session-cleanup.service';
 export * from './modules/auth/auth.module';
+// Auth building blocks — exported so consumers can extend/override them
+// (custom AuthController, widened RegisterDto, custom Passport strategy) without
+// deep-importing from `dist/`. See docs/authentication.md.
+export * from './modules/auth/auth.controller';
+export * from './modules/auth/auth.service';
+export * from './modules/auth/dto/register.dto';
+export * from './modules/auth/dto/user.dto';
+export * from './modules/auth/auth-field.decorator';
+export * from './modules/auth/local.strategy';
+export * from './modules/auth/local-auth.guard';
+export * from './modules/auth/jwt.strategy';
+export * from './modules/auth/refresh-token.strategy';
+export * from './modules/auth/refresh-token.guard';
+export * from './modules/auth/session/session-serializer';
+export * from './modules/auth/session/session-auth.guard';
 export * from './modules/auth/session/session-store';
 export * from './common/guards/rbac.guard';
 export * from './common/guards/user-population.guard';

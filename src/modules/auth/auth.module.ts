@@ -1,4 +1,4 @@
-import {Global, Module} from '@nestjs/common';
+import {DynamicModule, Global, Module} from '@nestjs/common';
 import {AuthService} from './auth.service';
 import {AuthController} from './auth.controller';
 import {UserModule} from '../user/user.module';
@@ -12,20 +12,47 @@ import {AuthenticatedGuard} from "./authenticated.guard";
 import {JwtStrategy} from "./jwt.strategy";
 import {RefreshTokenStrategy} from "./refresh-token.strategy";
 
+// Shared so the static @Module (default: registers AuthController) and the
+// forRoot() hook (optionally skips it) provide identical wiring.
+const authImports = [
+    ConfigModule,
+    UserModule,
+    PassportModule.register({session: true}),
+    JwtModule.registerAsync({
+        imports: [ConfigModule],
+        useFactory: async (config: ConfigService) => ({
+            secret: config.get<string>('JWT_SECRET'),
+            signOptions: {expiresIn: config.get<JwtSignOptions['expiresIn']>('JWT_EXPIRES_IN', '60m')},
+        }),
+        inject: [ConfigService],
+    }),
+];
+const authProviders = [AuthService, LocalStrategy, SessionSerializer, JwtStrategy, JwtAuthGuard, AuthenticatedGuard, RefreshTokenStrategy];
+const authExports = [AuthService, JwtAuthGuard, AuthenticatedGuard, JwtModule];
+
 @Global()
 @Module({
-    imports: [ConfigModule, UserModule, PassportModule.register({session: true}),
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            useFactory: async (config: ConfigService) => ({
-                secret: config.get<string>('JWT_SECRET'),
-                signOptions: {expiresIn: config.get<JwtSignOptions['expiresIn']>('JWT_EXPIRES_IN', '60m')},
-            }),
-            inject: [ConfigService],
-        }),],
-    providers: [AuthService, LocalStrategy, SessionSerializer, JwtStrategy, JwtAuthGuard, AuthenticatedGuard, RefreshTokenStrategy],
+    imports: authImports,
+    providers: authProviders,
     controllers: [AuthController],
-    exports: [AuthService, JwtAuthGuard, AuthenticatedGuard, JwtModule],
+    exports: authExports,
 })
 export class AuthModule {
+    /**
+     * For overriding the auth endpoints. `AuthModule.forRoot({ controller: false })`
+     * imports every auth provider globally (AuthService, Jwt, Passport, strategies,
+     * guards) but does NOT register the built-in `AuthController` — so you can
+     * register your OWN controller (e.g. one that `extends AuthController`) at the
+     * same `/auth` prefix with no duplicate route. See docs/authentication.md.
+     */
+    static forRoot(options?: {controller?: boolean}): DynamicModule {
+        return {
+            module: AuthModule,
+            global: true,
+            imports: authImports,
+            providers: authProviders,
+            controllers: options?.controller === false ? [] : [AuthController],
+            exports: authExports,
+        };
+    }
 }

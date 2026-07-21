@@ -7,6 +7,7 @@ Authoritative usage documentation for `@appxdigital/appx-core`. **This folder is
 - **[permissions.md](./permissions.md)** — the authorization model: the `@Permission` and `@ExposeModels` decorators, the `permissions.config.ts` shape, roles/actions, row-level `conditions`, field-level control, action fallbacks, and the `GUEST` (unauthenticated) flow.
 - **[dtos.md](./dtos.md)** — the generated CRUD validation DTOs: their two-file structure, **how to remove a field** (`OmitType` / `@NoWrite`), how to add validation, and why nested relation writes don't belong on generic CRUD.
 - **[data-access.md](./data-access.md)** — how you talk to the database: the Prisma proxy (`prisma.model.*`), how ABAC filtering and field omission are enforced on every call, the redirected single-record methods, relation behaviour, bypass hatches, and transactions.
+- **[authentication.md](./authentication.md)** — the built-in `/auth` surface, and **how to override framework internals** (extend the exported `AuthController`/`AuthService`/`RegisterDto`/Passport strategies and register your own at the same prefix via `AuthModule.forRoot({ controller: false })`) — e.g. adding `name` to registration.
 - **[graphql.md](./graphql.md)** — the **read-only** GraphQL API generated from your schema: queries, nested selections, and how ABAC filters them.
 - **[limitations.md](./limitations.md)** — **known limitations and features that are NOT ready for use** (e.g. `aggregate`, GraphQL writes). Read this before relying on any method not covered in the guides above.
 

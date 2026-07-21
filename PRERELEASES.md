@@ -31,6 +31,33 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.15] — unreleased
+
+**Library / docs. Additive — no behaviour change.** Auth is now extensible from
+the package root instead of deep `dist/` imports.
+
+- **Exported the auth building blocks** from `@appxdigital/appx-core`:
+  `AuthController`, `AuthService`, `RegisterDto`, `UserDto`, `AuthField`,
+  `LocalStrategy`, `JwtStrategy`, `RefreshTokenStrategy`, `LocalAuthGuard`,
+  `RefreshTokenGuard`, `SessionSerializer`, `SessionAuthGuard`. Stop importing
+  these from `@appxdigital/appx-core/dist/...` — deep paths are internal.
+- **`AuthModule.forRoot({ controller?: boolean })`** — importing
+  `AuthModule.forRoot({ controller: false })` registers every auth provider
+  globally but **not** the built-in `AuthController`, so you can register your own
+  controller (e.g. `extends AuthController`) at the same `/auth` prefix with no
+  duplicate route. Importing the plain `AuthModule` is unchanged (still registers
+  the controller).
+- **New doc `docs/authentication.md`** — the built-in `/auth` surface and how to
+  override framework internals (widen `RegisterDto` to accept e.g. `name`, extend
+  `AuthService`, swap a Passport strategy), wired at the same prefix in `AppModule`.
+
+## [0.1.121-beta.14] — unreleased
+
+**Library / types.** `RolePermissions.relations` is now usable in a properly
+typed `PermissionsConfigType` (no `as any`) — the catch-all index signature no
+longer collides with the `relations` key. Guarded by a type-contract test. The
+boot validator now takes `PermissionsConfigType` directly. No runtime change.
+
 ## [0.1.121-beta.13] — unreleased
 
 **Library.** **Relation-scoped `connect` rules.** A `connect` rule can now be
