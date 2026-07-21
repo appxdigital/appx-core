@@ -63,8 +63,9 @@ describe('validatePermissionsConfig (Option A)', () => {
         expect(issues[0].message).toMatch(/ownerId.*User/);
     });
 
-    test('WARNING: optional FK target has no connect rule', () => {
-        // Task requires project (grant Project.connect) but assignee (User) is optional.
+    test('ERROR: an optional but settable FK has no connect rule', () => {
+        // Task requires project (grant Project.connect); assignee (User) is optional
+        // but still settable, so it must have a connect rule too.
         const issues = validatePermissionsConfig(
             {
                 Task: { USER: { create: 'ALL' } },
@@ -72,9 +73,51 @@ describe('validatePermissionsConfig (Option A)', () => {
             },
             relations,
         );
-        expect(codes(issues)).toEqual(['missing-connect-optional']);
-        expect(issues[0]).toMatchObject({ level: 'warning', role: 'USER' });
+        expect(codes(issues)).toEqual(['missing-connect']);
+        expect(issues[0]).toMatchObject({ level: 'error', role: 'USER' });
         expect(issues[0].message).toMatch(/assigneeId.*User/);
+    });
+
+    test('a @NoWrite FK (fkWritable:false) is not required to have a connect rule', () => {
+        const noWriteRelations: SchemaRelations = {
+            task: [
+                { field: 'project', model: 'Project', referencingColumn: 'projectId', isRequired: true, kind: 'belongsTo' },
+                { field: 'assignee', model: 'User', referencingColumn: 'assigneeId', isRequired: false, kind: 'belongsTo', fkWritable: false },
+            ],
+        };
+        const issues = validatePermissionsConfig(
+            { Task: { USER: { create: 'ALL' } }, Project: { USER: { connect: 'ALL' } } },
+            noWriteRelations,
+        );
+        expect(issues).toEqual([]);
+    });
+
+    test('ERROR: a relation-scoped connect on a @NoWrite (unwritable) field is a contradiction', () => {
+        const noWriteRelations: SchemaRelations = {
+            task: [
+                { field: 'project', model: 'Project', referencingColumn: 'projectId', isRequired: true, kind: 'belongsTo' },
+                { field: 'assignee', model: 'User', referencingColumn: 'assigneeId', isRequired: false, kind: 'belongsTo', fkWritable: false },
+            ],
+        };
+        const issues = validatePermissionsConfig(
+            {
+                Task: { USER: { create: 'ALL', relations: { assignee: { connect: 'ALL' } } } },
+                Project: { USER: { connect: 'ALL' } },
+            },
+            noWriteRelations,
+        );
+        expect(codes(issues)).toEqual(['connect-on-unwritable']);
+        expect(issues[0].message).toMatch(/not writable/);
+    });
+
+    test('ERROR: an update-only model with a settable FK and no connect rule', () => {
+        const issues = validatePermissionsConfig(
+            { Task: { USER: { updateMany: 'ALL' } }, Project: { USER: { connect: 'ALL' } } },
+            relations,
+        );
+        // project satisfied; assignee (settable on update) is not → error.
+        expect(codes(issues)).toEqual(['missing-connect']);
+        expect(issues[0].message).toMatch(/update/);
     });
 
     test('ERROR: a create condition that references a relation', () => {
@@ -138,13 +181,13 @@ describe('validatePermissionsConfig (Option A)', () => {
         const issues = validatePermissionsConfig(
             {
                 // Task.project is required; authorize it on the relation instead of Project.connect.
+                // (User.connect covers the optional assignee, isolating the project check.)
                 Task: { USER: { create: 'ALL', relations: { project: { connect: 'ALL' } } } },
+                User: { USER: { connect: 'ALL' } },
             },
             relations,
         );
-        // assignee (optional User) still warns; project (required) is satisfied → no error.
-        expect(issues.filter((i) => i.level === 'error')).toEqual([]);
-        expect(codes(issues)).toEqual(['missing-connect-optional']);
+        expect(issues).toEqual([]);
     });
 
     test('WARNING: a relations key that is not a real relation of the model', () => {

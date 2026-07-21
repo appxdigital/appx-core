@@ -36,9 +36,9 @@ export const PermissionsConfig: PermissionsConfigType = {
       // `setUserIdField`, so the connect rule itself is open.
       connect: 'ALL',
       updateMany: {
+        // Even on self, USER cannot mutate role or move to another tenant —
+        // those columns are `/// @NoWrite` in the schema (excluded for all roles).
         conditions: { id: PermissionPlaceholder.USER_ID },
-        // Even on self, USER cannot mutate role or move to another tenant
-        restrictedFields: ['role', 'tenantId'],
       },
     },
   },
@@ -153,6 +153,9 @@ export const PermissionsConfig: PermissionsConfigType = {
       findMany: { conditions: { task: { project: ProjectAccessCondition } } },
       updateMany: { conditions: { authorId: PermissionPlaceholder.USER_ID } },
       deleteMany: { conditions: { authorId: PermissionPlaceholder.USER_ID } },
+      // Attaching a parent comment (the optional self-relation) requires access
+      // to a comment in a project you can see.
+      connect: { conditions: { task: { project: ProjectAccessCondition } } },
       // author is forced to the caller (setUserIdField); the comment's task is
       // authorized via Task.connect (its taskId FK).
       create: {

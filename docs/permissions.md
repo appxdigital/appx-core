@@ -127,11 +127,10 @@ So a minimal USER config often needs just `findMany`, `create`, `update`, `delet
 ### Field-level control
 
 - **`/// @Role(ADMIN)` on a schema column** — only listed roles can *read* that field. For everyone else the proxy omits it from results (it comes back `undefined`). `/// @Role(none)` hides it from all roles. Applies at every depth, including nested relation selections.
-- **`/// @NoWrite` on a schema column** — excludes the field from generated create/update DTOs (all roles).
-- **`restrictedFields: ['x', 'y']` on a permission action** — strips those keys from the incoming request body for that role+action (e.g. stop a role from setting `role`/`id`). Silent strip, not a `400`.
-- **`setUserIdField: 'ownerId'`** — the framework sets that field to the caller's id server-side on create (so a client can't forge ownership). Applied after `restrictedFields`, so it can't be clobbered.
+- **`/// @NoWrite` on a schema column** — excludes the field from generated create/update DTOs (all roles). Use it for privileged columns (e.g. `role`) that should be set out-of-band, not through generic CRUD.
+- **`setUserIdField: 'ownerId'`** — the framework sets that field to the caller's id server-side on create (so a client can't forge ownership).
 
-> For the generated request-body DTOs — their structure, and the full set of ways to **remove or restrict a writable field** (`OmitType`, `/// @NoWrite`, `restrictedFields`) — see **[dtos.md](./dtos.md)**.
+> For the generated request-body DTOs — their structure, and the ways to **remove a writable field** (`OmitType`, `/// @NoWrite`), including how to handle per-role differences — see **[dtos.md](./dtos.md)**. (The old per-role `restrictedFields` strip has been removed — see the migration note there.)
 
 ---
 

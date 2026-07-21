@@ -21,6 +21,8 @@ export interface RelationMeta {
     referencingColumn?: string;
     isRequired: boolean;
     kind: RelationKind;
+    /** False when the scalar FK is @NoWrite / @Role(none) (never client-writable). Defaults to writable. */
+    fkWritable?: boolean;
 }
 
 /** Relations per model, keyed by the lower-cased model name. */
@@ -31,7 +33,8 @@ export type IssueLevel = 'error' | 'warning';
 export type IssueCode =
     | 'relation-in-create-condition'
     | 'missing-connect-required'
-    | 'missing-connect-optional'
+    | 'missing-connect'
+    | 'connect-on-unwritable'
     | 'unknown-relation';
 
 export interface ValidationIssue {
@@ -121,26 +124,48 @@ export function validatePermissionsConfig(
                 }
             }
 
-            // A required FK is ALWAYS set by a create → hard error. Everything
-            // else (optional on create, or any FK set on an update) is a warning:
-            // the write only fails if the payload actually sets it.
+            // Every foreign key a write can SET must have a connect rule (target
+            // or relation-scoped) — otherwise setting it is denied at runtime.
+            // A @NoWrite / @Role(none) column is never settable.
             for (const r of belongsTo) {
-                if (hasRelationConnect(rules, r.field) || hasConnectRule(r.model, role)) continue;
-                if (creatable && r.isRequired) {
+                const col = r.referencingColumn as string;
+                const writable = r.fkWritable !== false; // not @NoWrite / @Role(none)
+                const settableOnCreate = writable && creatable;
+                const settableOnUpdate = writable && updatable;
+                const relRule = hasRelationConnect(rules, r.field);
+
+                if (!settableOnCreate && !settableOnUpdate) {
+                    // A relation-scoped connect rule for a field that can't be
+                    // written is contradictory — flag it rather than silently ignore.
+                    if (relRule) {
+                        issues.push({
+                            level: 'error',
+                            code: 'connect-on-unwritable',
+                            model: modelKey,
+                            role,
+                            message: `${modelKey}.${role}.relations.${r.field}.connect is set, but its foreign key '${col}' is not writable (@NoWrite / @Role(none)). Make the field writable or remove the relation rule.`,
+                        });
+                    }
+                    continue;
+                }
+                if (relRule || hasConnectRule(r.model, role)) continue;
+
+                const fix = `Declare '${r.model}.${role}.connect' (or 'ALL'), or scope it to this relation with '${modelKey}.${role}.relations.${r.field}.connect'.`;
+                if (settableOnCreate && r.isRequired) {
                     issues.push({
                         level: 'error',
                         code: 'missing-connect-required',
                         model: modelKey,
                         role,
-                        message: `${modelKey}.${role} can create, but its required foreign key '${r.referencingColumn}' → ${r.model} has no 'connect' rule for ${role}. Every create sets it, so the create is always denied. Declare '${r.model}.${role}.connect' (or 'ALL'), or scope it to this relation with '${modelKey}.${role}.relations.${r.field}.connect'.`,
+                        message: `${modelKey}.${role} can create, but its required foreign key '${col}' → ${r.model} has no 'connect' rule for ${role}. Every create sets it, so the create is always denied. ${fix}`,
                     });
                 } else {
                     issues.push({
-                        level: 'warning',
-                        code: 'missing-connect-optional',
+                        level: 'error',
+                        code: 'missing-connect',
                         model: modelKey,
                         role,
-                        message: `${modelKey}.${role} can write ${modelKey} and its foreign key '${r.referencingColumn}' → ${r.model} has no 'connect' rule for ${role}. A create or update that sets it is denied. Declare '${r.model}.${role}.connect' or '${modelKey}.${role}.relations.${r.field}.connect' if that association is expected.`,
+                        message: `${modelKey}.${role} can set foreign key '${col}' → ${r.model} (on ${settableOnCreate ? 'create' : ''}${settableOnCreate && settableOnUpdate ? '/' : ''}${settableOnUpdate ? 'update' : ''}), but ${r.model} has no 'connect' rule for ${role}, so any write that sets it is denied. ${fix}`,
                     });
                 }
             }

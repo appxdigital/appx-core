@@ -83,12 +83,15 @@ export class PrismaService {
         const relations: SchemaRelations = {};
         for (const model of Object.keys(this.fieldConfigs)) {
             const relationFields = this.fieldConfigs[model].relationFields || {};
+            const noWrite: string[] = this.fieldConfigs[model].noWriteFields || [];
             relations[model] = Object.keys(relationFields).map((field) => ({
                 field,
                 model: relationFields[field].model,
                 referencingColumn: relationFields[field].referencingColumn,
                 isRequired: relationFields[field].isRequired,
                 kind: relationFields[field].relation,
+                // The scalar FK is client-writable unless the column is @NoWrite / @Role(none).
+                fkWritable: !noWrite.includes(relationFields[field].referencingColumn),
             }));
         }
 
@@ -273,6 +276,7 @@ export class PrismaService {
             const fieldTypes: Record<string, string> = {};
             const scalarFields: string[] = [];
             const relationFields: Record<string, any> = {};
+            const noWriteFields: string[] = [];
 
             for (const field of fields) {
                 let field_name = field.name;
@@ -284,6 +288,10 @@ export class PrismaService {
                     const roleMatch = commentPart.match(/@Role\((.*?)\)/);
                     if (roleMatch) {
                         fieldConfig[field_name] = roleMatch[1].split(',').map((role: string) => role.trim());
+                    }
+                    // Fields excluded from write DTOs — never client-writable.
+                    if (/@NoWrite\b/.test(commentPart) || /@Role\(\s*none\s*\)/i.test(commentPart)) {
+                        noWriteFields.push(field_name);
                     }
                 }
 
@@ -315,6 +323,7 @@ export class PrismaService {
                 fieldTypes,
                 scalarFields,
                 relationFields,
+                noWriteFields,
             };
         }
     }

@@ -48,8 +48,18 @@ means unchanged behaviour. See `docs/permissions.md`.
 an `update` (`{ teacherId: 5 }` or `{ teacherId: { set: 5 } }`) is authorized by
 the same `connect` rules as `create` — previously the update path set foreign
 keys with no connect check. The `relations` config is shared across create and
-update. The boot validator flags update-reachable FK targets that lack a connect
-rule (as warnings — an update need not set the FK).
+update.
+
+**Boot validator is now strict about all settable FKs.** Any foreign key a role
+can set on create **or** update whose target lacks a `connect` rule is a boot
+**error** (previously optional/update FKs were warnings). `@NoWrite` / `@Role(none)`
+columns are exempt (never client-writable), and a relation-scoped `connect` on a
+non-writable field is flagged as a contradiction.
+
+**`restrictedFields` removed (breaking).** The per-role body-strip option on a
+permission action is gone; the `CoreController` no longer strips fields. Migrate
+to `/// @NoWrite` / `OmitType` / `setUserIdField` / a dedicated endpoint — see the
+`[0.1.121]` migration in `CHANGELOG.md` and `docs/dtos.md`.
 
 ## [0.1.121-beta.12] — unreleased
 

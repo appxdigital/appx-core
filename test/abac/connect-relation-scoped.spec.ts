@@ -122,22 +122,22 @@ describe('relation-scoped connect rules', () => {
 
     test('the relation rule stands alone when the target model has no connect rule', async () => {
         // No User block at all → User has no `connect` rule; the relation rule on
-        // Task.assignee is the only thing authorizing the association.
+        // Project.owner is the only thing authorizing the association. Project's
+        // only belongsTo is `owner`, so the config validates with no User rule.
         const { prisma, rawClient, close } = await buildAbacModule({
-            Task: { USER: { create: 'ALL', relations: { assignee: { connect: { conditions: { role: 'USER' } } } } } },
-            Project: { USER: { connect: 'ALL' } },
+            Project: { USER: { create: 'ALL', relations: { owner: { connect: { conditions: { role: 'USER' } } } } } },
         } as any);
         try {
             await resetAbac(rawClient);
             const seeded = await seedAbac(rawClient);
             const ok: any = await asUser(seeded.users.alice, () =>
-                prisma.model.task.create({ data: { title: 'solo', projectId: seeded.projects.p1.id, assigneeId: seeded.users.alice.id } }),
+                prisma.model.project.create({ data: { name: 'solo', ownerId: seeded.users.alice.id } }),
             );
             expect(ok?.id).toBeDefined();
 
             await expect(
                 asUser(seeded.users.alice, () =>
-                    prisma.model.task.create({ data: { title: 'solo-bad', projectId: seeded.projects.p1.id, assigneeId: seeded.users.root.id } }),
+                    prisma.model.project.create({ data: { name: 'solo-bad', ownerId: seeded.users.root.id } }),
                 ),
             ).rejects.toThrow(/does not satisfy the 'connect' permission/i);
         } finally {

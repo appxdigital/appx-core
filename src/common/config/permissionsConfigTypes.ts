@@ -103,7 +103,6 @@ export interface ActionPermission<
 > {
     conditions: FieldConditions<M, A> | FieldConditions<M, A>[];
     setUserIdField?: string;
-    restrictedFields?: string[];
 }
 
 /**
@@ -130,7 +129,6 @@ export type RolePermissions<
     [custom: string]: 'ALL' | {
         conditions?: unknown | unknown[];
         setUserIdField?: string;
-        restrictedFields?: string[];
     };
 };
 

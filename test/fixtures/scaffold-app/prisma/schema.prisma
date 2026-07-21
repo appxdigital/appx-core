@@ -36,11 +36,11 @@ model User {
   email          String              @unique
   name           String?
   password       String?             /// @Role(none)
-  role           Role                @default(USER)
+  role           Role                @default(USER) /// @NoWrite
   refreshTokens  UserRefreshToken[]
 
   // Multi-tenant scoping (optional — register flow does NOT set it)
-  tenantId       Int?
+  tenantId       Int?                /// @NoWrite
   tenant         Tenant?             @relation(fields: [tenantId], references: [id])
 
   // Project ownership + membership

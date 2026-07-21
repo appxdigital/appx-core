@@ -46,7 +46,7 @@ Generated CRUD accepts nested `create`/`connect` **one level deep only** — a `
 
 ## Sharp edges to know about
 
-- **`restrictedFields` strips silently.** Listed fields are removed from the request body with no `400`. It only affects fields that are present in the generated DTO (not `/// @NoWrite` ones). Decide per model whether silent stripping is acceptable.
+- **No per-role field strip.** A field is either writable through the generated DTO or not (`/// @NoWrite` / `OmitType`). There is no way to accept a field for one role and reject it for another on the same CRUD endpoint — model a privileged column as `/// @NoWrite` + a dedicated endpoint. (The old `restrictedFields` option was removed — see [dtos.md](./dtos.md#per-role-differences).)
 - **Per-call bypass options are only on three accessors.** `{ BYPASS_FILTERING, BYPASS_OMISSION }` are available on `prismaService.user` / `.session` / `.userRefreshToken`. For an unfiltered read of another model, use `withExposedModels([...])` or `@ExposeModels(...)`, not a per-call option on `prisma.model.<x>`.
 - **Role strings are not type-checked.** `PermissionsConfig` keys are plain strings; a typo (`ADIMN`) silently yields "no permissions" → default-deny for that role. Double-check role spelling against your `Role` enum.
 - **No audit logging of denials.** A refused request returns `403` but emits no structured audit event; per-request diagnostics are opt-in via `prismaService.debugQueries(true)`.

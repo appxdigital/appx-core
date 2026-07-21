@@ -7,8 +7,9 @@
  * setupCoreSecurity), unknown / non-writable fields are rejected with 400.
  *
  * Writable-field policy (schema-derived): excludes @id, server-managed
- * timestamps, /// @NoWrite, and /// @Role(none). So on User, `id` and
- * `password` (@Role(none)) are not accepted by POST /users.
+ * timestamps, /// @NoWrite, and /// @Role(none). So on User, `id`, `password`
+ * (@Role(none)), and `role` / `tenantId` (@NoWrite) are not accepted by POST
+ * /users — role and tenant are privileged, set out-of-band (DB / admin flow).
  *
  * Boots with the hardened pipe to mirror the shipped scaffold.
  */
@@ -91,10 +92,11 @@ describe('POST /users body validation on generated CRUD', () => {
     });
 
     test('a legitimate create with only writable fields succeeds', async () => {
+        // role is @NoWrite (privileged) — a legitimate create omits it.
         const res = await request(booted.server)
             .post('/users')
             .set('Authorization', `Bearer ${adminJwt}`)
-            .send({ email: 'legit@example.com', name: 'Legit', role: 'USER' });
+            .send({ email: 'legit@example.com', name: 'Legit' });
         expect([200, 201]).toContain(res.status);
 
         const u = await booted.withFreshDb((c) =>

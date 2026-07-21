@@ -42,13 +42,12 @@ A scalar field is **included** unless it is:
 
 ## How to remove a field
 
-There are three ways, at different scopes. Pick the narrowest one that fits.
+There are two ways, at different scopes. Pick the narrowest one that fits.
 
 | Mechanism | Scope | Where you declare it |
 |---|---|---|
 | `OmitType(GeneratedDto, ['field'])` | this one endpoint's DTO | the hand-owned `*.dto.ts` |
 | `/// @NoWrite` (or `/// @Role(none)`) | every generated DTO, every role | the Prisma schema |
-| `restrictedFields: ['field']` | a specific role + action (runtime strip) | `permissions.config.ts` |
 
 ### 1. `OmitType` — remove a field for one endpoint
 
@@ -80,17 +79,11 @@ model Task {
 }
 ```
 
-### 3. `restrictedFields` — remove a field per role
+### Per-role differences
 
-Strip specific keys from the body for a given role + action, at runtime, from `permissions.config.ts`:
+There is **no per-role field strip** — a field is either writable through the generated DTO or it isn't. If one role may write a field and another may not (e.g. only `ADMIN` sets `role`), the field is a **privileged** one: mark it `/// @NoWrite` so generic CRUD never accepts it from anyone, and set it out-of-band — a dedicated admin endpoint/service (with its own guard), AdminJS, or a direct data-access call. Trying to express "writable for role A, not role B" through one shared CRUD DTO isn't possible; model it as a separate endpoint instead.
 
-```ts
-Task: {
-  USER: { create: { conditions: { ... }, restrictedFields: ['status'] } },
-}
-```
-
-Note: `restrictedFields` **strips silently** (no `400`), and only affects fields that are present in the DTO to begin with. See [permissions.md](./permissions.md#field-level-control).
+> **Migrating off `restrictedFields`.** Earlier versions had a `restrictedFields: ['x']` option on a permission action that stripped keys from the body per role. It has been **removed**. Replace it: for a field no client should write, use `/// @NoWrite` (or `/// @Role(none)`); for one endpoint, use `OmitType`; for a value the server owns (like an owner id), use `setUserIdField`; for a genuinely per-role write difference, use a dedicated endpoint as above.
 
 ---
 
