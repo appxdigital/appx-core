@@ -14,6 +14,12 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.122] — 2026-07-21
+
+**No migration necessary.**
+
+---
+
 ## [0.1.121] — 2026-07-14
 
 Hardening release: request validation, boot configuration, generated-CRUD DTOs, and data-access create enforcement.
@@ -38,8 +44,7 @@ Hardening release: request validation, boot configuration, generated-CRUD DTOs, 
   - `src/generated/dto/<model>/<action>-<model>.generated.dto.ts` — base class, **always overwritten**, under the gitignored `src/generated/`. Never hand-edit.
   - `src/modules/<model>/dto/<action>-<model>.dto.ts` — a hand-owned subclass, generated **once**, for custom validation. The controller imports this.
 - **`/// @NoWrite` field annotation** — excludes a field from the generated create/update DTOs (all roles). Fields annotated `/// @Role(none)` are also treated as non-writable.
-- **Create-permission enforcement in the data-access proxy.** `create` / `createMany` validate that the incoming data satisfies the permission's `conditions` before insert (own-scalar fields against the data; relation conditions by looking up the referenced parent), and default-deny when the model/role has no `create` permission. A development-only warning fires when a created row would not satisfy the model's `find` conditions.
-- **`restrictedFields` on `create`** in `CoreController` (previously only `update`, which also read the wrong permission key so it never applied under `updateMany`).
+- **Create-permission enforcement in the data-access proxy.** `create` / `createMany` validate that the incoming data satisfies the permission's `conditions` before insert (the model's **own scalar fields** — relationship authorization is handled by the `connect` action; see Migration), and default-deny when the model/role has no `create` permission. A development-only warning fires when a created row would not satisfy the model's `find` conditions.
 
 ### Writable-field policy (generated DTOs)
 
@@ -112,7 +117,7 @@ async create(@Body() data: Create<Model>Dto) { return super.create(data as any);
 @Put(':id') @Permission('updateMany')
 async update(@Param('id') id: string, @Body() data: Update<Model>Dto) { return super.update(id, data as any); }
 ```
-(Or delete an un-customized controller and re-run `appx generate` for the new template.) Add custom validation in the hand-owned `dto/*.dto.ts` subclasses — never in the `.generated.dto.ts` base. Lock sensitive columns with `/// @NoWrite` (all roles) or `restrictedFields` on the permission (per role), then regenerate. To drop a field from one endpoint's DTO, extend `OmitType(<Model>GeneratedDto, ['field'] as const)`. Full details in [`docs/dtos.md`](../docs/dtos.md).
+(Or delete an un-customized controller and re-run `appx generate` for the new template.) Add custom validation in the hand-owned `dto/*.dto.ts` subclasses — never in the `.generated.dto.ts` base. Lock sensitive columns with `/// @NoWrite` / `/// @Role(none)` (all roles), then regenerate. To drop a field from one endpoint's DTO, extend `OmitType(<Model>GeneratedDto, ['field'] as const)`. Full details in [`docs/dtos.md`](../docs/dtos.md).
 
 > **Nested relation writes are now an explicit, permission-gated allowlist — this is a behaviour restriction; a migrating agent MUST flag it to the developer.** Generated **create** DTOs accept only two nested operators, each authorized by ABAC: **`create`** (checked against the related model's `create` rule) and **`connect`** (checked against the related model's new dedicated **`connect`** permission — a `connect` rule is required; no rule ⇒ refused). Every other operator (`set`, `disconnect`, `update`, `upsert`, `delete`, …) is rejected (`400`). Nested writes are available on **`create` only** — `update` resolves to `updateMany`, whose payload is scalar-only. **Keep `forbidNonWhitelisted: true` on (fail loud); never `whitelist`-strip on writes.**
 >
@@ -147,4 +152,3 @@ prefix. The auth building blocks (`AuthController`, `AuthService`, `RegisterDto`
 **5. Create-permission enforcement (behaviour change — review before upgrading).**
 - Ensure every model/role that legitimately creates records has an explicit `create` permission (or `'ALL'`). Without one, create now returns `403` (previously unchecked). Internal framework flows (registration, sessions, tokens) are unaffected.
 - If you supplied arbitrary values for a field a `create` condition constrains (e.g. an owner id), those requests now return `403` unless the value matches — use `setUserIdField` to have the framework set it.
-- **`restrictedFields` under `updateMany` now applies** (it was a no-op before). Fields listed there are stripped on `PUT`. Remove any field that should remain writable.
