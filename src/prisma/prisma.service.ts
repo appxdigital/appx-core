@@ -95,7 +95,7 @@ export class PrismaService {
             }));
         }
 
-        const issues = validatePermissionsConfig(this.permissionsConfig as any, relations);
+        const issues = validatePermissionsConfig(this.permissionsConfig, relations);
         for (const issue of issues.filter((i) => i.level === 'warning')) {
             console.warn('\x1b[33m', `[APPX-CORE PERMISSIONS] ${issue.message}`, '\x1b[0m');
         }

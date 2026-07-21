@@ -9,6 +9,7 @@
  *
  * Pure and schema-only (no database), so it is independently unit-testable.
  */
+import type { PermissionsConfigType } from '../common/config/permissionsConfigTypes';
 
 export type RelationKind = 'belongsTo' | 'hasMany';
 
@@ -76,13 +77,16 @@ function findRelationKeys(cond: any, relationFields: Set<string>, found = new Se
  *    has no `connect` rule for the role. Only denied when the payload sets it.
  */
 export function validatePermissionsConfig(
-    config: Record<string, Record<string, any>>,
+    config: PermissionsConfigType,
     relations: SchemaRelations,
 ): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
 
+    // Iterate the typed config structurally — model/role keys are dynamic, and
+    // condition/rule shapes are inspected at runtime.
+    const cfg = (config || {}) as Record<string, Record<string, any>>;
     const byModel: Record<string, Record<string, any>> = {};
-    for (const m of Object.keys(config || {})) byModel[m.toLowerCase()] = config[m];
+    for (const m of Object.keys(cfg)) byModel[m.toLowerCase()] = cfg[m];
 
     const hasConnectRule = (targetModel: string, role: string): boolean => {
         const rules = byModel[targetModel.toLowerCase()]?.[role];
@@ -97,8 +101,8 @@ export function validatePermissionsConfig(
     const canUpdate = (rules: any): boolean =>
         !!rules && (rules.update !== undefined || rules.updateMany !== undefined);
 
-    for (const modelKey of Object.keys(config || {})) {
-        const roles = config[modelKey] || {};
+    for (const modelKey of Object.keys(cfg)) {
+        const roles = cfg[modelKey] || {};
         const rels = relations[modelKey.toLowerCase()] || [];
         const belongsTo = rels.filter((r) => r.kind === 'belongsTo' && r.referencingColumn);
         const relationFieldNames = new Set(rels.map((r) => r.field));
