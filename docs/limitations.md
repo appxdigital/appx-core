@@ -51,6 +51,8 @@ Generated CRUD accepts nested `create`/`connect` **one level deep only** — a `
 - **Role strings are not type-checked.** `PermissionsConfig` keys are plain strings; a typo (`ADIMN`) silently yields "no permissions" → default-deny for that role. Double-check role spelling against your `Role` enum.
 - **No audit logging of denials.** A refused request returns `403` but emits no structured audit event; per-request diagnostics are opt-in via `prismaService.debugQueries(true)`.
 - **Exposed models are a full bypass.** `@ExposeModels` / `@Permission(a, [models])` / `withExposedModels` disable row *and* field filtering for the listed models within that scope. Keep the scope as narrow as possible.
+- **`connect` is one rule per target model, not per relation.** Every foreign key that points at model `T` — from any relation, on any creating model — is authorized by the single `T.connect` rule for the role. You can't say "attach a project as a task's parent (members OK)" but "attach a project for a membership (owner only)" with different `connect` conditions; both use `Project.connect`. Make the rule the union of what any referencing relation needs, and enforce finer distinctions in an explicit endpoint.
+- **The config is validated at boot; a bad config stops the app.** A create condition that references a relation, or a required foreign key whose target lacks a `connect` rule for a role that can create, is a startup error (not a runtime one). This is deliberate — the alternative is a silent runtime `403`. The error message names exactly what to fix.
 
 ---
 

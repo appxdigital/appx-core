@@ -31,6 +31,15 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.121-beta.12] — unreleased
+
+**Library.** **Relationship authorization moved entirely to the `connect` action, with boot-time config validation.** Two fixes from an adopter report plus the model change:
+
+- **Fix — create condition vs the `connect` form.** A create condition on a scalar FK (`{ ownerId: $USER_ID }`) is now satisfied when the association is supplied via `owner: { connect: { id } }`, not only the raw scalar. Resolved from relation metadata (no naming assumptions).
+- **Model change (behaviour restriction — review on upgrade).** A `create` condition judges the model's **own scalar fields only**; **every foreign-key reference a create establishes — raw scalar FK, `connect`, or nested `create` — is authorized by the target model's `connect` rule** (default-deny, no bypass). The auto-filled back-FK to a same-request nesting parent is trusted. This fixes nested `create`s whose child rule referenced the parent (previously a spurious `403`) and closes the raw-FK bypass.
+- **Boot validation.** The config is checked against the schema at startup: a required FK whose target has no `connect` rule for a creating role, or a `create` condition that references a relation, **rejects boot** (optional FK → warning). The error names each missing `<Model>.<Role>.connect`.
+- **Migration is mandatory** — see the `[0.1.121]` banner in `CHANGELOG.md` (“Relationship authorization moved to `connect`”). Move relation-reaching create conditions to `connect` rules and add a `connect` rule for every FK-referenced model. An agent doing the migration must warn the developer.
+
 ## [0.1.121-beta.11] — unreleased
 
 **Docs.** No code change. Documented that nested writes over HTTP CRUD are

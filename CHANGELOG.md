@@ -117,6 +117,19 @@ async update(@Param('id') id: string, @Body() data: Update<Model>Dto) { return s
 >
 > **For AI agents doing this migration on an existing project:** this can break existing behaviour. Before deploying, tell the developer explicitly that (a) any nested operator other than `create`/`connect` used through CRUD will now `400`, (b) every model that is nested-`connect`ed now needs a `connect` permission or the request fails, and (c) nested writes no longer work on update endpoints. Do not proceed silently. See [`docs/dtos.md`](../docs/dtos.md#relations--nested-writes) and [`docs/permissions.md`](../docs/permissions.md).
 
+> ## ⚠️ Relationship authorization moved to `connect` — this WILL break configs; the app refuses to boot until migrated
+>
+> **Every foreign-key reference a `create` establishes is now authorized by the target model's `connect` rule** — whether supplied as a nested `connect`, a nested `create`, **or a plain scalar foreign key** (`ownerId: 7` is checked against `User.connect`, no bypass). A **`create` condition now judges the created model's own scalar fields only** — it must NOT reach across a relation. The one thing not re-checked is the foreign key Prisma auto-fills for a child nested inside its parent's `create` (the parent already authorized itself).
+>
+> **The framework validates this at boot.** If a model a role can `create` has a **required** foreign key whose target has **no `connect` rule** for that role, **the app refuses to start** (it would always `403`); an optional FK logs a warning; a `create` condition that references a relation is also a boot error.
+>
+> **Required migration for existing projects:**
+> 1. **Move relationship checks out of `create` conditions and into `connect` rules.** A rule like `ExamQuestion.create: { conditions: { exam: { course: {...} } } }` must become `Course.connect: { conditions: {...} }` (or `Exam.connect`), reached via the FK on the create. A `create` condition may only constrain the model's **own** columns (e.g. `{ ownerId: $USER_ID }`, which stays valid and is still checked).
+> 2. **Add a `connect` rule to every model referenced by a foreign key on a create you allow.** For unrestricted roles that already have `create: 'ALL'`, add `connect: 'ALL'`. Start the app — the boot error lists every missing `<Model>.<Role>.connect` by name; add each until it starts.
+> 3. Because one `connect` rule serves every relation that points at a model (it is keyed on `[model][role]`, not per-relation), make its conditions the **union** of what any referencing relation legitimately needs; enforce anything finer in an explicit endpoint.
+>
+> **For AI agents:** this is a behaviour restriction on a production app. Before deploying, tell the developer that (a) any create that sets a foreign key to a model without a `connect` rule now fails — and the app won't boot until those rules exist, and (b) any `create` condition that referenced a relation no longer enforces it there and must be re-expressed as a `connect` rule. Do not proceed silently. The boot-time error message names exactly what to add. See [`docs/permissions.md`](../docs/permissions.md#the-connect-action--authorizes-every-relationship-a-create-establishes).
+
 **5. Create-permission enforcement (behaviour change — review before upgrading).**
 - Ensure every model/role that legitimately creates records has an explicit `create` permission (or `'ALL'`). Without one, create now returns `403` (previously unchecked). Internal framework flows (registration, sessions, tokens) are unaffected.
 - If you supplied arbitrary values for a field a `create` condition constrains (e.g. an owner id), those requests now return `403` unless the value matches — use `setUserIdField` to have the framework set it.

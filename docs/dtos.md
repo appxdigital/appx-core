@@ -124,6 +124,8 @@ Generated **create** DTOs expose each relation as a nested-write member that acc
 
 So a nested write succeeds only when it is an allowed operator **and** the caller passes the related model's rule.
 
+**Raw foreign keys are authorized the same way.** Setting a relation by its scalar FK (`ownerId: 7`) instead of `owner: { connect: { id: 7 } }` is not a shortcut around authorization — the framework knows `ownerId` backs the `owner` relation and checks the value against `User.connect` exactly as the `connect` form would. Every foreign key a create establishes needs a `connect` rule on its target (the sole exception is the FK Prisma fills for a child nested inside its parent, which is trusted). If a required FK's target has no `connect` rule, the app refuses to boot. See [permissions.md](./permissions.md#the-connect-action--authorizes-every-relationship-a-create-establishes).
+
 **Only `create()` carries nested writes.** `update` resolves to `updateMany`, whose payload is scalar-only (a Prisma constraint), so nested writes are not available on update — do the update and the relation change as separate operations, or in an explicit endpoint.
 
 Example — create a project with a new task and connect existing tags:

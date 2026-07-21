@@ -59,20 +59,31 @@ Shape: `PermissionsConfig[Model][Role][action]`, where each `action` value is ei
 
 > `aggregate` is **not** a supported permission action yet — see [limitations.md](./limitations.md).
 
-### The `connect` action
+### The `connect` action — authorizes every relationship a create establishes
 
-When a `create` payload nests `{ relation: { connect: {...} } }` (linking an existing record), the framework checks the **target model's `connect` rule** — a **dedicated** action, separate from reads. This exists because *being able to see a record is not permission to associate it* (seeing a team ≠ being allowed to join it).
+A `create` condition judges the created model's **own scalar fields only** — it never reaches across a relation. All relationship authorization lives in the `connect` action. Whenever a `create` payload establishes a link to model `T`, the framework checks **`T`'s `connect` rule**, a **dedicated** action separate from reads (*being able to see a record is not permission to associate it* — seeing a team ≠ being allowed to join it). This applies however the link is supplied:
+
+| Payload | Authorized by |
+|---|---|
+| a raw scalar foreign key (`teamId: 7`) | `Team.connect` |
+| `team: { connect: { id: 7 } }` | `Team.connect` |
+| `team: { create: {...} }` (nested create) | `Team.create`, recursively |
+| the back-FK to the row you're nested under | trusted — not re-checked |
 
 ```ts
 Team: {
   USER: {
-    findMany: { conditions: { ... } },        // who can SEE a team
-    connect:  { conditions: { ownerId: $UID } } // who can ATTACH a team to something they're creating
+    findMany: { conditions: { ... } },          // who can SEE a team
+    connect:  { conditions: { ownerId: $UID } }, // who can ATTACH a team to a row they're creating
   },
 }
 ```
 
-The `connect` rule's conditions are evaluated against the candidate record. **Default-deny, no fallback:** if the target model has no `connect` rule, the connect is refused. See [dtos.md](./dtos.md#relations--nested-writes) for the nested-write allowlist (`create` / `connect` only).
+The `connect` rule's conditions are evaluated against the candidate record. **Default-deny, no fallback:** if the target model has no `connect` rule, the association is refused — a raw FK cannot bypass it. The one exception is the foreign key Prisma fills in automatically for a child created *inside* its parent's payload: that back-reference is trusted, because the parent authorized itself.
+
+> **Boot validation.** Because a raw FK now needs a `connect` rule, the framework validates the config against the schema **at startup**. If a model a role can `create` has a **required** foreign key whose target lacks a `connect` rule for that role, the app **refuses to boot** (it would always `403`). An **optional** FK in the same situation logs a warning. A `create` condition that references a relation is also a boot error. Fix the config or the app won't start. See [dtos.md](./dtos.md#relations--nested-writes) for the nested-write allowlist (`create` / `connect` only).
+
+> **One `connect` rule per target model.** `connect` is keyed on `[model][role]`, so it can't vary by *which* relation references the model — e.g. "attach a project as a task's parent" and "attach a project for a membership" share one `Project.connect` rule. Make it the union of what any referencing relation needs, and enforce anything finer in an explicit endpoint.
 
 ### Action fallback chains
 
