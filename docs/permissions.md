@@ -59,9 +59,9 @@ Shape: `PermissionsConfig[Model][Role][action]`, where each `action` value is ei
 
 > `aggregate` is **not** a supported permission action yet — see [limitations.md](./limitations.md).
 
-### The `connect` action — authorizes every relationship a create establishes
+### The `connect` action — authorizes every relationship a write establishes
 
-A `create` condition judges the created model's **own scalar fields only** — it never reaches across a relation. All relationship authorization lives in the `connect` action. Whenever a `create` payload establishes a link to model `T`, the framework checks **`T`'s `connect` rule**, a **dedicated** action separate from reads (*being able to see a record is not permission to associate it* — seeing a team ≠ being allowed to join it). This applies however the link is supplied:
+A `create` condition judges the created model's **own scalar fields only** — it never reaches across a relation. All relationship authorization lives in the `connect` action. Whenever a **write** links a row to model `T` — a `create` that sets the association, **or an `update` that re-points a foreign key** — the framework checks **`T`'s `connect` rule**, a **dedicated** action separate from reads (*being able to see a record is not permission to associate it* — seeing a team ≠ being allowed to join it). This applies however the link is supplied:
 
 | Payload | Authorized by |
 |---|---|
@@ -79,7 +79,7 @@ Team: {
 }
 ```
 
-The `connect` rule's conditions are evaluated against the candidate record. **Default-deny, no fallback:** if the target model has no `connect` rule, the association is refused — a raw FK cannot bypass it. The one exception is the foreign key Prisma fills in automatically for a child created *inside* its parent's payload: that back-reference is trusted, because the parent authorized itself.
+The `connect` rule's conditions are evaluated against the candidate record. **Default-deny, no fallback:** if the target model has no `connect` rule, the association is refused — a raw FK cannot bypass it, on create **or** update. The one exception is the foreign key Prisma fills in automatically for a child created *inside* its parent's payload: that back-reference is trusted, because the parent authorized itself.
 
 > **Boot validation.** Because a raw FK now needs a `connect` rule, the framework validates the config against the schema **at startup**. If a model a role can `create` has a **required** foreign key whose target lacks a `connect` rule for that role, the app **refuses to boot** (it would always `403`). An **optional** FK in the same situation logs a warning. A `create` condition that references a relation is also a boot error. Fix the config or the app won't start. See [dtos.md](./dtos.md#relations--nested-writes) for the nested-write allowlist (`create` / `connect` only).
 

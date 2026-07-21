@@ -119,7 +119,7 @@ async update(@Param('id') id: string, @Body() data: Update<Model>Dto) { return s
 
 > ## ⚠️ Relationship authorization moved to `connect` — this WILL break configs; the app refuses to boot until migrated
 >
-> **Every foreign-key reference a `create` establishes is now authorized by the target model's `connect` rule** — whether supplied as a nested `connect`, a nested `create`, **or a plain scalar foreign key** (`ownerId: 7` is checked against `User.connect`, no bypass). A **`create` condition now judges the created model's own scalar fields only** — it must NOT reach across a relation. The one thing not re-checked is the foreign key Prisma auto-fills for a child nested inside its parent's `create` (the parent already authorized itself).
+> **Every foreign-key reference a write establishes is now authorized by the target model's `connect` rule** — on a `create` (nested `connect`, nested `create`, **or a plain scalar FK** like `ownerId: 7`) **and on an `update` that re-points a foreign key** (`{ teacherId: 5 }` / `{ teacherId: { set: 5 } }`). A **`create` condition now judges the created model's own scalar fields only** — it must NOT reach across a relation. The one thing not re-checked is the foreign key Prisma auto-fills for a child nested inside its parent's `create` (the parent already authorized itself).
 >
 > **The framework validates this at boot.** If a model a role can `create` has a **required** foreign key whose target has **no `connect` rule** for that role, **the app refuses to start** (it would always `403`); an optional FK logs a warning; a `create` condition that references a relation is also a boot error.
 >

@@ -44,6 +44,13 @@ stands alone, so the target model needs no `connect` rule. The boot validator
 accepts either placement. Additive and backward-compatible — no `relations` block
 means unchanged behaviour. See `docs/permissions.md`.
 
+**Connect authorization now also covers `update`.** Re-pointing a foreign key on
+an `update` (`{ teacherId: 5 }` or `{ teacherId: { set: 5 } }`) is authorized by
+the same `connect` rules as `create` — previously the update path set foreign
+keys with no connect check. The `relations` config is shared across create and
+update. The boot validator flags update-reachable FK targets that lack a connect
+rule (as warnings — an update need not set the FK).
+
 ## [0.1.121-beta.12] — unreleased
 
 **Library.** **Relationship authorization moved entirely to the `connect` action, with boot-time config validation.** Two fixes from an adopter report plus the model change:
