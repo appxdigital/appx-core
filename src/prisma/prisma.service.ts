@@ -1,6 +1,7 @@
 import {ForbiddenException, HttpException, HttpStatus, Inject, Injectable} from '@nestjs/common';
 import {Prisma, PrismaClient} from '@prisma/client';
 import {PermissionsConfigType, SINGULAR_ACTION} from '../common/config/permissionsConfigTypes';
+import {validatePermissionsConfig, SchemaRelations} from './permissions-validator';
 import {RequestContext} from "nestjs-request-context";
 import type {PrismaClient as RuntimeClient} from '.prisma/client';
 // @ts-ignore
@@ -68,7 +69,40 @@ export class PrismaService {
     ) {
         this.prismaClient = prismaClient;
         this.parseSchema();
+        this.validatePermissions();
         this.proxyModels();
+    }
+
+    /**
+     * Validates the permissions config against the schema at boot. Warnings are
+     * logged; errors (a create condition that crosses a relation, or a required
+     * FK whose target has no `connect` rule) reject boot — the misconfiguration
+     * would otherwise surface as a runtime 403.
+     */
+    private validatePermissions(): void {
+        const relations: SchemaRelations = {};
+        for (const model of Object.keys(this.fieldConfigs)) {
+            const relationFields = this.fieldConfigs[model].relationFields || {};
+            relations[model] = Object.keys(relationFields).map((field) => ({
+                field,
+                model: relationFields[field].model,
+                referencingColumn: relationFields[field].referencingColumn,
+                isRequired: relationFields[field].isRequired,
+                kind: relationFields[field].relation,
+            }));
+        }
+
+        const issues = validatePermissionsConfig(this.permissionsConfig as any, relations);
+        for (const issue of issues.filter((i) => i.level === 'warning')) {
+            console.warn('\x1b[33m', `[APPX-CORE PERMISSIONS] ${issue.message}`, '\x1b[0m');
+        }
+        const errors = issues.filter((i) => i.level === 'error');
+        if (errors.length) {
+            throw new Error(
+                `[APPX-CORE PERMISSIONS] Invalid permissions configuration — ${errors.length} error(s):\n` +
+                    errors.map((e) => `  • ${e.message}`).join('\n'),
+            );
+        }
     }
 
     debugQueries(enable: boolean) {

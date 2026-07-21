@@ -51,19 +51,9 @@ describe('create foreign-key authorization (Option A — connect required)', () 
         expect(await raw.project.findFirst({ where: { name: 'RawOk' } })).not.toBeNull();
     });
 
-    test('raw FK LOCKED when no connect rule exists on the target (no bypass)', async () => {
-        await withConfig(
-            { Project: { USER: { create: 'ALL' } } }, // User has no connect rule
-            async (prisma) => {
-                await expect(
-                    asUser(s.users.alice, () =>
-                        prisma.model.project.create({ data: { name: 'RawNoRule', ownerId: s.users.alice.id } }),
-                    ),
-                ).rejects.toThrow(/no 'connect' permission on User/i);
-            },
-        );
-        expect(await raw.project.findFirst({ where: { name: 'RawNoRule' } })).toBeNull();
-    });
+    // Note: "no connect rule at all on a required-FK target" is rejected at BOOT by
+    // the config validator (see test/unit/permissions-validator.spec.ts), so it
+    // cannot be exercised at runtime — the module won't construct.
 
     test('raw FK LOCKED when the connect rule is not satisfied by the target', async () => {
         await withConfig(

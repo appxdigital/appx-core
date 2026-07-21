@@ -23,6 +23,7 @@ const ADMIN_ALL = {
     findFirst: 'ALL',
     findMany: 'ALL',
     create: 'ALL',
+    connect: 'ALL', // Option A: creating a row with FK references needs connect on the targets
     updateMany: 'ALL',
     deleteMany: 'ALL',
 } as any;
@@ -30,7 +31,7 @@ const ADMIN_ALL = {
 export const abacPermissions: PermissionsConfigType = {
     Tenant: {
         ADMIN: ADMIN_ALL,
-        USER: { findFirst: 'ALL', findMany: 'ALL' },
+        USER: { findFirst: 'ALL', findMany: 'ALL', connect: 'ALL' },
     },
     User: {
         ADMIN: ADMIN_ALL,
@@ -38,6 +39,9 @@ export const abacPermissions: PermissionsConfigType = {
             // Self OR direct reports (self-relation hierarchy) — §1.0.2 / §1.4.
             findFirst: { conditions: { OR: [{ id: $UID }, { managerId: $UID }] } },
             findMany: { conditions: { OR: [{ id: $UID }, { managerId: $UID }] } },
+            // A USER is referenceable as a relation target (owner/assignee/author/…);
+            // create tests override this per-test to exercise connect denial.
+            connect: 'ALL',
             updateMany: { conditions: { id: $UID } },
         },
     },
@@ -54,6 +58,7 @@ export const abacPermissions: PermissionsConfigType = {
         USER: {
             findMany: { conditions: ProjectAccessCondition },
             findFirst: { conditions: ProjectAccessCondition },
+            connect: 'ALL',
         },
     },
     ProjectMember: {
@@ -68,6 +73,7 @@ export const abacPermissions: PermissionsConfigType = {
         USER: {
             findMany: { conditions: { project: ProjectAccessCondition } },
             findFirst: { conditions: { project: ProjectAccessCondition } },
+            connect: 'ALL',
         },
     },
     Comment: {
@@ -75,6 +81,7 @@ export const abacPermissions: PermissionsConfigType = {
         USER: {
             findMany: { conditions: { authorId: $UID } },
             findFirst: { conditions: { authorId: $UID } },
+            connect: 'ALL',
         },
     },
     Tag: {
