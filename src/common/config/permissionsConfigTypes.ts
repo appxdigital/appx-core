@@ -126,7 +126,11 @@ export type RolePermissions<
     } & {
         relations?: RelationConnectMap;
     } & {
-    [custom: string]: 'ALL' | {
+    // Catch-all for the dedicated `connect` action and any custom RBAC-only
+    // action labels. `RelationConnectMap` is included so the `relations` key
+    // (checked against this index signature) type-checks — without it, the
+    // index collides with `relations?` above and forces `as any`.
+    [custom: string]: 'ALL' | RelationConnectMap | {
         conditions?: unknown | unknown[];
         setUserIdField?: string;
     };
