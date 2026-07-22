@@ -230,6 +230,8 @@ rows through it. Scaffold modules only for the resources you actually serve.
 > The `User` model is framework-owned (auth already serves user endpoints) and is
 > never offered by the wizard.
 
+Full reference: **[docs/generate.md](./docs/generate.md)**.
+
 ### 6) Run Migrations
 
 ```bash

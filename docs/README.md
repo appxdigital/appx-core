@@ -4,6 +4,7 @@ Authoritative usage documentation for `@appxdigital/appx-core`. **This folder is
 
 ## Contents
 
+- **[generate.md](./generate.md)** — the two code-generation commands: `generate` (deploy-safe — regenerates `src/generated/**` only, no code mutation) and `generate models` (the wizard that scaffolds + registers CRUD modules for chosen models). When to use each, and why not every table needs a module.
 - **[permissions.md](./permissions.md)** — the authorization model: the `@Permission` and `@ExposeModels` decorators, the `permissions.config.ts` shape, roles/actions, row-level `conditions`, field-level control, action fallbacks, and the `GUEST` (unauthenticated) flow.
 - **[dtos.md](./dtos.md)** — the generated CRUD validation DTOs: their two-file structure, **how to remove a field** (`OmitType` / `@NoWrite`), how to add validation, and why nested relation writes don't belong on generic CRUD.
 - **[data-access.md](./data-access.md)** — how you talk to the database: the Prisma proxy (`prisma.model.*`), how ABAC filtering and field omission are enforced on every call, the redirected single-record methods, relation behaviour, bypass hatches, and transactions.

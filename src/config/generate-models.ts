@@ -22,7 +22,7 @@
  * scaffolded resolver/controller imports resolve.
  */
 import {execSync} from 'child_process';
-import {loadAllModels, loadModels, modelFolder, moduleExists} from './utils';
+import {loadAllModels, loadModels, modelFolder, moduleExists, ownedModels} from './utils';
 import {generateDtoBases, scaffoldDtoSubclass} from './generate-dtos';
 import {registerModulesInAppModule, scaffoldModule} from './generate-modules';
 import {scaffoldService} from './generate-services';
@@ -41,8 +41,13 @@ async function main(): Promise<void> {
     execSync('prisma generate', {stdio: 'inherit'});
     generateDtoBases(loadAllModels());
 
-    // 2) Candidates = non-framework models that don't already have a module.
-    const candidates = loadModels().filter((m) => !moduleExists(m.name));
+    // 2) Candidates = non-framework models with no module yet. "Has a module"
+    //    means either the canonical folder exists OR some existing module already
+    //    serves the model via CoreController/CoreService<Model> — the latter
+    //    catches hand-written modules under a non-canonical (e.g. pluralised)
+    //    folder, so we don't scaffold a duplicate.
+    const owned = ownedModels();
+    const candidates = loadModels().filter((m) => !moduleExists(m.name) && !owned.has(m.name));
 
     // 3) Resolve the selection from argv, else prompt.
     const args = process.argv.slice(2);

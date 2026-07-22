@@ -22,6 +22,9 @@ The `generate` command is split into a **deploy-safe pass** and a **module wizar
 - **`appx-core generate models`** — new interactive wizard that scaffolds CRUD (module/service/controller/resolver + DTO subclass) for the models you choose and registers them in `app.module.ts`, then runs the safe pass. Non-interactive forms: `appx-core generate models <Name…>` and `appx-core generate models --all`. Only models **without** an existing module are offered; if there are none it prints `No modules available to generate`.
 - Model discovery is now driven by the Prisma **DMMF** (the schema), not by scanning the GraphQL plugin's output folders.
 - The **`User`** model is framework-owned (auth already serves user endpoints; generic User CRUD is a mass-assignment surface) and is no longer scaffolded — it is never offered by the wizard.
+- Module-registration in `app.module.ts` now finds the `@Module` `imports` array's real closing bracket (bracket-matching that skips strings/comments) and **appends** there, preserving existing registration order. It no longer breaks when the array contains a nested array literal such as `ThrottlerModule.forRoot([...])` (previously new modules could be inserted into that inner array), never double-registers a module already present, and never adds a duplicate `import` line.
+- "Already has a module" is now detected by the model a module serves (`CoreController<Model>` / `CoreService<Model>`), not by folder name — so a hand-written module under a non-canonical folder (e.g. a pluralised `wearable-connections/` serving `WearableConnection`) is recognised and no duplicate is scaffolded.
+- Full reference: [`docs/generate.md`](./docs/generate.md).
 
 ### Migration
 

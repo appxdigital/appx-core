@@ -80,8 +80,42 @@ export const loadAllModels = (): any[] => {
 
 export const loadModels = (): any[] => loadAllModels().filter((m) => !FRAMEWORK_MODELS.includes(m.name));
 
-/** True if a hand-owned module already exists for this model under src/modules. */
+/** True if a module exists at the model's canonical folder under src/modules. */
 export const moduleExists = (modelName: string): boolean => {
     const folder = modelFolder(modelName);
     return fs.existsSync(path.join(process.cwd(), 'src/modules', folder, `${folder}.module.ts`));
+};
+
+/**
+ * The set of model names already served by existing module source — detected by
+ * the `CoreController<Model>` / `CoreService<Model>` type argument. Pure (takes
+ * file contents) so it is unit-testable. This catches a module that serves a
+ * model under a NON-canonical folder name (e.g. a hand-written pluralised
+ * `wearable-connections/` module owning the `WearableConnection` model), which a
+ * folder-name check (`moduleExists`) would miss — preventing the wizard from
+ * scaffolding a duplicate module + controller on a second route.
+ */
+export const modelsServedBySource = (contents: string[]): Set<string> => {
+    const owned = new Set<string>();
+    const re = /Core(?:Controller|Service)<\s*([A-Za-z0-9_]+)\s*>/g;
+    for (const content of contents) {
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(content)) !== null) owned.add(m[1]);
+    }
+    return owned;
+};
+
+/** Scans src/modules for the models already served by an existing module. */
+export const ownedModels = (): Set<string> => {
+    const root = path.join(process.cwd(), 'src/modules');
+    if (!fs.existsSync(root)) return new Set();
+    const contents: string[] = [];
+    for (const dir of fs.readdirSync(root)) {
+        const dirPath = path.join(root, dir);
+        if (!fs.statSync(dirPath).isDirectory()) continue;
+        for (const file of fs.readdirSync(dirPath)) {
+            if (file.endsWith('.ts')) contents.push(fs.readFileSync(path.join(dirPath, file), 'utf8'));
+        }
+    }
+    return modelsServedBySource(contents);
 };
