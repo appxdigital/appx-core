@@ -29,6 +29,11 @@ enum Role {
   USER
 }
 
+enum Priority {
+  LOW
+  HIGH
+}
+
 // ----- Framework-owned models (do not remove fields) -----
 
 model User {
@@ -160,4 +165,26 @@ model Tag {
   id       Int       @id @default(autoincrement())
   name     String    @unique
   projects Project[]
+}
+
+// Scalar-type coverage — one writable field per generate-dtos `mapField` branch,
+// so the generated CRUD DTOs (and the controller override compiled by
+// buildFixtureApp/tsc) exercise every type mapping, not just String/Int. This is
+// the guard that would have caught the DateTime-as-string bug: `dueAt` below.
+// NOTE: Decimal and BigInt are intentionally omitted — their write-DTO
+// representation over HTTP is still an open question; scalar lists are omitted
+// because MySQL (one of the two matrix providers) doesn't support them.
+model TypeSample {
+  id        Int       @id @default(autoincrement())
+  text      String
+  flag      Boolean
+  count     Int
+  ratio     Float
+  dueAt     DateTime
+  priority  Priority
+  meta      Json
+  noteOpt   String?
+  flagOpt   Boolean?
+  dueAtOpt  DateTime?
+  createdAt DateTime  @default(now()) // server-managed — must be excluded from the DTO
 }

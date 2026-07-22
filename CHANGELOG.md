@@ -14,6 +14,27 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.123] — 2026-07-22
+
+Generated CRUD DTOs now type `DateTime` columns as `Date` (previously `string`), matching the Prisma model type so a controller override type-checks.
+
+### Migration
+
+If you applied the manual per-DTO `OmitType(...)` workaround to re-type a `DateTime` field as `Date` (because the generated `string` type made your controller override fail with `TS2416`), you can now **delete that workaround** and let the generated base DTO stand:
+
+```ts
+// DELETE this hand-written override — the generated DTO now types `date` as Date.
+export class UpdateHabitLogDto extends OmitType(UpdateHabitLogGeneratedDto, ['date'] as const) {
+  @IsOptional() @Type(() => Date) @IsDate() date?: Date;
+}
+// Back to the plain generated subclass:
+export class UpdateHabitLogDto extends UpdateHabitLogGeneratedDto {}
+```
+
+Then regenerate DTOs (`appx-core generate`). No wire/API change: the generated field uses `@Type(() => Date)`, so it still accepts an ISO-8601 string in the request body and coerces it to a `Date` (the hardened `ValidationPipe` runs with `transform: true`). Prisma now receives a real `Date` instead of a string.
+
+---
+
 ## [0.1.122] — 2026-07-21
 
 **No migration necessary.**

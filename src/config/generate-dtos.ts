@@ -84,8 +84,10 @@ function isServerManagedTimestamp(field: DmmfField): boolean {
     return !!def && typeof def === 'object' && def.name === 'now';
 }
 
-/** Decision for a scalar/enum field: base validator, TS type, optional enum arg. */
-function mapField(field: DmmfField): {validator: string; tsType: string; enumArg?: string} {
+/** Decision for a scalar/enum field: base validator, TS type, optional enum arg,
+ * optional class-transformer `@Type(() => <transform>)` (needed when the wire
+ * value must be coerced to a non-primitive before validation, e.g. ISO → Date). */
+function mapField(field: DmmfField): {validator: string; tsType: string; enumArg?: string; transform?: string} {
     if (field.kind === 'enum') {
         return {validator: 'IsEnum', tsType: field.type, enumArg: field.type};
     }
@@ -101,7 +103,12 @@ function mapField(field: DmmfField): {validator: string; tsType: string; enumArg
         case 'Decimal':
             return {validator: 'IsNumber', tsType: 'number'};
         case 'DateTime':
-            return {validator: 'IsDateString', tsType: 'string'};
+            // Prisma types DateTime columns as `Date`; the DTO must match so a
+            // controller override (`data: UpdateXDto` vs base `Partial<X>`)
+            // type-checks. `@Type(() => Date)` still accepts an ISO string over
+            // the wire and coerces it (ValidationPipe runs with transform:true),
+            // so there is no API change and Prisma receives a real Date.
+            return {validator: 'IsDate', tsType: 'Date', transform: 'Date'};
         default:
             // Json, Bytes, and anything unrecognised: keep the field (so it isn't
             // stripped by whitelist) without a strict type validator.
@@ -139,6 +146,7 @@ function renderScalarLines(
     mode: 'create' | 'update' | 'connect',
     validatorImports: Set<string>,
     enumImports: Set<string>,
+    transformerImports: Set<string>,
 ): string[] {
     const lines: string[] = [];
     for (const field of fields) {
@@ -169,6 +177,10 @@ function renderScalarLines(
         if (isList && m.validator !== 'Allow') {
             validatorImports.add('IsArray');
             decoratorLines.push('    @IsArray()');
+        }
+        if (m.transform) {
+            transformerImports.add('Type');
+            decoratorLines.push(`    @Type(() => ${m.transform})`);
         }
         decoratorLines.push(`    ${validatorDecorator}`);
 
@@ -208,11 +220,11 @@ function renderRelationNestedWrites(
 
         // create: related writable scalars minus the back-reference FK.
         const omit = backFkColumns(related, rel.relationName);
-        classes.push(renderClass(createCls, renderScalarLines(writableFields(related, omit), 'create', validatorImports, enumImports)));
+        classes.push(renderClass(createCls, renderScalarLines(writableFields(related, omit), 'create', validatorImports, enumImports, transformerImports)));
 
         // connect: related unique fields (all optional).
         const conn = connectFields(related);
-        classes.push(renderClass(connectCls, renderScalarLines(conn, 'connect', validatorImports, enumImports)));
+        classes.push(renderClass(connectCls, renderScalarLines(conn, 'connect', validatorImports, enumImports, transformerImports)));
 
         // nested-write: create? / connect? only.
         transformerImports.add('Type');
@@ -248,7 +260,7 @@ function renderBaseDto(className: string, model: any, mode: 'create' | 'update')
     const enumImports = new Set<string>();
     const transformerImports = new Set<string>();
 
-    const scalarLines = renderScalarLines(writableFields(model), mode, validatorImports, enumImports);
+    const scalarLines = renderScalarLines(writableFields(model), mode, validatorImports, enumImports, transformerImports);
 
     let nested = {classes: [] as string[], parentLines: [] as string[]};
     if (mode === 'create') {
