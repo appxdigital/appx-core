@@ -83,10 +83,36 @@ function coreGenerate(showOutput) {
     }
 }
 
-program.command('generate')
-    .description('Updates Prisma client and generates the GraphQL schema')
+function coreGenerateModels(names, options) {
+    // run the wizard inside node_modules/@appxdigital/appx-core/dist/config/generate-models.js
+    const scriptPath = path.join(process.cwd(), 'node_modules', '@appxdigital/appx-core', 'dist', 'config', 'generate-models.js');
+    if (!fsCore.existsSync(scriptPath)) {
+        console.error('❌ Not inside a valid AppX Core project directory. Please run this command inside your project directory.');
+        process.exit(1);
+    }
+    const argv = [...(names || [])];
+    if (options?.all) argv.push('--all');
+    try {
+        // stdio inherit so the interactive picker (when no names/--all) works.
+        execSync(`node ${scriptPath} ${argv.join(' ')}`.trim(), {stdio: 'inherit'});
+    } catch (error) {
+        console.error('❌ An error occurred while generating modules:', error.message);
+        process.exit(1);
+    }
+}
+
+const generateCommand = program.command('generate')
+    .description('Regenerate deploy-safe artifacts (Prisma client, GraphQL types, DTO bases). No code changes.')
     .action(() => {
         coreGenerate(true);
+    });
+
+generateCommand
+    .command('models [names...]')
+    .description('Scaffold CRUD modules (module/service/controller/resolver/DTO) for selected models and register them in AppModule. Interactive picker when no names are given.')
+    .option('--all', 'Scaffold every generatable model (legacy behaviour)')
+    .action((names, options) => {
+        coreGenerateModels(names, options);
     });
 
 program.command('setup:fileupload')

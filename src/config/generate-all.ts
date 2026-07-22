@@ -1,43 +1,27 @@
 #!/usr/bin/env node
 
+/**
+ * `appx generate` — the DEPLOY-SAFE pass.
+ *
+ * Regenerates only the overwrite-safe artifacts under the gitignored
+ * `src/generated/**`:
+ *   - the Prisma client and the prisma-nestjs-graphql outputs (`prisma generate`
+ *     runs both generator blocks), and
+ *   - the DTO base classes (`src/generated/dto/**`).
+ *
+ * It NEVER writes `src/modules/**` and NEVER edits `src/app.module.ts`, so it is
+ * safe to run in CI / postinstall / predeploy and re-run any number of times.
+ * Scaffolding CRUD modules (which mutates code) is the separate, interactive
+ * `appx generate models` wizard.
+ */
 import {execSync} from 'child_process';
-import * as path from 'path';
+import {loadAllModels} from './utils';
+import {generateDtoBases} from './generate-dtos';
 
-const scriptsDir = path.join(__dirname);
+console.log('Running Prisma Generate (client + GraphQL artifacts)...');
+execSync('prisma generate', {stdio: 'inherit'});
 
-console.log('Running Prisma Generate...');
-execSync(`prisma generate`, {
-    stdio: 'inherit',
-});
+console.log('Generating DTO base classes...');
+generateDtoBases(loadAllModels());
 
-console.log('Generating Modules...');
-execSync(`node ${path.join(scriptsDir, 'generate-modules.js')}`, {
-    stdio: 'inherit',
-});
-
-console.log('Generating Resolvers...');
-execSync(`node ${path.join(scriptsDir, 'generate-resolvers.js')}`, {
-    stdio: 'inherit',
-});
-
-console.log('Generating Services...');
-execSync(`node ${path.join(scriptsDir, 'generate-services.js')}`, {
-    stdio: 'inherit',
-});
-
-console.log('Generating DTOs...');
-execSync(`node ${path.join(scriptsDir, 'generate-dtos.js')}`, {
-    stdio: 'inherit',
-});
-
-console.log('Generating Controllers...');
-execSync(`node ${path.join(scriptsDir, 'generate-controllers.js')}`, {
-    stdio: 'inherit',
-});
-
-// console.log('Generating Session Schema...');
-// execSync(`node ${path.join(scriptsDir, 'generate-session-schema.js')}`, {
-//   stdio: 'inherit',
-// });
-
-console.log('All generators ran successfully.');
+console.log('Deploy-safe generation complete — src/generated only, no code changes.');

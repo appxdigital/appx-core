@@ -186,5 +186,7 @@ model TypeSample {
   noteOpt   String?
   flagOpt   Boolean?
   dueAtOpt  DateTime?
+  secret    String?   /// @Role(none)  — non-writable (readable by nobody), excluded from DTOs
+  internalNote String? /// @NoWrite     — non-writable for all roles, excluded from DTOs
   createdAt DateTime  @default(now()) // server-managed — must be excluded from the DTO
 }

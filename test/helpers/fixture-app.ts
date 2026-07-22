@@ -172,20 +172,22 @@ export function pushFixtureSchemaTo(databaseUrl: string): void {
 }
 
 /**
- * Run `appx-core generate` inside the fixture — emits CRUD modules for every
- * Prisma model. The fixture's package.json has a `generate` script that runs
- * the CLI from its node_modules copy.
+ * Prepare the fixture's generated code. Mirrors the two-command split shipped to
+ * consumers:
+ *   1. the deploy-safe pass (`generate-all.js`) — Prisma client + GraphQL
+ *      artifacts + DTO bases, no code mutation; then
+ *   2. the module wizard (`generate-models.js --all`) — scaffolds a CRUD module
+ *      for every generatable (non-framework) model and registers it in
+ *      AppModule, non-interactively.
+ * The `--all` form reproduces the old "expose every table" behaviour the ABAC
+ * HTTP/proxy fixture relies on.
  */
 export function runFixtureGenerate(): void {
-    // The fixture's @appxdigital/appx-core dist/config/generate-all.js is what
-    // cli/cli.js invokes. We call it directly to skip the global CLI dependency.
-    const generateAll = path.join(
-        FRAMEWORK_PKG_DIR_IN_FIXTURE,
-        'dist',
-        'config',
-        'generate-all.js',
-    );
-    sh(`node ${generateAll}`, FIXTURE_DIR);
+    const configDir = path.join(FRAMEWORK_PKG_DIR_IN_FIXTURE, 'dist', 'config');
+    // The wizard runs the safe pass itself, but call it explicitly first so a
+    // safe-pass-only regression is visible independently of the scaffold step.
+    sh(`node ${path.join(configDir, 'generate-all.js')}`, FIXTURE_DIR);
+    sh(`node ${path.join(configDir, 'generate-models.js')} --all`, FIXTURE_DIR);
 }
 
 /**

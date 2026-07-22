@@ -202,13 +202,33 @@ npx prisma db pull
 
 ### 5) Generate Modules and CRUD
 
-After you edit `schema.prisma`, run:
+There are two generation commands, split by what they touch:
 
 ```bash
+# Deploy-safe: regenerate the Prisma client, GraphQL types and DTO base classes
+# under src/generated/ (gitignored). Never writes src/modules/ or app.module.ts,
+# so it is safe in CI / postinstall / predeploy. Run it every time the schema
+# changes (no need to run `prisma generate` separately).
 appx-core generate
+
+# Scaffold CRUD for the tables you want to EXPOSE. Interactive picker listing
+# models that don't yet have a module; for each selected model it creates the
+# module/service/controller/resolver + DTO subclass and registers the module in
+# app.module.ts, then runs the safe pass above.
+appx-core generate models
+#   appx-core generate models Habit Log   # non-interactive: named models
+#   appx-core generate models --all       # every generatable model
 ```
 
-Run this **every time** you change the Prisma schema. This is the only required generation step (no need to run `prisma generate` separately).
+Not every table needs its own module — because CRUD supports permission-gated
+nested writes (`create` / `connect`), you can expose a parent and write related
+rows through it. Scaffold modules only for the resources you actually serve.
+
+> **`generate` is deploy-safe; `generate models` mutates code.** Only `generate
+> models` writes hand-owned files and edits `app.module.ts` — run it during
+> development. `generate` alone is idempotent and touches only `src/generated/`.
+> The `User` model is framework-owned (auth already serves user endpoints) and is
+> never offered by the wizard.
 
 ### 6) Run Migrations
 

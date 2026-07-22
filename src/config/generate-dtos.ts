@@ -1,7 +1,7 @@
 import * as path from 'path';
 import {
+    FRAMEWORK_MODELS,
     GENERATED_BANNER,
-    IGNORE_FOLDERS,
     createFileIfNotExists,
     pascalToKebabCase,
     writeGeneratedFile,
@@ -38,14 +38,14 @@ import {
  */
 
 const cwd = process.cwd();
-
-// Read the consumer's generated Prisma client for the DMMF (authoritative
-// field metadata incl. `documentation`, which carries /// @Role / @NoWrite).
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const {Prisma} = require(path.join(cwd, 'node_modules', '@prisma/client'));
-
 const generatedDtoRoot = path.join(cwd, 'src/generated/dto');
 const modulesRoot = path.join(cwd, 'src/modules');
+
+// Populated by generateDtoBases() from the DMMF models it is handed (authoritative
+// field metadata incl. `documentation`, which carries /// @Role / @NoWrite).
+// A module-level lookup so the relation-nested-write renderer can resolve a
+// related model by name without threading it through every call.
+let modelsByName: Record<string, any> = {};
 
 type DmmfField = {
     name: string;
@@ -62,9 +62,6 @@ type DmmfField = {
     relationName?: string;
     relationFromFields?: string[];
 };
-
-const modelsByName: Record<string, any> = {};
-for (const m of Prisma.dmmf.datamodel.models) modelsByName[m.name] = m;
 
 function isNoWrite(doc?: string): boolean {
     if (!doc) return false;
@@ -303,25 +300,45 @@ function renderSubclassDto(subclass: string, baseClass: string, importPath: stri
     );
 }
 
-for (const model of Prisma.dmmf.datamodel.models) {
-    const modelName: string = model.name; // Pascal, e.g. ProjectMember
-    const folder = pascalToKebabCase(modelName); // kebab, e.g. project-member
-    if (IGNORE_FOLDERS.includes(folder)) continue;
+/**
+ * Deploy-safe pass: (re)generate the DTO **base** classes under the gitignored
+ * `src/generated/dto/`, one per non-framework model. Overwrite-only — never
+ * touches `src/modules/`. `allModels` is the full DMMF list (framework models
+ * included) so relation-nested-write members can resolve their target model;
+ * bases are only emitted for non-framework models.
+ */
+export function generateDtoBases(allModels: any[]): void {
+    modelsByName = {};
+    for (const m of allModels) modelsByName[m.name] = m;
 
+    for (const model of allModels) {
+        const modelName: string = model.name; // Pascal, e.g. ProjectMember
+        if (FRAMEWORK_MODELS.includes(modelName)) continue;
+        const folder = pascalToKebabCase(modelName); // kebab, e.g. project-member
+
+        for (const mode of ['create', 'update'] as const) {
+            const capMode = mode.charAt(0).toUpperCase() + mode.slice(1);
+            const baseClass = `${capMode}${modelName}GeneratedDto`;
+            const basePath = path.join(generatedDtoRoot, folder, `${mode}-${folder}.generated.dto.ts`);
+            writeGeneratedFile(basePath, renderBaseDto(baseClass, model, mode));
+        }
+    }
+    console.log('DTO base classes generated.');
+}
+
+/**
+ * Wizard/scaffold pass: create the hand-owned DTO **subclass** files (create +
+ * update) for a single model under `src/modules/<model>/dto/`. Generated once,
+ * never overwritten — this is where the developer adds custom validation.
+ */
+export function scaffoldDtoSubclass(modelName: string): void {
+    const folder = pascalToKebabCase(modelName);
     for (const mode of ['create', 'update'] as const) {
         const capMode = mode.charAt(0).toUpperCase() + mode.slice(1);
         const baseClass = `${capMode}${modelName}GeneratedDto`;
         const subclass = `${capMode}${modelName}Dto`;
-
-        // Base (overwritten, gitignored).
-        const basePath = path.join(generatedDtoRoot, folder, `${mode}-${folder}.generated.dto.ts`);
-        writeGeneratedFile(basePath, renderBaseDto(baseClass, model, mode));
-
-        // Subclass (once, hand-owned, committed).
         const subPath = path.join(modulesRoot, folder, 'dto', `${mode}-${folder}.dto.ts`);
         const importPath = `../../../generated/dto/${folder}/${mode}-${folder}.generated.dto`;
         createFileIfNotExists(subPath, renderSubclassDto(subclass, baseClass, importPath));
     }
 }
-
-console.log('DTOs generated.');

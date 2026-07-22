@@ -1,8 +1,6 @@
-import * as fs from 'fs';
 import * as path from 'path';
-import {createFileIfNotExists, IGNORE_FOLDERS, kebabToPascalCase} from './utils';
+import {createFileIfNotExists, modelFolder} from './utils';
 
-const modelsPath = path.join(process.cwd(), 'src/generated');
 const modulesOutputPath = path.join(process.cwd(), 'src/modules');
 
 /**
@@ -45,24 +43,9 @@ export class ${model}Controller extends CoreController<${model}> {
 }
 `;
 
-/**
- * Generate controllers for each model
- */
-fs.readdirSync(modelsPath).forEach((folder) => {
-    if (IGNORE_FOLDERS.includes(folder)) return;
-
-    const modelName = kebabToPascalCase(folder);  // Capitalize model name e.g., 'Comment', 'Post'
-    const modelOutputPath = path.join(modulesOutputPath, folder);
-
-    if (!fs.existsSync(modelOutputPath)) {
-        fs.mkdirSync(modelOutputPath, {recursive: true});
-        console.log(`Folder for model ${modelName} created.`);
-    } else {
-        console.log(`Folder for model ${modelName} already exists, skipping creation.`);
-    }
-    /**
-     * Create the controller file
-     */
-    const controllerPath = path.join(modelOutputPath, `${folder}.controller.ts`);
+/** Scaffold the controller file for a single model (once; never overwritten). */
+export function scaffoldController(modelName: string): void {
+    const folder = modelFolder(modelName);
+    const controllerPath = path.join(modulesOutputPath, folder, `${folder}.controller.ts`);
     createFileIfNotExists(controllerPath, genericControllerTemplate(modelName, folder));
-});
+}

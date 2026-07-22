@@ -14,6 +14,28 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.2.0] — 2026-07-22
+
+The `generate` command is split into a **deploy-safe pass** and a **module wizard**, so regenerating types in CI no longer mutates your code.
+
+- **`appx-core generate`** — now regenerates only the overwrite-safe artifacts under the gitignored `src/generated/**` (Prisma client, GraphQL types, DTO **base** classes). It **no longer** writes `src/modules/**` or edits `src/app.module.ts`. Idempotent and safe for CI / postinstall / predeploy.
+- **`appx-core generate models`** — new interactive wizard that scaffolds CRUD (module/service/controller/resolver + DTO subclass) for the models you choose and registers them in `app.module.ts`, then runs the safe pass. Non-interactive forms: `appx-core generate models <Name…>` and `appx-core generate models --all`. Only models **without** an existing module are offered; if there are none it prints `No modules available to generate`.
+- Model discovery is now driven by the Prisma **DMMF** (the schema), not by scanning the GraphQL plugin's output folders.
+- The **`User`** model is framework-owned (auth already serves user endpoints; generic User CRUD is a mass-assignment surface) and is no longer scaffolded — it is never offered by the wizard.
+
+### Migration
+
+> **Behaviour change — a bare `appx-core generate` no longer creates modules or edits `app.module.ts`.** This is intentional (it makes the command safe to run in CI), but it means new tables are not auto-exposed.
+
+1. **Regenerating types stays the same:** keep running `appx-core generate` after every schema change — it refreshes the Prisma client, GraphQL types and DTO bases. It is now guaranteed not to touch your committed code.
+2. **To expose a new table** as CRUD, run `appx-core generate models` and pick it (or `appx-core generate models <Name>`). This is the only command that scaffolds `src/modules/**` and registers a module in `app.module.ts`.
+3. **Existing modules are unaffected** — already-scaffolded modules and their `app.module.ts` registration keep working. To reproduce the old "expose every table" behaviour in one shot, run `appx-core generate models --all`.
+4. If you relied on the generated **`/users`** CRUD, note it is no longer scaffolded (auth owns `/auth/*`). Re-create it by hand only if you genuinely need generic user CRUD; prefer a dedicated, permission-scoped endpoint.
+
+> GraphQL remains **read-only** (query + aggregate) and every scaffolded module still gets its resolver; per-module GraphQL toggling is planned for a later release.
+
+---
+
 ## [0.1.123] — 2026-07-22
 
 Generated CRUD DTOs now type `DateTime` columns as `Date` (previously `string`), matching the Prisma model type so a controller override type-checks.

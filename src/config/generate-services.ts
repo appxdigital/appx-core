@@ -1,8 +1,6 @@
-import * as fs from 'fs';
 import * as path from 'path';
-import {createFileIfNotExists, IGNORE_FOLDERS, kebabToPascalCase} from './utils';
+import {createFileIfNotExists, modelFolder} from './utils';
 
-const modelsPath = path.join(process.cwd(), 'src/generated');
 const servicesOutputPath = path.join(process.cwd(), 'src/modules');
 
 /**
@@ -24,19 +22,9 @@ export class ${model}Service extends CoreService<${model}> {
 }
 `;
 
-/**
- * Generate services for each model
- */
-fs.readdirSync(modelsPath).forEach((folder) => {
-    if (IGNORE_FOLDERS.includes(folder)) return;
-
-    const modelName = kebabToPascalCase(folder);
-    const modelOutputPath = path.join(servicesOutputPath, folder);
-    if (!fs.existsSync(modelOutputPath)) {
-        fs.mkdirSync(modelOutputPath, {recursive: true});
-        console.log(`Folder for model ${modelName} created.`);
-    }
-
-    const servicePath = path.join(modelOutputPath, `${folder}.service.ts`);
+/** Scaffold the service file for a single model (once; never overwritten). */
+export function scaffoldService(modelName: string): void {
+    const folder = modelFolder(modelName);
+    const servicePath = path.join(servicesOutputPath, folder, `${folder}.service.ts`);
     createFileIfNotExists(servicePath, genericServiceTemplate(modelName));
-});
+}

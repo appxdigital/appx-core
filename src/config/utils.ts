@@ -48,13 +48,40 @@ export const writeGeneratedFile = (filePath: string, content: string) => {
     console.log(`Generated ${filePath}`);
 };
 
-export const IGNORE_FOLDERS = [
-    'prisma',
-    'schema.gql',
-    'session',
-    'user-refresh-token',
-    // Generated DTOs live under src/generated/dto/. The model generators scan
-    // src/generated's top-level dirs as model names, so this must be skipped or
-    // they emit a bogus `dto` module.
-    'dto',
-];
+/**
+ * Framework-owned models. Excluded from model discovery: no generic CRUD module,
+ * controller, service, resolver, or DTO is scaffolded for them. `Session` /
+ * `UserRefreshToken` are framework plumbing; `User` is owned by the auth module
+ * (generic User CRUD would be a mass-assignment surface, and `/auth/*` already
+ * covers user endpoints), so it is hidden from the module wizard entirely.
+ */
+export const FRAMEWORK_MODELS = ['Session', 'UserRefreshToken', 'User'];
+
+/**
+ * The kebab-case folder / file basename for a model. Matches the folder naming
+ * of the prisma-nestjs-graphql generator output under `src/generated/`, so the
+ * scaffolded resolver's imports (`../../generated/<folder>/<folder>.model`)
+ * resolve. E.g. `ProjectMember` -> `project-member`, `TypeSample` -> `type-sample`.
+ */
+export const modelFolder = (modelName: string): string => pascalToKebabCase(modelName);
+
+/**
+ * Loads the datamodel from the consumer project's generated Prisma client and
+ * returns the discoverable (non-framework-owned) models. This is the single
+ * source of truth for "what models exist" — independent of whatever folders the
+ * GraphQL plugin happened to emit. Requires `@prisma/client` lazily so callers
+ * can run `prisma generate` first and pick up a fresh schema in the same process.
+ */
+export const loadAllModels = (): any[] => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const {Prisma} = require(path.join(process.cwd(), 'node_modules', '@prisma/client'));
+    return Prisma.dmmf.datamodel.models as any[];
+};
+
+export const loadModels = (): any[] => loadAllModels().filter((m) => !FRAMEWORK_MODELS.includes(m.name));
+
+/** True if a hand-owned module already exists for this model under src/modules. */
+export const moduleExists = (modelName: string): boolean => {
+    const folder = modelFolder(modelName);
+    return fs.existsSync(path.join(process.cwd(), 'src/modules', folder, `${folder}.module.ts`));
+};

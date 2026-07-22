@@ -61,6 +61,19 @@ export const PermissionsConfig: PermissionsConfigType = {
     },
   },
 
+  // -------- TypeSample --------
+  // Scalar-type + writable-field coverage model (no relations). ADMIN can create
+  // it so the generated-CRUD DTO-validation HTTP test can exercise a real create.
+  TypeSample: {
+    ADMIN: {
+      findFirst: 'ALL',
+      findMany: 'ALL',
+      create: 'ALL',
+      updateMany: 'ALL',
+      deleteMany: 'ALL',
+    },
+  },
+
   // -------- Project --------
   // Exercises OR + list-relation `some` + tighter rules for write actions
   // (only owner can update/delete, but any member can read). `create` pins the

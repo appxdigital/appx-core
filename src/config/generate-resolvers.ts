@@ -1,8 +1,6 @@
-import * as fs from 'fs';
 import * as path from 'path';
-import {createFileIfNotExists, IGNORE_FOLDERS, kebabToPascalCase} from './utils';
+import {createFileIfNotExists, modelFolder} from './utils';
 
-const modelsPath = path.join(process.cwd(), 'src/generated');
 const outputPath = path.join(process.cwd(), 'src/modules');
 
 /**
@@ -47,21 +45,13 @@ export class ${model}Resolver extends ${model}GenericResolver {
 `;
 
 /**
- * Generate resolvers for each model
+ * Scaffold the (read-only) GraphQL resolver file for a single model (once;
+ * never overwritten). Imports the prisma-nestjs-graphql artifacts under
+ * `src/generated/<folder>/`, so the deploy-safe pass (`prisma generate`) must
+ * have produced them first.
  */
-fs.readdirSync(modelsPath).forEach((folder) => {
-    if (IGNORE_FOLDERS.includes(folder)) return;
-
-    const modelName = kebabToPascalCase(folder);
-    const modelOutputPath = path.join(outputPath, folder);
-
-    if (!fs.existsSync(modelOutputPath)) {
-        fs.mkdirSync(modelOutputPath, {recursive: true});
-        console.log(`Folder for model ${modelName} created.`);
-    } else {
-        console.log(`Folder for model ${modelName} already exists, skipping creation.`);
-    }
-
-    const resolverPath = path.join(modelOutputPath, `${folder}.resolver.ts`);
+export function scaffoldResolver(modelName: string): void {
+    const folder = modelFolder(modelName);
+    const resolverPath = path.join(outputPath, folder, `${folder}.resolver.ts`);
     createFileIfNotExists(resolverPath, genericResolverTemplate(modelName, folder));
-});
+}

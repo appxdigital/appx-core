@@ -1,8 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import {IGNORE_FOLDERS, kebabToPascalCase} from './utils';
+import {createFileIfNotExists, modelFolder} from './utils';
 
-const modelsPath = path.join(process.cwd(), 'src/generated');
 const modulesOutputPath = path.join(process.cwd(), 'src/modules');
 const appModulePath = path.join(process.cwd(), 'src/app.module.ts');
 
@@ -26,118 +25,77 @@ import { ${model}Resolver } from './${folder}.resolver';
 export class ${model}Module {}
 `;
 
-/**
- * Create or update the module file for a given model
- * @param model
- * @param modulePath
- * @param folder
- */
-const createModuleFile = (model: string, modulePath: string, folder: string) => {
-    const moduleContent = moduleTemplate(model, folder);
-    fs.writeFileSync(modulePath, moduleContent);
-    console.log(`Module for ${model} created or updated.`);
-};
+/** Scaffold the module file for a single model (once; never overwritten). */
+export function scaffoldModule(modelName: string): void {
+    const folder = modelFolder(modelName);
+    const modulePath = path.join(modulesOutputPath, folder, `${folder}.module.ts`);
+    createFileIfNotExists(modulePath, moduleTemplate(modelName, folder));
+}
 
 /**
- * Update the AppModule with new module imports
+ * Register the given models' modules in `src/app.module.ts` — the ONE code
+ * mutation in the generator, performed only by the module wizard (never by the
+ * deploy-safe pass). Idempotent: a module already imported / already in the
+ * `imports:` array is left untouched. Scoped to the models passed in — it does
+ * NOT scan `src/modules`, so it never registers something the caller didn't ask
+ * for.
  */
-const updateAppModule = () => {
+export function registerModulesInAppModule(modelNames: string[]): void {
+    if (modelNames.length === 0) return;
+
     let appModuleContent = fs.readFileSync(appModulePath, 'utf8');
 
-    /**
-     * Regex to extract existing module imports from the AppModule
-     */
-    const importRegex = /import { (\w+)Module } from '.\/modules\/\w+\/\w+.module';/g;
+    // Existing module imports (by `import { XModule } from './modules/…'`).
+    const importRegex = /import { (\w+)Module } from '.\/modules\/[\w-]+\/[\w-]+.module';/g;
     const existingImports = new Set<string>();
     let match;
     while ((match = importRegex.exec(appModuleContent)) !== null) {
-        existingImports.add(match[1]);
+        existingImports.add(`${match[1]}Module`);
+    }
+
+    // Existing entries already inside the `imports: [ … ]` array.
+    const importsArrayRegex = /(imports:\s*\[)([^]*?)(\])/;
+    const importsArrayMatch = appModuleContent.match(importsArrayRegex);
+    const existingModuleNames = new Set<string>();
+    if (importsArrayMatch) {
+        importsArrayMatch[2]
+            .split(',')
+            .map((m) => m.trim().replace(/\s/g, ''))
+            .filter((m) => m)
+            .forEach((moduleName) => existingModuleNames.add(moduleName));
     }
 
     const newImports: string[] = [];
     const newModules: string[] = [];
-
-    /**
-     * Regex to extract the imports array from the AppModule to prevent duplicates
-     */
-    const importsArrayRegex = /(imports:\s*\[)([^]*?)(\])/;
-    const importsArrayMatch = appModuleContent.match(importsArrayRegex);
-    const existingModuleNames = new Set<string>();
-
-    if (importsArrayMatch) {
-        const currentImportsArray = importsArrayMatch[2]
-            .split(',')
-            .map((m) => m.trim().replace(/\s/g, ''))
-            .filter((m) => m);
-        currentImportsArray.forEach((moduleName) => {
-            existingModuleNames.add(moduleName);
-        });
+    for (const modelName of modelNames) {
+        const moduleName = `${modelName}Module`;
+        const folder = modelFolder(modelName);
+        if (existingImports.has(moduleName) || existingModuleNames.has(moduleName)) continue;
+        newImports.push(`import { ${moduleName} } from './modules/${folder}/${folder}.module';`);
+        newModules.push(moduleName);
     }
 
-    /**
-     * Iterate over the modules directory and add new imports to the AppModule
-     */
-    fs.readdirSync(modulesOutputPath).forEach((folder) => {
-        if (IGNORE_FOLDERS.includes(folder)) return;
-
-        const modelName = kebabToPascalCase(folder);
-        const moduleName = `${modelName}Module`;
-
-        // Ensure no duplicate imports and no duplicate entries in the imports array
-        if (!existingImports.has(moduleName) && !existingModuleNames.has(moduleName)) {
-            newImports.push(`import { ${modelName}Module } from './modules/${folder}/${folder}.module';`);
-            newModules.push(moduleName);
-        }
-    });
-
     if (newImports.length === 0) {
-        console.log('No new modules to add.');
+        console.log('No new modules to register in AppModule.');
         return;
     }
 
-    // Add new imports to AppModule and update the imports array without duplicates
+    // Add the new modules to the `imports:` array without duplicates.
     appModuleContent = appModuleContent.replace(
-        /(imports:\s*\[)([^]*?)(\])/,
+        importsArrayRegex,
         (_, prefix, currentImports, suffix) => {
             const currentModules = currentImports
                 .split(',')
                 .map((m: string) => m.trim())
                 .filter((m: string) => m);
             newModules.forEach((newModule) => {
-                if (!currentModules.includes(newModule)) {
-                    currentModules.push(newModule);
-                }
+                if (!currentModules.includes(newModule)) currentModules.push(newModule);
             });
             return `${prefix}${currentModules.join(', ')}${suffix}`;
-        }
+        },
     );
 
     const finalContent = newImports.join('\n') + '\n' + appModuleContent;
     fs.writeFileSync(appModulePath, finalContent);
-    console.log('AppModule updated successfully.');
-};
-
-/**
- * Generate modules for each model
- */
-fs.readdirSync(modelsPath).forEach((folder) => {
-    if (IGNORE_FOLDERS.includes(folder)) return;
-
-    const modelName = kebabToPascalCase(folder);
-    const modelOutputPath = path.join(modulesOutputPath, folder);
-
-    if (!fs.existsSync(modelOutputPath)) {
-        fs.mkdirSync(modelOutputPath, {recursive: true});
-        console.log(`Folder for model ${modelName} created.`);
-    }
-
-    const modulePath = path.join(modelOutputPath, `${folder}.module.ts`);
-
-    if (!fs.existsSync(modulePath)) {
-        createModuleFile(modelName, modulePath, folder);
-    } else {
-        console.log(`Module for ${modelName} already exists, skipping.`);
-    }
-});
-
-updateAppModule();
+    console.log(`AppModule updated: registered ${newModules.join(', ')}.`);
+}

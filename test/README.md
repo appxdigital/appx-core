@@ -88,7 +88,7 @@ test/
 │   ├── cors.spec.ts
 │   └── create-conditions.spec.ts
 └── cli/
-    ├── generate-fixture.spec.ts    # real-fixture: prisma generate → appx-core generate → tsc
+    ├── generate-fixture.spec.ts    # real-fixture: prisma generate → generate (safe) → generate models --all → tsc
     ├── create.spec.ts              # scaffold-template contract + optional subprocess
     └── create-parity.spec.ts       # end-to-end: spawn `cli.js create`, diff vs committed fixture
 ```
@@ -102,7 +102,7 @@ Blacklisted methods, USER_ID placeholder filtering, ADMIN unrestricted reads, GU
 ### `http/*.spec.ts` (real fixture, appx_fixture DB)
 
 - **Register validation**: the hardened ValidationPipe rejects unknown body fields (e.g. `role`) with `400`.
-- **Generated-CRUD validation**: `POST /users` rejects unknown / non-writable fields (`id`, `password`) via the per-model DTO.
+- **Generated-CRUD validation**: `POST /typesamples` rejects unknown / non-writable fields (`id`, `secret` @Role(none), `internalNote` @NoWrite) via the per-model DTO, and accepts a valid create (DateTime coerced from an ISO string).
 - **Session-admin endpoints**: `/auth/sessions/:userId` is guarded (authenticated + ADMIN).
 - **CORS**: origin is configurable; other origins are blocked.
 - **Create conditions + default-deny**: a USER can only create a `ProjectMember` in a project they own; creating a model with no create permission is denied.
