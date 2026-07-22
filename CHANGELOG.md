@@ -91,7 +91,7 @@ import { setupCoreSecurity } from '@appxdigital/appx-core';
 const corsOrigin = configService.get<string>('CORS_ORIGIN') ?? 'http://localhost:3000';
 setupCoreSecurity(app, { cors: { origin: corsOrigin, credentials: true } });
 ```
-- Install Helmet: `npm install helmet@^8.0.0` (applied automatically by `setupCoreSecurity`; tune with `{ helmet: {...} }`, disable with `{ helmet: false }`).
+- Helmet is applied automatically by `setupCoreSecurity` (tune with `{ helmet: {...} }`, disable with `{ helmet: false }`). It's a peer dependency, so `npm install` pulls it in for you (npm 7+ auto-installs peers) — just confirm it's present with `npm ls helmet`. Only if your package manager doesn't auto-install peers (or reports it missing) add it explicitly.
 - If you register a `ValidationPipe` with custom options, pass them through: `setupCoreSecurity(app, { validationPipe: { /* overrides */ } })`.
 - With `whitelist` + `forbidNonWhitelisted`, body properties not declared on a `class-validator` DTO are rejected (`400`). Confirm every DTO declares every field it legitimately accepts before deploying.
 - Set `CORS_ORIGIN` to your real front-end origin in production. Do not combine `'*'` with credentials — the helper throws at boot. For a public credential-less API pass `{ cors: { origin: '*', credentials: false } }`.
