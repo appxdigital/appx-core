@@ -34,7 +34,19 @@ A scalar field is **included** unless it is:
 - annotated `/// @NoWrite`,
 - annotated `/// @Role(none)`.
 
-**Relation navigation fields are excluded**; their scalar foreign keys are kept. Types map to validators: enums → `@IsEnum`, scalars → `@IsString`/`@IsInt`/`@IsBoolean`/`@IsNumber`/`@IsDateString`, `Json`/`Bytes` → `@Allow()`.
+**Relation navigation fields are excluded**; their scalar foreign keys are kept. Each field is typed to match its **Prisma model type** so a controller override type-checks, and validated accordingly:
+
+| Prisma type | DTO type | Decorator | Wire input |
+|---|---|---|---|
+| `String` / enum | `string` / enum | `@IsString` / `@IsEnum` | string |
+| `Int` / `Float` | `number` | `@IsInt` / `@IsNumber` | number |
+| `Boolean` | `boolean` | `@IsBoolean` | boolean |
+| `DateTime` | `Date` | `@Type(() => Date)` | ISO-8601 string |
+| `Decimal` | `Prisma.Decimal` | `@DecimalField()` | string **or** number |
+| `BigInt` | `bigint` | `@BigIntField()` | string **or** number |
+| `Json` / `Bytes` | `any` | `@Allow()` | any |
+
+`@DecimalField()` / `@BigIntField()` accept a string or number and coerce/validate it (invalid → `400`); prefer strings for `Decimal` (money) and large `BigInt` values to avoid JSON float-precision loss. A `BigInt` column serialises as a **string** in JSON responses (JSON has no bigint). A `Decimal` column with the GraphQL generator requires the `prisma-graphql-type-decimal` peer dependency (npm auto-installs it).
 
 > Because relations are excluded, generic CRUD endpoints accept **flat** writes (scalars + FK ids), not nested relation writes. See [Relations & nested writes](#relations--nested-writes) below.
 

@@ -19,6 +19,8 @@ import { bootFixture, BootedApp } from '../helpers/fixture-bootstrap';
 const HARDENED_PIPE = { transform: true, whitelist: true, forbidNonWhitelisted: true };
 
 // A complete, valid TypeSample create body (all required writable fields).
+// `amount` (Decimal) as a string and `big` (BigInt) as a number exercise both
+// accepted wire forms.
 const validTypeSample = () => ({
     text: 'hello',
     flag: true,
@@ -27,6 +29,8 @@ const validTypeSample = () => ({
     dueAt: new Date('2030-01-02T03:04:05.000Z').toISOString(),
     priority: 'LOW',
     meta: { a: 1 },
+    amount: '12.50',
+    big: 42,
 });
 
 describe('POST /typesamples body validation on generated CRUD', () => {
@@ -118,6 +122,8 @@ describe('POST /typesamples body validation on generated CRUD', () => {
             .set('Authorization', `Bearer ${adminJwt}`)
             .send(validTypeSample());
         expect([200, 201]).toContain(res.status);
+        // BigInt columns serialize as a string in the JSON response (not a 500).
+        expect(res.body.big).toBe('42');
 
         const row = await booted.withFreshDb((c) =>
             c.typeSample.findFirst({ where: { text: 'hello' } }),
@@ -126,5 +132,28 @@ describe('POST /typesamples body validation on generated CRUD', () => {
         expect(row.count).toBe(3);
         // @Type(() => Date) coerced the ISO string to a real Date before Prisma.
         expect(row.dueAt instanceof Date).toBe(true);
+        // @DecimalField coerced the "12.50" string to a Prisma.Decimal.
+        expect(row.amount.toString()).toBe('12.5');
+        // @BigIntField coerced the number 42 to a bigint.
+        expect(typeof row.big).toBe('bigint');
+        expect(row.big).toBe(42n);
+    });
+
+    test('a non-numeric Decimal is rejected at the HTTP layer (400)', async () => {
+        const res = await request(booted.server)
+            .post('/typesamples')
+            .set('Authorization', `Bearer ${adminJwt}`)
+            .send({ ...validTypeSample(), amount: 'not-a-number' });
+        expect(res.status).toBe(400);
+        expect(JSON.stringify(res.body)).toMatch(/amount/i);
+    });
+
+    test('a non-integer BigInt is rejected at the HTTP layer (400)', async () => {
+        const res = await request(booted.server)
+            .post('/typesamples')
+            .set('Authorization', `Bearer ${adminJwt}`)
+            .send({ ...validTypeSample(), big: 'nope' });
+        expect(res.status).toBe(400);
+        expect(JSON.stringify(res.body)).toMatch(/big/i);
     });
 });

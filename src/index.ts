@@ -26,6 +26,7 @@ export * from './common/guards/rbac.guard';
 export * from './common/guards/user-population.guard';
 export * from './modules/common.module';
 export * from './common/interceptors/prisma.interceptor';
+export * from './common/decorators/scalar-field.decorator';
 export * from './common/config/permissionsConfigTypes';
 export * from './common/config/adminConfigType';
 export * from './common/config/permissions.config.provider';

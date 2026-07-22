@@ -83,8 +83,18 @@ function isServerManagedTimestamp(field: DmmfField): boolean {
 
 /** Decision for a scalar/enum field: base validator, TS type, optional enum arg,
  * optional class-transformer `@Type(() => <transform>)` (needed when the wire
- * value must be coerced to a non-primitive before validation, e.g. ISO → Date). */
-function mapField(field: DmmfField): {validator: string; tsType: string; enumArg?: string; transform?: string} {
+ * value must be coerced to a non-primitive before validation, e.g. ISO → Date).
+ * `fieldDecorator` marks a framework decorator (imported from
+ * `@appxdigital/appx-core`, emitted as `@Name()`) that does its own coercion +
+ * validation (Decimal/BigInt); `needsPrisma` requests a `Prisma` type import. */
+function mapField(field: DmmfField): {
+    validator: string;
+    tsType: string;
+    enumArg?: string;
+    transform?: string;
+    fieldDecorator?: boolean;
+    needsPrisma?: boolean;
+} {
     if (field.kind === 'enum') {
         return {validator: 'IsEnum', tsType: field.type, enumArg: field.type};
     }
@@ -94,11 +104,18 @@ function mapField(field: DmmfField): {validator: string; tsType: string; enumArg
         case 'Boolean':
             return {validator: 'IsBoolean', tsType: 'boolean'};
         case 'Int':
-        case 'BigInt':
             return {validator: 'IsInt', tsType: 'number'};
+        case 'BigInt':
+            // Prisma types BigInt columns as `bigint`; JSON can't carry one, so
+            // `@BigIntField()` accepts a string or number and coerces it.
+            return {validator: 'BigIntField', tsType: 'bigint', fieldDecorator: true};
         case 'Float':
-        case 'Decimal':
             return {validator: 'IsNumber', tsType: 'number'};
+        case 'Decimal':
+            // Prisma types Decimal columns as `Prisma.Decimal`; `@DecimalField()`
+            // accepts a string or number and coerces it to a real Decimal so the
+            // DTO matches the model type and Prisma gets the right value.
+            return {validator: 'DecimalField', tsType: 'Prisma.Decimal', fieldDecorator: true, needsPrisma: true};
         case 'DateTime':
             // Prisma types DateTime columns as `Date`; the DTO must match so a
             // controller override (`data: UpdateXDto` vs base `Partial<X>`)
@@ -144,12 +161,15 @@ function renderScalarLines(
     validatorImports: Set<string>,
     enumImports: Set<string>,
     transformerImports: Set<string>,
+    frameworkImports: Set<string>,
 ): string[] {
     const lines: string[] = [];
     for (const field of fields) {
         const m = mapField(field);
-        validatorImports.add(m.validator);
+        if (m.fieldDecorator) frameworkImports.add(m.validator);
+        else validatorImports.add(m.validator);
         if (m.enumArg) enumImports.add(m.enumArg);
+        if (m.needsPrisma) enumImports.add('Prisma');
 
         // update / connect: everything optional. create: optional if not required or defaulted.
         const optional = mode !== 'create' || !field.isRequired || field.hasDefaultValue;
@@ -159,6 +179,9 @@ function renderScalarLines(
         let validatorDecorator: string;
         if (m.validator === 'Allow') {
             validatorDecorator = '@Allow()';
+        } else if (m.fieldDecorator) {
+            // Framework decorator handles list coercion internally — no `each`.
+            validatorDecorator = `@${m.validator}()`;
         } else {
             const args: string[] = [];
             if (m.enumArg) args.push(m.enumArg);
@@ -202,6 +225,7 @@ function renderRelationNestedWrites(
     validatorImports: Set<string>,
     enumImports: Set<string>,
     transformerImports: Set<string>,
+    frameworkImports: Set<string>,
 ): {classes: string[]; parentLines: string[]} {
     const classes: string[] = [];
     const parentLines: string[] = [];
@@ -217,11 +241,11 @@ function renderRelationNestedWrites(
 
         // create: related writable scalars minus the back-reference FK.
         const omit = backFkColumns(related, rel.relationName);
-        classes.push(renderClass(createCls, renderScalarLines(writableFields(related, omit), 'create', validatorImports, enumImports, transformerImports)));
+        classes.push(renderClass(createCls, renderScalarLines(writableFields(related, omit), 'create', validatorImports, enumImports, transformerImports, frameworkImports)));
 
         // connect: related unique fields (all optional).
         const conn = connectFields(related);
-        classes.push(renderClass(connectCls, renderScalarLines(conn, 'connect', validatorImports, enumImports, transformerImports)));
+        classes.push(renderClass(connectCls, renderScalarLines(conn, 'connect', validatorImports, enumImports, transformerImports, frameworkImports)));
 
         // nested-write: create? / connect? only.
         transformerImports.add('Type');
@@ -256,12 +280,13 @@ function renderBaseDto(className: string, model: any, mode: 'create' | 'update')
     const validatorImports = new Set<string>();
     const enumImports = new Set<string>();
     const transformerImports = new Set<string>();
+    const frameworkImports = new Set<string>();
 
-    const scalarLines = renderScalarLines(writableFields(model), mode, validatorImports, enumImports, transformerImports);
+    const scalarLines = renderScalarLines(writableFields(model), mode, validatorImports, enumImports, transformerImports, frameworkImports);
 
     let nested = {classes: [] as string[], parentLines: [] as string[]};
     if (mode === 'create') {
-        nested = renderRelationNestedWrites(model, validatorImports, enumImports, transformerImports);
+        nested = renderRelationNestedWrites(model, validatorImports, enumImports, transformerImports, frameworkImports);
     }
 
     const parentClass = renderClass(className, [...scalarLines, ...nested.parentLines]);
@@ -275,6 +300,9 @@ function renderBaseDto(className: string, model: any, mode: 'create' | 'update')
     }
     if (enumImports.size > 0) {
         importLines.push(`import { ${[...enumImports].sort().join(', ')} } from '@prisma/client';`);
+    }
+    if (frameworkImports.size > 0) {
+        importLines.push(`import { ${[...frameworkImports].sort().join(', ')} } from '@appxdigital/appx-core';`);
     }
 
     return (

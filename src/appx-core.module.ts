@@ -1,3 +1,4 @@
+import './common/bigint-serializer'; // side effect: BigInt → string in JSON output
 import {DynamicModule, Global, Module, Provider} from '@nestjs/common';
 import {PermissionsConfigProvider, PERMISSIONS_CONFIG_TOKEN} from './common/config/permissions.config.provider';
 import {PermissionsConfigType} from './common/config/permissionsConfigTypes';

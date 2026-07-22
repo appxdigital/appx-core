@@ -486,7 +486,6 @@ function createPackageJson(projectPath, projectName) {
         },
         dependencies: {
             "@appxdigital/appx-core": CORE_VERSION,
-            "helmet": "^8.0.0",
         },
         devDependencies: {
             "@nestjs/cli": "~11.0.0",

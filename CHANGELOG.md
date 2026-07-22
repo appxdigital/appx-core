@@ -14,49 +14,42 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
-## [0.2.0] — 2026-07-22
-
-The `generate` command is split into a **deploy-safe pass** and a **module wizard**, so regenerating types in CI no longer mutates your code.
-
-- **`appx-core generate`** — now regenerates only the overwrite-safe artifacts under the gitignored `src/generated/**` (Prisma client, GraphQL types, DTO **base** classes). It **no longer** writes `src/modules/**` or edits `src/app.module.ts`. Idempotent and safe for CI / postinstall / predeploy.
-- **`appx-core generate models`** — new interactive wizard that scaffolds CRUD (module/service/controller/resolver + DTO subclass) for the models you choose and registers them in `app.module.ts`, then runs the safe pass. Non-interactive forms: `appx-core generate models <Name…>` and `appx-core generate models --all`. Only models **without** an existing module are offered; if there are none it prints `No modules available to generate`.
-- Model discovery is now driven by the Prisma **DMMF** (the schema), not by scanning the GraphQL plugin's output folders.
-- The **`User`** model is framework-owned (auth already serves user endpoints; generic User CRUD is a mass-assignment surface) and is no longer scaffolded — it is never offered by the wizard.
-- Module-registration in `app.module.ts` now finds the `@Module` `imports` array's real closing bracket (bracket-matching that skips strings/comments) and **appends** there, preserving existing registration order. It no longer breaks when the array contains a nested array literal such as `ThrottlerModule.forRoot([...])` (previously new modules could be inserted into that inner array), never double-registers a module already present, and never adds a duplicate `import` line.
-- "Already has a module" is now detected by the model a module serves (`CoreController<Model>` / `CoreService<Model>`), not by folder name — so a hand-written module under a non-canonical folder (e.g. a pluralised `wearable-connections/` serving `WearableConnection`) is recognised and no duplicate is scaffolded.
-- Full reference: [`docs/generate.md`](./docs/generate.md).
-
-### Migration
-
-> **Behaviour change — a bare `appx-core generate` no longer creates modules or edits `app.module.ts`.** This is intentional (it makes the command safe to run in CI), but it means new tables are not auto-exposed.
-
-1. **Regenerating types stays the same:** keep running `appx-core generate` after every schema change — it refreshes the Prisma client, GraphQL types and DTO bases. It is now guaranteed not to touch your committed code.
-2. **To expose a new table** as CRUD, run `appx-core generate models` and pick it (or `appx-core generate models <Name>`). This is the only command that scaffolds `src/modules/**` and registers a module in `app.module.ts`.
-3. **Existing modules are unaffected** — already-scaffolded modules and their `app.module.ts` registration keep working. To reproduce the old "expose every table" behaviour in one shot, run `appx-core generate models --all`.
-4. If you relied on the generated **`/users`** CRUD, note it is no longer scaffolded (auth owns `/auth/*`). Re-create it by hand only if you genuinely need generic user CRUD; prefer a dedicated, permission-scoped endpoint.
-
-> GraphQL remains **read-only** (query + aggregate) and every scaffolded module still gets its resolver; per-module GraphQL toggling is planned for a later release.
-
----
-
 ## [0.1.123] — 2026-07-22
 
-Generated CRUD DTOs now type `DateTime` columns as `Date` (previously `string`), matching the Prisma model type so a controller override type-checks.
+Two changes: the `generate` command is split into a deploy-safe pass + a module wizard, and generated CRUD DTOs now type each scalar column to match its Prisma model type.
+
+### Generate command split
+
+Regenerating types no longer mutates your code.
+
+- **`appx-core generate`** — regenerates only the overwrite-safe artifacts under the gitignored `src/generated/**` (Prisma client, GraphQL types, DTO **base** classes). It **no longer** writes `src/modules/**` or edits `src/app.module.ts`. Idempotent and safe for CI / postinstall / predeploy.
+- **`appx-core generate models`** — new interactive wizard that scaffolds CRUD (module/service/controller/resolver + DTO subclass) for the models you choose and registers them in `app.module.ts`, then runs the safe pass. Non-interactive: `appx-core generate models <Name…>` and `--all`. Only models **without** an existing module are offered; if there are none it prints `No modules available to generate`.
+- Model discovery is driven by the Prisma **DMMF** (the schema), not by scanning the GraphQL plugin's output folders.
+- The **`User`** model is framework-owned (auth already serves user endpoints; generic User CRUD is a mass-assignment surface) and is no longer scaffolded.
+- Module-registration in `app.module.ts` finds the `@Module` `imports` array's real closing bracket (skipping strings/comments/nested arrays) and **appends** there, preserving order — it no longer breaks on a nested array literal like `ThrottlerModule.forRoot([...])`, never double-registers, and never adds a duplicate import.
+- "Already has a module" is detected by the model a module serves (`CoreController<Model>` / `CoreService<Model>`), not by folder name — so a hand-written module under a non-canonical (e.g. pluralised) folder isn't duplicated.
+- Full reference: [`docs/generate.md`](./docs/generate.md). GraphQL stays **read-only**; every scaffolded module still gets its resolver.
+
+### Generated-CRUD DTO scalar typing
+
+Generated CRUD DTOs now type each scalar column to match its Prisma model type, so a controller override type-checks:
+
+- **`DateTime` → `Date`** (was `string`), via `@Type(() => Date)`.
+- **`Decimal` → `Prisma.Decimal`** (was `number`), via the new `@DecimalField()`.
+- **`BigInt` → `bigint`** (was `number`), via the new `@BigIntField()`.
+
+`@DecimalField()` / `@BigIntField()` accept a **string or number** on the wire and coerce/validate it (bad input → `400`), so there is no API change. `BigInt` columns serialize as a **string** in JSON responses (JSON has no bigint), pairing with the string-accepting input.
 
 ### Migration
 
-If you applied the manual per-DTO `OmitType(...)` workaround to re-type a `DateTime` field as `Date` (because the generated `string` type made your controller override fail with `TS2416`), you can now **delete that workaround** and let the generated base DTO stand:
+> **Behaviour change — a bare `appx-core generate` no longer creates modules or edits `app.module.ts`.** Intentional (it makes the command CI-safe), but new tables are not auto-exposed.
 
-```ts
-// DELETE this hand-written override — the generated DTO now types `date` as Date.
-export class UpdateHabitLogDto extends OmitType(UpdateHabitLogGeneratedDto, ['date'] as const) {
-  @IsOptional() @Type(() => Date) @IsDate() date?: Date;
-}
-// Back to the plain generated subclass:
-export class UpdateHabitLogDto extends UpdateHabitLogGeneratedDto {}
-```
-
-Then regenerate DTOs (`appx-core generate`). No wire/API change: the generated field uses `@Type(() => Date)`, so it still accepts an ISO-8601 string in the request body and coerces it to a `Date` (the hardened `ValidationPipe` runs with `transform: true`). Prisma now receives a real `Date` instead of a string.
+1. Keep running `appx-core generate` after every schema change — it refreshes the Prisma client, GraphQL types and DTO bases, and is now guaranteed not to touch your committed code.
+2. **To expose a new table** as CRUD, run `appx-core generate models` and pick it (or `appx-core generate models <Name>`) — the only command that scaffolds `src/modules/**` and registers a module.
+3. **Existing modules are unaffected.** To reproduce the old "expose every table" behaviour in one shot, run `appx-core generate models --all`.
+4. If you relied on the generated **`/users`** CRUD, it is no longer scaffolded (auth owns `/auth/*`) — re-create it by hand only if you truly need generic user CRUD.
+5. **`Decimal` columns + GraphQL:** the GraphQL generator emits imports of `prisma-graphql-type-decimal` — a **peer dependency**, so `npm install` pulls it in (npm 7+ auto-installs peers); confirm with `npm ls prisma-graphql-type-decimal` if your package manager doesn't.
+6. If you hand-typed an `OmitType(...)` override to re-type a `DateTime` / `Decimal` / `BigInt` field (because the old type made your controller override fail with `TS2416`), delete it, let the generated base DTO stand, and regenerate. No wire change.
 
 ---
 

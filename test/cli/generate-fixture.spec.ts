@@ -68,6 +68,22 @@ describe('appx-core generate — real fixture output (end-to-end)', () => {
         expect(c).toMatch(/UpdateTypeSampleDto/);
     });
 
+    test('scalar columns are typed to match the Prisma model (Date / Decimal / bigint)', () => {
+        const base = fs.readFileSync(
+            path.join(SCAFFOLD, 'src/generated/dto/type-sample/update-type-sample.generated.dto.ts'),
+            'utf8',
+        );
+        // DateTime → Date via @Type(() => Date).
+        expect(base).toMatch(/@Type\(\(\) => Date\)\s*\n\s*@IsDate\(\)\s*\n\s*dueAt\?: Date;/);
+        // Decimal → Prisma.Decimal via @DecimalField().
+        expect(base).toMatch(/@DecimalField\(\)\s*\n\s*amount\?: Prisma\.Decimal;/);
+        // BigInt → bigint via @BigIntField().
+        expect(base).toMatch(/@BigIntField\(\)\s*\n\s*big\?: bigint;/);
+        // The framework + Prisma type imports are emitted.
+        expect(base).toMatch(/import \{ BigIntField, DecimalField \} from '@appxdigital\/appx-core';/);
+        expect(base).toMatch(/import \{[^}]*\bPrisma\b[^}]*\} from '@prisma\/client';/);
+    });
+
     test('create DTO emits the nested-write allowlist (create/connect only) for relations', () => {
         const base = fs.readFileSync(
             path.join(SCAFFOLD, 'src/generated/dto/project/create-project.generated.dto.ts'),
