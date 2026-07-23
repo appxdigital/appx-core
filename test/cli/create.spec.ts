@@ -206,7 +206,9 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
         const proc = spawn('node', [CLI_PATH, 'create'], {
             cwd: tmpdir,
             stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, FORCE_COLOR: '0' },
+            // Disable CLI self-update: the subprocess must not hit the registry
+            // or trigger a real global `npm install -g` during tests.
+            env: { ...process.env, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1' },
         });
 
         const answers = [
@@ -257,9 +259,11 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
         expect(jwtSecret).toMatch(/^[a-f0-9]{64}$/);
         expect(sessionSecret).not.toBe(jwtSecret);
 
-        // 6. Assert: package.json depends on @appxdigital/appx-core@<version>.
+        // 6. Assert: package.json depends on @appxdigital/appx-core, pinned to
+        // a concrete version (the usual case) or, when the CLI's channel differs
+        // from the baked library channel, a channel dist-tag (beta/latest).
         const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
-        expect(pkg.dependencies['@appxdigital/appx-core']).toMatch(/^[0-9.~^]+$/);
+        expect(pkg.dependencies['@appxdigital/appx-core']).toMatch(/^([0-9][0-9.~^-]*|beta|latest)$/);
 
         // Cleanup is fine; tmpdir gets reclaimed by the OS.
     }, 240_000);   // 4 minutes — npm install is slow on first run

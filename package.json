@@ -6,7 +6,7 @@
     "types": "dist/index.d.ts",
     "scripts": {
         "build": "tsc",
-        "build:cli": "npm --prefix cli ci",
+        "build:cli": "node scripts/sync-cli-core-version.mjs && npm --prefix cli ci",
         "build:all": "npm run build && npm run build:cli",
         "db-pull": "npx prisma db pull && prisma-case-format --table-case pascal --field-case camel --enum-case pascal --file prisma/schema.prisma",
         "test": "jest",

@@ -12,7 +12,7 @@ import {program} from 'commander';
 import inquirer from 'inquirer';
 import fs from 'fs-extra';
 import fsCore from 'fs';
-import {execSync} from 'child_process';
+import {execSync, spawn} from 'child_process';
 import path from 'path';
 import {fileURLToPath} from 'url';
 import cliProgress from 'cli-progress';
@@ -22,12 +22,50 @@ import mysql from "mysql2/promise";
 
 // Utils and data
 import {gatherFileUploadSettings, insertFileUploadConfiguration} from './utils/fileUploadConfig.js';
+import autoUpdate from './auto-update.cjs';
 import packageJson from './package.json' with {type: 'json'};
+import coreVersionInfo from './core-version.json' with {type: 'json'};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CORE_VERSION = '0.1.120';
+// The library version to pin in scaffolded projects. Baked from the repo's
+// root package.json at release/build time (see scripts/sync-cli-core-version.mjs)
+// so it tracks the library automatically instead of being hardcoded.
+const CORE_VERSION = coreVersionInfo.version;
+
+const subcommand = process.argv[2];
+
+// ─── Auto-update (phase 1): apply a pending update, then re-exec ──────
+//
+// A previous invocation may have detected a newer CLI version and staged
+// it (see the background check near the bottom of this file). Install it
+// now — foreground, output captured to ~/.appx-core/last-install.log —
+// BEFORE any command work, then re-exec into the freshly installed
+// binary so the user's command runs the new code. Deferring the install
+// to a later invocation (rather than a background `npm install -g` in
+// the running process) avoids rewriting the package directory while it's
+// being read. Skipped inside the re-exec'd child, for `appx-core update`
+// (which installs directly), and when disabled via env.
+if (
+    !process.env[autoUpdate.REEXEC_ENV_FLAG] &&
+    process.env[autoUpdate.ENV_DISABLE] !== '1' &&
+    subcommand !== 'update'
+) {
+    const result = await autoUpdate.applyPendingUpdate({
+        packageName: packageJson.name,
+        currentVersion: packageJson.version,
+    });
+    if (result.applied && result.succeeded) {
+        const child = spawn(process.argv[0], [process.argv[1], ...process.argv.slice(2)], {
+            stdio: 'inherit',
+            env: {...process.env, [autoUpdate.REEXEC_ENV_FLAG]: '1'},
+        });
+        child.on('exit', (code) => process.exit(code ?? 0));
+        child.on('error', () => process.exit(1));
+        await new Promise(() => {}); // hand the terminal to the child; never resolves
+    }
+}
 
 const phaseDurations = {
     installDependencies: 30,
@@ -468,6 +506,26 @@ async function createProject(answers, fileUploadConfigData) {
     }
 }
 
+/**
+ * The `@appxdigital/appx-core` dependency spec to write into a scaffolded
+ * project, matched to THIS CLI's release channel: a beta CLI pins the beta
+ * library, a production CLI pins the production library.
+ *
+ * The baked `CORE_VERSION` is the library version from the repo at build time.
+ * When its channel matches the CLI's, we pin it exactly (reproducible). When it
+ * doesn't (e.g. a beta CLI built while the repo's library was on a production
+ * version), we fall back to the channel's dist-tag so the project still gets the
+ * right channel — never a production project depending on a prerelease.
+ */
+function coreDependencySpec() {
+    const cliChannel = autoUpdate.inferChannel(packageJson.version);
+    const coreChannel = autoUpdate.inferChannel(CORE_VERSION);
+    if (cliChannel === 'beta') {
+        return coreChannel === 'beta' ? CORE_VERSION : 'beta';
+    }
+    return coreChannel === 'beta' ? 'latest' : CORE_VERSION;
+}
+
 function createPackageJson(projectPath, projectName) {
     const packageJsonContent = {
         name: projectName,
@@ -485,7 +543,7 @@ function createPackageJson(projectPath, projectName) {
             "db-pull": "npm run db-pull --prefix ./node_modules/appx-core"
         },
         dependencies: {
-            "@appxdigital/appx-core": CORE_VERSION,
+            "@appxdigital/appx-core": coreDependencySpec(),
         },
         devDependencies: {
             "@nestjs/cli": "~11.0.0",
@@ -601,4 +659,39 @@ function executeCommand(command, showOutput = answers?.showOutput) {
     }
 }
 
-program.parse(process.argv);
+program.command('update')
+    .description('Update the appx-core CLI to the latest version on your release channel (beta stays beta).')
+    .option('--channel <channel>', 'Install from a specific channel: beta | production')
+    .action(async (options) => {
+        const channel = options.channel === 'beta' || options.channel === 'production'
+            ? options.channel
+            : undefined;
+        if (options.channel && !channel) {
+            console.error('❌ --channel must be "beta" or "production".');
+            process.exit(1);
+        }
+        await autoUpdate.runUpdate(
+            {channel},
+            {packageName: packageJson.name, currentVersion: packageJson.version},
+        );
+    });
+
+// ─── Auto-update (phase 2): background detection ─────────────────────
+//
+// Fire-and-forget, throttled (default 30 min). Only DETECTS a newer
+// version and stages it in ~/.appx-core/state.json; the install happens
+// on the NEXT invocation via the apply step above. Never blocks the
+// current command. Skipped in the re-exec'd child, for `appx-core
+// update`, and when disabled via env.
+if (
+    !process.env[autoUpdate.REEXEC_ENV_FLAG] &&
+    process.env[autoUpdate.ENV_DISABLE] !== '1' &&
+    subcommand !== 'update'
+) {
+    void autoUpdate.checkForUpdate({
+        packageName: packageJson.name,
+        currentVersion: packageJson.version,
+    }).catch(() => {}); // best-effort; never surface a background failure
+}
+
+await program.parseAsync(process.argv);

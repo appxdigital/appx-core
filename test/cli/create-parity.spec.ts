@@ -151,6 +151,9 @@ describe('§5 — cli/cli.js create produces the committed fixture (parity)', ()
         // break other suites. Strip them so the scaffold's generated .env
         // (pointing at the isolated appx_parity) is authoritative.
         const childEnv: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: '0', CI: '1' };
+        // Disable CLI self-update: the subprocess must not hit the registry or
+        // trigger a real global `npm install -g` during the parity run.
+        childEnv.APPX_CORE_NO_AUTO_UPDATE = '1';
         delete childEnv.DATABASE_URL;
         delete childEnv.APPX_PROXY_DB_URL;
         delete childEnv.APPX_FIXTURE_DB_URL;

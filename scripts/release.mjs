@@ -39,6 +39,12 @@ if (execSync('git status --porcelain --untracked-files=no').toString().trim()) {
 const preidArg = preid ? `--preid ${preid}` : '';
 execSync(`npm version ${bump} ${preidArg} --no-git-tag-version`, {cwd: t.dir, stdio: 'inherit'});
 
+// Bake the current library version into the CLI (cli/core-version.json) so it
+// ships in this release commit — `appx-core create` pins the matching lib
+// version. Harmless for CLI releases (the lib version is unchanged); essential
+// for library releases so the CLI's pin tracks the new version.
+execSync('node scripts/sync-cli-core-version.mjs', {stdio: 'inherit'});
+
 const version = JSON.parse(readFileSync(t.pkg, 'utf8')).version;
 const tag = `${t.prefix}${version}`;
 

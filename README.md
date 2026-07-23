@@ -124,11 +124,21 @@ npm install -g @appxdigital/appx-core-cli
 npm install -g @appxdigital/appx-core-cli@beta   # CLI prerelease
 ```
 
-`appx-core create` scaffolds a project that depends on the **stable** library. To test a library prerelease in that project, install it there:
+`appx-core create` pins the library to **the CLI's own channel** — a stable CLI scaffolds a project depending on the stable library, a beta CLI (`@beta`) one depending on the beta library. To move an existing project across channels, install it there directly:
 
 ```bash
 npm install @appxdigital/appx-core@beta          # inside your project
 ```
+
+**Staying up to date (automatic).** The CLI keeps itself current. On each run it checks the registry in the background (throttled), and when a newer version is published **on your channel** it installs it before your *next* command and re-launches into the new binary — so a beta install stays on `beta`, a stable install stays on `latest`. The check never blocks your command, and a failed/offline check is silently ignored.
+
+```bash
+appx-core update                 # update now, on your current channel
+appx-core update --channel beta  # switch to the beta channel (or --channel production to switch back)
+APPX_CORE_NO_AUTO_UPDATE=1 …     # disable the background auto-update entirely
+```
+
+Install logs (only written when an update runs) go to `~/.appx-core/last-install.log`.
 
 ### 2) Create a New Project
 
