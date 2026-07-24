@@ -1,5 +1,54 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import {execSync} from 'child_process';
+
+/**
+ * Locate a binary inside the project's own `node_modules/.bin`, walking up from
+ * `cwd` so hoisted / monorepo layouts resolve too. Returns null when the project
+ * doesn't provide it (i.e. only a global install would be found on PATH).
+ */
+const findProjectBin = (bin: string, cwd: string): {exe: string; binDir: string} | null => {
+    const name = process.platform === 'win32' ? `${bin}.cmd` : bin;
+    let dir = path.resolve(cwd);
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+        const binDir = path.join(dir, 'node_modules', '.bin');
+        const exe = path.join(binDir, name);
+        if (fs.existsSync(exe)) return {exe, binDir};
+        const parent = path.dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }
+};
+
+/**
+ * Run a project-local CLI binary (e.g. `prisma`) from the PROJECT's node_modules.
+ *
+ * The `appx-core` CLI is normally installed **globally**, so the project's
+ * `node_modules/.bin` is not on PATH — a bare `prisma generate` would resolve to
+ * a global Prisma (a different version than the project's, or nothing at all).
+ * We resolve the executable inside the project and prepend its `.bin` to PATH so
+ * that anything the tool spawns — Prisma's generator binaries such as
+ * `prisma-nestjs-graphql` — also resolves from the project.
+ *
+ * Throws with an actionable message rather than silently falling back to a
+ * global install, since generating against the wrong Prisma version is exactly
+ * the failure this avoids.
+ */
+export const runProjectBin = (bin: string, args: string, cwd: string = process.cwd()): void => {
+    const found = findProjectBin(bin, cwd);
+    if (!found) {
+        throw new Error(
+            `Could not find "${bin}" in this project's node_modules. ` +
+            `Run "npm install" in the project root and try again.`,
+        );
+    }
+    execSync(`"${found.exe}" ${args}`.trim(), {
+        cwd,
+        stdio: 'inherit',
+        env: {...process.env, PATH: `${found.binDir}${path.delimiter}${process.env.PATH ?? ''}`},
+    });
+};
 
 export const kebabToPascalCase = (str: string) => {
     return str

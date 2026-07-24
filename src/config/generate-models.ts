@@ -21,8 +21,7 @@
  * It first runs the deploy-safe pass (prisma generate + DTO bases), so the
  * scaffolded resolver/controller imports resolve.
  */
-import {execSync} from 'child_process';
-import {loadAllModels, loadModels, modelFolder, moduleExists, ownedModels} from './utils';
+import {loadAllModels, loadModels, modelFolder, moduleExists, ownedModels, runProjectBin} from './utils';
 import {generateDtoBases, scaffoldDtoSubclass} from './generate-dtos';
 import {registerModulesInAppModule, scaffoldModule} from './generate-modules';
 import {scaffoldService} from './generate-services';
@@ -38,7 +37,8 @@ const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Pr
 async function main(): Promise<void> {
     // 1) Deploy-safe pass first — refresh client + GraphQL artifacts + DTO bases.
     console.log('Running Prisma Generate (client + GraphQL artifacts)...');
-    execSync('prisma generate', {stdio: 'inherit'});
+    // Project-local prisma: the CLI is usually global, so PATH has no project .bin.
+    runProjectBin('prisma', 'generate');
     generateDtoBases(loadAllModels());
 
     // 2) Candidates = non-framework models with no module yet. "Has a module"

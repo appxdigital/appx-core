@@ -14,12 +14,12 @@
  * Scaffolding CRUD modules (which mutates code) is the separate, interactive
  * `appx generate models` wizard.
  */
-import {execSync} from 'child_process';
-import {loadAllModels} from './utils';
+import {loadAllModels, runProjectBin} from './utils';
 import {generateDtoBases} from './generate-dtos';
 
 console.log('Running Prisma Generate (client + GraphQL artifacts)...');
-execSync('prisma generate', {stdio: 'inherit'});
+// Project-local prisma: the CLI is usually global, so PATH has no project .bin.
+runProjectBin('prisma', 'generate');
 
 console.log('Generating DTO base classes...');
 generateDtoBases(loadAllModels());
