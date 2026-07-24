@@ -14,6 +14,16 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.124] — 2026-07-23
+
+### Fixed
+
+- **`appx-core generate` and `generate models` now run the project's own Prisma.** Both shelled out to a bare `prisma generate`, which resolves from `PATH`. With the CLI installed **globally** the project's `node_modules/.bin` is not on `PATH`, so Prisma resolved to a *global* install — a different version than the project's — or was not found at all. The executable is now resolved inside the project (walking up from the working directory, so hoisted / monorepo layouts work), and its `.bin` is prepended to `PATH` so the generator binaries Prisma spawns (`prisma-nestjs-graphql`, …) also resolve from the project. A project with no local Prisma now fails with an actionable message instead of silently generating against a global one.
+
+Drop-in: no changes required in your project.
+
+---
+
 ## [0.1.123] — 2026-07-22
 
 Two changes: the `generate` command is split into a deploy-safe pass + a module wizard, and generated CRUD DTOs now type each scalar column to match its Prisma model type.
