@@ -14,6 +14,31 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.125] — 2026-07-29
+
+A string (uuid/cuid) `User.id` is now supported end-to-end, and the CLI's `create` gains a non-interactive mode plus far better failure diagnostics.
+
+### String `User.id` support (library)
+
+The framework was already id-type-agnostic in generic CRUD (it reads the PK type from the schema before coercing), but the auth module hardcoded `Int` in a few places — most importantly `SessionSerializer.deserializeUser`, which did `Number(userId)`: `NaN` for a uuid, so **session auth failed on every request** for string-id projects. All of it is fixed via one shared `coerceId(delegate, id)` helper (a `String` PK passes through, anything else is number-coerced):
+
+- `SessionSerializer.deserializeUser` — was `Number(userId)`.
+- `GET /auth/sessions/:userId` — was `parseInt(userId, 10)`, which silently truncates a uuid starting with digits (`'3f2a…'` → `3`, the **wrong user's sessions**).
+- `getSessionsByUserId` / `revokeRefreshTokensForUser` accept `UserId` (`string | number`, exported); the `express-session` `SessionData.userId` augmentation is widened the same way.
+- `coerceId` and `UserId` are exported from the package root for consumer overrides.
+
+**Using a string id is a schema-only change** — set `User.id String @default(uuid())` and switch `Session.userId` / `UserRefreshToken.userId` to `String` with it. No code overrides needed. See the new section in [`docs/authentication.md`](./docs/authentication.md#using-a-string-uuid--cuid-userid). Int-keyed projects are unaffected (drop-in).
+
+### CLI (`@appxdigital/appx-core-cli`)
+
+- **Non-interactive `create`.** `appx-core create --yes` (or any value flag) skips the wizard — for CI, scripts, and non-TTY contexts. Unset values take the wizard's defaults; the database check fails fast with the reason instead of re-prompting. Flags: `--name`, `--db-provider`, `--db-host`, `--db-port`, `--db-user`, `--db-password`, `--db-name`, `--show-output`.
+- **`create` failures now show the real error.** Hidden commands piped their output to nowhere, so an init failure surfaced as an opaque stack trace with `stdout/stderr: null`; the tail of the failing command's output is now printed.
+- **Prisma is preflighted and invoked from the project.** After `npm install`, `create` verifies the project's own `node_modules/.bin/prisma` exists (an `~/.npmrc` with `legacy-peer-deps`/`omit=peer` silently skips the peer deps that carry it) and runs every migrate step via that explicit path — never a `PATH` lookup.
+
+Drop-in: no changes required in existing projects.
+
+---
+
 ## [0.1.124] — 2026-07-23
 
 ### Fixed

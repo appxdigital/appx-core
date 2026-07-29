@@ -31,6 +31,26 @@ Prereleases are excluded from normal semver range resolution, so a project on
 
 ---
 
+## [0.1.125-beta.0] — library
+
+Prerelease of the string-`User.id` support that ships in `[0.1.125]` — see
+[`CHANGELOG.md`](./CHANGELOG.md#01125--2026-07-29) for the full notes. Same
+content as the production cut; published to `beta` so a uuid-keyed project can
+validate before promoting.
+
+- Session auth, `GET /auth/sessions/:userId`, and refresh-token revocation now
+  coerce ids to the `User.id` type from your schema (`coerceId`, exported).
+- `UserId` (`string | number`) exported; `SessionData.userId` widened.
+- Int-keyed projects: drop-in, no changes.
+
+## [cli-1.0.25-beta.0] — CLI
+
+Prerelease of the CLI changes in `[0.1.125]`'s CLI section: non-interactive
+`create --yes` (+ per-answer flags), failure output no longer swallowed, prisma
+preflighted and run from the project's own `node_modules/.bin`. Also includes
+the self-update mechanism and channel-matched library pinning shipped in
+cli-1.0.23.
+
 ## [0.1.121-beta.16] — unreleased
 
 **Fix — `AuthModule.forRoot({ controller: false })` now actually omits the
