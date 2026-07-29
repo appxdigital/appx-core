@@ -1,5 +1,6 @@
-import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
+import {Injectable, NotFoundException} from '@nestjs/common';
 import {handleError} from "../../common/utils/error-handler";
+import {coerceId} from "../../common/utils/coerce-id.util";
 import type {PrismaClient} from '.prisma/client';
 
 @Injectable()
@@ -101,16 +102,11 @@ export class CoreService<T> {
     }
 
     /*
-      * Generates a 'where' clause based on the model's ID field. Depending on the type of the ID field, it may convert the ID to a number.
+      * Generates a 'where' clause based on the model's ID field. Coercion to the
+      * PK's concrete type (String passes through, otherwise Number) is centralised
+      * in `coerceId` and shared with the auth module.
      */
     private _generateWhereFromIdField(id: string | number): any {
-        let idField = this.modelDelegate.fields.id;
-        if (!idField) {
-            throw new BadRequestException(`Model does not have an 'id' field`);
-        }
-        if (idField.typeName != "String") {
-            id = Number(id);
-        }
-        return {id: id};
+        return {id: coerceId(this.modelDelegate, id)};
     }
 }

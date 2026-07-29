@@ -7,6 +7,8 @@ import {ConfigService} from '@nestjs/config';
 import {Request, Response} from 'express';
 import {JwtService, JwtSignOptions} from "@nestjs/jwt";
 import {createId} from "@paralleldrive/cuid2";
+import {coerceId} from '../../common/utils/coerce-id.util';
+import {UserId} from '../../common/interfaces/user.interface';
 // @ts-ignore
 import {User} from "@prisma/client";
 
@@ -171,9 +173,9 @@ export class AuthService {
         }
     }
 
-    async getSessionsByUserId(userId: number) {
+    async getSessionsByUserId(userId: UserId) {
         return this.prisma.session.findMany({
-            where: {userId, expiresAt: {gte: new Date()}},
+            where: {userId: coerceId(this.prisma.user as any, userId), expiresAt: {gte: new Date()}},
         });
     }
 
@@ -284,9 +286,9 @@ export class AuthService {
         return {access_token: access_token, refresh_token: refresh_token, user: userResult};
     }
 
-    async revokeRefreshTokensForUser(userId: number): Promise<void> {
+    async revokeRefreshTokensForUser(userId: UserId): Promise<void> {
         await this.prisma.userRefreshToken.updateMany({
-                where: {userId: userId, revokedAt: null},
+                where: {userId: coerceId(this.prisma.user as any, userId), revokedAt: null},
                 data: {revokedAt: new Date()},
             },
             // @ts-ignore

@@ -22,6 +22,9 @@ declare global {
 
 declare module 'express-session' {
     interface SessionData {
-        userId: number;
+        // string | number so string-keyed (uuid/cuid) User ids fit. This is a
+        // global augmentation shipped by the package, so a narrower `number`
+        // would land in every consumer's type space and block string-id adopters.
+        userId: string | number;
     }
 }

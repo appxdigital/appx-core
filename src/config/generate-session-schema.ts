@@ -18,6 +18,21 @@ const doesSessionModelExist = (): boolean => {
 };
 
 /**
+ * Read the type of `User.id` from schema.prisma so the generated `Session.userId`
+ * foreign key matches it. A consumer who changes `User.id` to `String` (uuid/cuid)
+ * must not have an `Int` FK written back by tooling. Defaults to `Int` when the
+ * User model or its id can't be found.
+ */
+const getUserIdType = (): string => {
+    if (!fs.existsSync(schemaPath)) return 'Int';
+    const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
+    const userModel = schemaContent.match(/model\s+User\s*{[\s\S]*?}/i);
+    if (!userModel) return 'Int';
+    const idField = userModel[0].match(/^\s*id\s+(\w+)/m);
+    return idField ? idField[1] : 'Int';
+};
+
+/**
  * Ensure that the session schema exists if it is not already defined in schema.prisma
  */
 const ensureSessionSchemaExists = () => {
@@ -29,13 +44,14 @@ const ensureSessionSchemaExists = () => {
     if (!fs.existsSync(sessionSchemaPath)) {
         console.log('Session schema not found in session.prisma. Creating it...');
 
+        const userIdType = getUserIdType();
         const sessionSchemaContent = `
       model Session {
         id        String   @id
         sid       String   @unique
         data      String
         expiresAt DateTime
-        userId    Int?
+        userId    ${userIdType}?
       }
     `;
 

@@ -218,3 +218,43 @@ exported from `@appxdigital/appx-core`. To override inner functionality:
 
 If a class you need to extend isn't exported, that's a framework gap — open it
 rather than deep-importing from `dist/`.
+
+## Using a string (UUID / cuid) `User.id`
+
+The scaffold defaults to `User.id Int @default(autoincrement())`, but a **string
+primary key is fully supported** — teams migrating in from Supabase, Firebase,
+Hasura, etc. usually keep their existing UUIDs. The framework reads the id's
+type from your schema and coerces ids to it at the data-access boundary
+(`coerceId`), so generic CRUD, sessions, and the auth module all handle a string
+`User.id` without any override.
+
+To use it, change the primary key **and the two foreign keys that reference it**
+together — they must match:
+
+```prisma
+model User {
+  id String @id @default(uuid())   // or @default(cuid())
+  // …
+}
+
+model Session {
+  // …
+  userId String?                    // was Int?
+}
+
+model UserRefreshToken {
+  // …
+  userId String                     // was Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+```
+
+That's the whole change — no code overrides are required. A `prisma db pull`
+against an existing UUID-keyed database already emits `String @id`, so the pulled
+schema and the framework agree.
+
+> **Why it's just the schema:** ids arrive over HTTP and in sessions as strings.
+> The framework never hardcodes `Number(id)` — it converts based on the PK type,
+> so a `String` id passes through untouched while an `Int` id is still parsed.
+> Accept a user id as `UserId` (`string | number`) in your own signatures if you
+> extend the auth service; it's exported from the package root.

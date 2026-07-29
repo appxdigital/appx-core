@@ -77,7 +77,10 @@ export class AuthController {
         if (req.user?.role !== 'ADMIN') {
             throw new ForbiddenException('Access denied.');
         }
-        const sessions = await this.authService.getSessionsByUserId(parseInt(userId, 10));
+        // Pass the raw param through; the service coerces it to the User PK's
+        // actual type. `parseInt('3f2a…', 10)` was `3` — a silent wrong-user
+        // lookup for uuid ids — while `parseInt('f3a2…')` was `NaN`.
+        const sessions = await this.authService.getSessionsByUserId(userId);
         return {sessions};
     }
 

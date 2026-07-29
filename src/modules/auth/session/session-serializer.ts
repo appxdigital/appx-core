@@ -1,6 +1,7 @@
 import {Injectable} from '@nestjs/common';
 import {PassportSerializer} from '@nestjs/passport';
 import {PrismaService} from '../../../prisma/prisma.service';
+import {coerceId} from '../../../common/utils/coerce-id.util';
 
 @Injectable()
 export class SessionSerializer extends PassportSerializer {
@@ -18,7 +19,10 @@ export class SessionSerializer extends PassportSerializer {
         }
         try {
             const user = await this.prisma.user.findFirstOrThrow({
-                where: {id: Number(userId)},
+                // Coerce to the User PK's actual type. `Number(userId)` here made
+                // session auth fail closed for string (uuid/cuid) ids — Number of
+                // a uuid is NaN, so findFirstOrThrow threw on every request.
+                where: {id: coerceId(this.prisma.user as any, userId)},
                 select: {
                     id: true,
                     role: true,
