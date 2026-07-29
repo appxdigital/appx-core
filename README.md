@@ -147,6 +147,17 @@ appx-core create
 cd <your-project>
 ```
 
+**Non-interactive (CI / scripts).** Passing `--yes` — or any value flag — skips the wizard entirely; anything not given uses the wizard's default. No prompt is ever opened, so it's safe without a TTY. The database check still runs and fails fast with the reason instead of re-prompting.
+
+```bash
+appx-core create --yes \
+  --name my-app \
+  --db-provider mysql --db-host 127.0.0.1 --db-port 3306 \
+  --db-user root --db-password secret --db-name my_app_db
+```
+
+Flags: `--name`, `--db-provider mysql|postgresql`, `--db-host`, `--db-port`, `--db-user`, `--db-password`, `--db-name`, `--show-output`. File upload isn't configured on this path — run `appx-core setup:fileupload` inside the project afterwards.
+
 ### 3) Configure Environment
 
 `appx-core create` **already writes a `.env`** at the project root, with secure

@@ -15,7 +15,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
+import { spawn, spawnSync, execSync } from 'child_process';
 import * as os from 'os';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -135,6 +135,19 @@ describe('cli/cli.js — scaffold template contract', () => {
         expect(cli).toMatch(/prismaBin.*migrate dev --name init --create-only/);
         expect(cli).not.toMatch(/executeCommand\(`prisma /);
         expect(cli).toMatch(/existsSync\(prismaBin\)/);
+    });
+
+    test('create exposes the non-interactive flags (--yes + every wizard answer)', () => {
+        const cli = fs.readFileSync(CLI_PATH, 'utf8');
+        for (const flag of ['--yes', '--name <name>', '--db-provider <provider>', '--db-host <host>',
+                            '--db-port <port>', '--db-user <user>', '--db-password <password>',
+                            '--db-name <name>', '--show-output']) {
+            expect(cli).toContain(`'${flag}'`);
+        }
+        // The non-interactive path must never open an inquirer prompt.
+        expect(cli).toMatch(/async function createNonInteractive/);
+        expect(cli.slice(cli.indexOf('async function createNonInteractive'),
+                         cli.indexOf('async function createProject'))).not.toMatch(/inquirer/);
     });
 
     test('scaffold .env.template (post-rename: .env) has zero hard-coded secrets', () => {
@@ -295,6 +308,113 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
  * traversal attempt (we don't want to write to /tmp/escape) but pins the validation
  * gap so a future fix flips it.
  */
+/**
+ * Non-interactive create (`--yes` / flags). Fast tests: validation and the
+ * fail-fast DB check run in seconds with stdin closed — proving no prompt can
+ * hang a non-TTY run. The full-project path is covered by the E2E below.
+ */
+describe('cli/cli.js create --yes — non-interactive validation (fast)', () => {
+    const runCreate = (args: string[], cwd: string) =>
+        spawnSync('node', [CLI_PATH, 'create', ...args], {
+            cwd,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],   // stdin closed: a prompt would fail, not hang
+            env: { ...process.env, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1' },
+            timeout: 60_000,
+        });
+
+    test('rejects an unknown --db-provider with exit 1 and a clear message', () => {
+        const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-ni-'));
+        const res = runCreate(['--yes', '--db-provider', 'oracle'], tmpdir);
+        expect(res.status).toBe(1);
+        expect(res.stdout + res.stderr).toMatch(/--db-provider must be "mysql" or "postgresql"/);
+    });
+
+    test('rejects a non-numeric --db-port with exit 1', () => {
+        const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-ni-'));
+        const res = runCreate(['--yes', '--db-port', 'abc'], tmpdir);
+        expect(res.status).toBe(1);
+        expect(res.stdout + res.stderr).toMatch(/--db-port must be a number/);
+    });
+
+    test('an unreachable database fails fast with the reason — no prompt, no scaffold', () => {
+        const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-ni-'));
+        // Port 1 refuses immediately; the wizard would loop back into a prompt,
+        // the non-interactive path must exit 1 with the checkDb reason.
+        const res = runCreate(['--yes', '--db-host', '127.0.0.1', '--db-port', '1'], tmpdir);
+        expect(res.status).toBe(1);
+        expect(res.stdout + res.stderr).toMatch(/Database check failed/);
+        expect(fs.readdirSync(tmpdir)).toEqual([]);   // nothing was scaffolded
+    });
+});
+
+describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
+    const fixtureUrl = process.env.APPX_FIXTURE_DB_URL;
+    // mysql-only, same as the wizard E2E (and it needs the host mysql client
+    // to create the one-off database — skips gracefully without it).
+    const isMysql = (process.env.DB_PROVIDER || 'mysql').toLowerCase().startsWith('mysql');
+    const itOrSkip = fixtureUrl && isMysql ? test : test.skip;
+
+    itOrSkip('creates a complete project from flags alone, no TTY', async () => {
+        const u = new URL(fixtureUrl!);
+        const dbHost = u.hostname;
+        const dbPort = u.port;
+        const dbUser = decodeURIComponent(u.username);
+        const dbPassword = decodeURIComponent(u.password);
+        const dbName = `appx_ni_create_${Date.now()}`;
+        try {
+            execSync(
+                `mysql -h${dbHost} -P${dbPort} -u${dbUser} -p${dbPassword} -e "CREATE DATABASE ${dbName};"`,
+                { stdio: 'pipe' },
+            );
+        } catch {
+            // eslint-disable-next-line no-console
+            console.warn('[cli-create-ni] mysql client not on PATH — skipping E2E');
+            return;
+        }
+
+        const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-ni-e2e-'));
+        const childEnv: NodeJS.ProcessEnv = {
+            ...process.env, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1',
+        };
+        // Same isolation as the wizard E2E: don't let the parent's DATABASE_URL
+        // leak into the child's prisma migrate.
+        delete childEnv.DATABASE_URL;
+        delete childEnv.APPX_PROXY_DB_URL;
+        delete childEnv.APPX_FIXTURE_DB_URL;
+        delete childEnv.APPX_PARITY_DB_URL;
+
+        const res = spawnSync('node', [
+            CLI_PATH, 'create', '--yes',
+            '--name', 'ni-target',
+            '--db-provider', 'mysql',
+            '--db-host', dbHost,
+            '--db-port', dbPort,
+            '--db-user', dbUser,
+            '--db-password', dbPassword,
+            '--db-name', dbName,
+        ], {
+            cwd: tmpdir,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],   // no TTY at all
+            env: childEnv,
+            timeout: 220_000,
+        });
+
+        if (res.status !== 0) {
+            throw new Error(`non-interactive create exited ${res.status}.\n${(res.stdout + res.stderr).slice(-3000)}`);
+        }
+
+        const projectPath = path.join(tmpdir, 'ni-target');
+        for (const f of ['package.json', 'src/main.ts', 'src/app.module.ts', 'prisma/schema.prisma', '.env']) {
+            expect(fs.existsSync(path.join(projectPath, f))).toBe(true);
+        }
+        // Secrets are per-run random hex, exactly like the wizard path.
+        const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
+        expect(env.match(/SESSION_SECRET="([^"]+)"/)?.[1]).toMatch(/^[a-f0-9]{64}$/);
+    }, 240_000);
+});
+
 describe('cli/cli.js — projectName validation', () => {
     test('createProject only strips spaces from projectName — no path-traversal validation', () => {
         const cli = fs.readFileSync(CLI_PATH, 'utf8');

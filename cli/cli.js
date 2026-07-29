@@ -98,10 +98,28 @@ let progressBar;
 let remainingETA = 0;
 program
     .command('create')
-    .description('Create a new AppX Core project')
-    .action(() => {
-        console.log('Starting AppX Core...');
-        promptUser();
+    .description('Create a new AppX Core project (wizard by default; any flag or --yes switches to non-interactive)')
+    .option('--yes', 'Non-interactive: skip the wizard, use defaults for anything not given via flags')
+    .option('--name <name>', 'Project name (default: nestjs-project)')
+    .option('--db-provider <provider>', 'Database provider: mysql | postgresql (default: mysql)')
+    .option('--db-host <host>', 'Database host (default: 127.0.0.1)')
+    .option('--db-port <port>', 'Database port (default: 3306 for mysql, 5432 for postgresql)')
+    .option('--db-user <user>', 'Database user (default: root)')
+    .option('--db-password <password>', 'Database password (default: empty)')
+    .option('--db-name <name>', 'Database name (default: generic)')
+    .option('--show-output', 'Show full command output instead of the progress bar')
+    .action(async (options) => {
+        // Any value-bearing flag (or --yes) means the caller is scripting this —
+        // never open the wizard, and never touch a prompt without a TTY.
+        const nonInteractive = !!options.yes ||
+            ['name', 'dbProvider', 'dbHost', 'dbPort', 'dbUser', 'dbPassword', 'dbName']
+                .some((k) => options[k] !== undefined);
+        if (nonInteractive) {
+            await createNonInteractive(options);
+        } else {
+            console.log('Starting AppX Core...');
+            promptUser();
+        }
     });
 
 function coreGenerate(showOutput) {
@@ -384,6 +402,55 @@ async function promptUser() {
     } catch (error) {
         console.error('Error prompting user:', error);
     }
+}
+
+/**
+ * Non-interactive `create` — for CI, scripts, and any non-TTY context. Every
+ * wizard answer has a flag; anything not given takes the wizard's default. No
+ * inquirer prompt is ever opened, so a missing value can never hang the run.
+ * The database check still runs, but failure exits with the reason instead of
+ * looping back into a prompt. File upload isn't configured on this path — run
+ * `appx-core setup:fileupload` inside the project afterwards.
+ */
+async function createNonInteractive(options) {
+    const dbProvider = options.dbProvider ?? 'mysql';
+    if (!['mysql', 'postgresql'].includes(dbProvider)) {
+        console.error(`❌ --db-provider must be "mysql" or "postgresql" (got "${dbProvider}").`);
+        process.exit(1);
+    }
+    const dbPort = options.dbPort ?? (dbProvider === 'mysql' ? '3306' : '5432');
+    if (Number.isNaN(Number(dbPort))) {
+        console.error(`❌ --db-port must be a number (got "${dbPort}").`);
+        process.exit(1);
+    }
+
+    const answers = {
+        projectName: options.name ?? 'nestjs-project',
+        dbProvider,
+        dbHost: options.dbHost ?? '127.0.0.1',
+        dbPort: String(dbPort),
+        dbUser: options.dbUser ?? 'root',
+        dbPassword: options.dbPassword ?? '',
+        dbName: options.dbName ?? 'generic',
+        showOutput: !!options.showOutput,
+        configureFileUpload: false,
+    };
+
+    // Same gate as the wizard (empty, reachable database) — but fail fast with
+    // the reason instead of re-prompting.
+    try {
+        const result = await checkDb(answers);
+        if (!result.ok) {
+            console.error(`❌ Database check failed: ${result.reason}`);
+            process.exit(1);
+        }
+    } catch (err) {
+        console.error(`❌ Database check failed: ${err.message}`);
+        process.exit(1);
+    }
+
+    remainingETA = calculateTotalETA();
+    await createProject(answers, {});
 }
 
 async function createProject(answers, fileUploadConfigData) {
