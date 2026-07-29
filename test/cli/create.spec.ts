@@ -118,6 +118,25 @@ describe('cli/cli.js — scaffold template contract', () => {
         expect(appModule).not.toMatch(/NODE_ENV\s*\|\|\s*['"]development['"]/);
     });
 
+    test('create init-resilience: output captured, local prisma bin, no --logevel typo', () => {
+        const cli = fs.readFileSync(CLI_PATH, 'utf8');
+
+        // Hidden-mode failures must capture stdout/stderr (piped) so the real
+        // error is printed — stdio:'ignore' in executeCommand made every init
+        // failure opaque (stdout/stderr: null in the thrown error).
+        expect(cli).toMatch(/\['ignore', 'pipe', 'pipe'\]/);
+
+        // npm quieting flag: --logevel was a typo npm silently ignored.
+        expect(cli).toContain('--loglevel=error');
+        expect(cli).not.toContain('--logevel');
+
+        // prisma must be invoked via the project's own bin (preflighted after
+        // npm install), never resolved from whatever PATH happens to hold.
+        expect(cli).toMatch(/prismaBin.*migrate dev --name init --create-only/);
+        expect(cli).not.toMatch(/executeCommand\(`prisma /);
+        expect(cli).toMatch(/existsSync\(prismaBin\)/);
+    });
+
     test('scaffold .env.template (post-rename: .env) has zero hard-coded secrets', () => {
         // All secret-bearing values must be {{KEY}} placeholders, not literals.
         const envTpl = fs.readFileSync(path.join(SCAFFOLD_DIR, '.env.template'), 'utf8');

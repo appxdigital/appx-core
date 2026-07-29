@@ -444,12 +444,31 @@ async function createProject(answers, fileUploadConfigData) {
 
         // Install dependencies
         createPackageJson(projectPath, projectName);
-        executeCommand('npm --logevel=error install', answers.showOutput);
+        executeCommand('npm --loglevel=error install', answers.showOutput);
         incrementProgress(answers?.showOutput, "installDependencies");
 
-        // Update PATH to include local node_modules/.bin
+        // Update PATH to include local node_modules/.bin (Prisma spawns
+        // generator binaries like prisma-nestjs-graphql that resolve from it).
         const localBinPath = path.join(projectPath, 'node_modules', '.bin');
         process.env.PATH = `${localBinPath}${path.delimiter}${process.env.PATH}`;
+
+        // Preflight: prisma must have been installed into the project. It arrives
+        // as a peer dependency of @appxdigital/appx-core, which npm >= 7 installs
+        // automatically — but an ~/.npmrc with `legacy-peer-deps` / `omit=peer`,
+        // or an old npm, silently skips peers and every prisma step below would
+        // fail with an opaque error. Fail here, with the actual cause.
+        const prismaBin = path.join(localBinPath, process.platform === 'win32' ? 'prisma.cmd' : 'prisma');
+        if (!fsCore.existsSync(prismaBin)) {
+            const npmVersion = (() => {
+                try { return execSync('npm --version', {stdio: ['ignore', 'pipe', 'ignore']}).toString().trim(); }
+                catch { return 'unknown'; }
+            })();
+            throw new Error(
+                `prisma was not installed into the project (expected ${prismaBin}).\n` +
+                `It is a peer dependency of @appxdigital/appx-core; npm installs peers automatically since v7 (yours: ${npmVersion}, project requires >= 10).\n` +
+                `Check that your npm config does not set "legacy-peer-deps" or "omit=peer" (npm config list), then re-run in an empty directory.`
+            );
+        }
 
         // Create Core project structure
         setupProjectStructure(projectPath, project_config);
@@ -462,8 +481,9 @@ async function createProject(answers, fileUploadConfigData) {
 
         incrementProgress(answers?.showOutput, "setupProjectStructure");
 
-        // Create prisma migration file
-        executeCommand(`prisma migrate dev --name init --create-only`, answers?.showOutput);
+        // Create prisma migration file. Invoke the project's own prisma by
+        // explicit path — never whatever `prisma` happens to be on PATH.
+        executeCommand(`"${prismaBin}" migrate dev --name init --create-only`, answers?.showOutput);
         incrementProgress(answers?.showOutput, "createPrismaMigration");
 
         // Generate Core Models
@@ -483,7 +503,7 @@ async function createProject(answers, fileUploadConfigData) {
         incrementProgress(answers?.showOutput, "gitInit");
 
         // Migrate database
-        executeCommand(`prisma migrate dev`, answers?.showOutput);
+        executeCommand(`"${prismaBin}" migrate dev`, answers?.showOutput);
 
         incrementProgress(answers?.showOutput, "migrateDatabase");
 
@@ -494,9 +514,11 @@ async function createProject(answers, fileUploadConfigData) {
 
     } catch (error) {
         console.error('❌ An error occurred during project creation:', error.message);
-        if (fs.existsSync(projectPath)) {
-            //console.log('🧹 Cleaning up incomplete project files...');
-            //fs.removeSync(projectPath);
+        // Deliberately no automatic cleanup: the partial project is often what
+        // you need to diagnose the failure. But `create` requires an empty
+        // directory, so say what a retry needs.
+        if (fs.existsSync(projectPath) && fs.readdirSync(projectPath).length > 0) {
+            console.error(`🧹 A partial project remains in ${projectPath} — inspect it if useful, then remove it (or pick another directory) before retrying.`);
         }
         console.error('🚫 Project creation aborted due to the above error.');
         if (!showOutput && progressBar) {
@@ -649,12 +671,21 @@ function incrementProgress(showOutput, phase) {
     }
 }
 
-function executeCommand(command, showOutput = answers?.showOutput) {
-    const options = showOutput ? {stdio: 'inherit'} : {stdio: 'ignore'};
+function executeCommand(command, showOutput = false) {
+    if (showOutput) {
+        execSync(command, {stdio: 'inherit'});
+        return;
+    }
+    // Hidden mode: CAPTURE output instead of discarding it, so a failure can
+    // show the underlying error. stdio:'ignore' made failures opaque — the
+    // thrown error carried stdout/stderr: null and users saw only a stack trace.
     try {
-        execSync(command, options);
+        execSync(command, {stdio: ['ignore', 'pipe', 'pipe']});
     } catch (error) {
-        console.error(`Failed to execute command: ${command}`, error);
+        const tail = (buf) => (buf ? buf.toString().trim().split('\n').slice(-20).join('\n') : '');
+        console.error(`\n❌ Command failed: ${command}`);
+        const details = tail(error.stderr) || tail(error.stdout);
+        if (details) console.error(details);
         throw error;
     }
 }
