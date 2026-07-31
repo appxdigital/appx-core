@@ -77,7 +77,7 @@ describe('Create conditions + default-deny (ProjectMember / Tenant)', () => {
 
     test("USER cannot create a ProjectMember in a project they don't own → 403", async () => {
         const res = await request(booted.server)
-            .post('/projectmembers')
+            .post('/project-members')
             .set('Authorization', `Bearer ${bobJwt}`)
             .send({ projectId: projectAlice.id, userId: bob.id, role: 'manager' });
         expect(res.status).toBe(403);
@@ -90,7 +90,7 @@ describe('Create conditions + default-deny (ProjectMember / Tenant)', () => {
 
     test('USER can create a ProjectMember in a project they own → 201', async () => {
         const res = await request(booted.server)
-            .post('/projectmembers')
+            .post('/project-members')
             .set('Authorization', `Bearer ${bobJwt}`)
             .send({ projectId: projectBob.id, userId: bob.id, role: 'manager' });
         expect([200, 201]).toContain(res.status);

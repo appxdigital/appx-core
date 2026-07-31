@@ -64,6 +64,26 @@ export const pascalToKebabCase = (str: string) => {
         .toLowerCase();
 };
 
+/**
+ * The HTTP route prefix for a model's generated controller: the kebab-case model
+ * name plus a plural 's'.
+ *
+ *   AlbumMember     → album-members
+ *   PublishSettings → publish-settings   (already ends in 's' — not doubled)
+ *   Tenant          → tenants
+ *
+ * Kebab-case so the route matches the file names this generator emits
+ * (`album-member.controller.ts`) instead of running the words together.
+ *
+ * Deliberately NOT a pluralization engine — no English -ies/-es rules, since
+ * model names here are not necessarily English. The only guard is against
+ * emitting a doubled 's'.
+ */
+export const modelRoutePath = (name: string): string => {
+    const kebab = pascalToKebabCase(name);
+    return kebab.endsWith('s') ? kebab : `${kebab}s`;
+};
+
 export const createFileIfNotExists = (filePath: string, content: string) => {
     console.log(`Creating ${filePath}...`);
     if (!fs.existsSync(filePath)) {

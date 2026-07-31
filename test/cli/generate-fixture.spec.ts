@@ -36,7 +36,7 @@ describe('appx-core generate — real fixture output (end-to-end)', () => {
 
     test('type-sample.controller.ts wires CoreController<TypeSample> with the right entity name and route', () => {
         const c = fs.readFileSync(path.join(SCAFFOLD, 'src/modules/type-sample/type-sample.controller.ts'), 'utf8');
-        expect(c).toMatch(/@Controller\('typesamples'\)/);
+        expect(c).toMatch(/@Controller\('type-samples'\)/);
         expect(c).toMatch(/extends CoreController<TypeSample>/);
         expect(c).toMatch(/static get entityName\(\):\s*string\s*\{[\s\S]*return\s*'TypeSample'/);
     });

@@ -1,5 +1,5 @@
 import * as path from 'path';
-import {createFileIfNotExists, modelFolder} from './utils';
+import {createFileIfNotExists, modelFolder, modelRoutePath} from './utils';
 
 const modulesOutputPath = path.join(process.cwd(), 'src/modules');
 
@@ -16,7 +16,7 @@ import { CoreController, Permission } from '@appxdigital/appx-core';
 import { Create${model}Dto } from './dto/create-${folder}.dto';
 import { Update${model}Dto } from './dto/update-${folder}.dto';
 
-@Controller('${model.toLowerCase()}s')
+@Controller('${modelRoutePath(model)}')
 export class ${model}Controller extends CoreController<${model}> {
   constructor(protected readonly service: ${model}Service) {
     super(service);

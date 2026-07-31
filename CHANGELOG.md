@@ -14,6 +14,27 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.126] — 2026-07-31
+
+### Fixed
+
+- **A freshly scaffolded project now boots.** `cli/scaffold/src/app.module.ts` never imported the `PrismaModule` it ships, and **no framework module provides `PrismaService`** — so `AuthModule` (and the admin module) had an unresolvable dependency and a brand-new project failed at startup with `UnknownDependenciesException`. It only appeared to work once `generate models` had been run, because generated modules import that `@Global()` module as a side effect. The scaffold now imports it explicitly. **Scaffold-only** — existing projects already register it (directly or via a generated module) and need no change.
+
+### Changed
+
+- **Generated controller routes are kebab-case.** `@Controller()` prefixes were `model.toLowerCase() + 's'`, which ran words together and doubled a trailing `s` (`AlbumMember` → `albummembers`, `PublishSettings` → `publishsettingss`). They now match the file names the same command generates: `album-members`, `publish-settings`, `type-samples`. No English pluralization rules are applied (model names are not necessarily English) — the kebab-cased name gets an `s` unless it already ends in one.
+
+  > **Only affects newly generated controllers.** Generated controllers are hand-owned (written once, never overwritten), so existing routes are untouched and no deployed API changes. A project that generates *new* modules after upgrading will have both styles side by side; rename the older `@Controller()` prefixes by hand if you want consistency.
+
+### Documentation
+
+- **`permissions.md`** gains a "migrating from row-level security" callout — transcribing an RLS `INSERT` policy that checks a joined table (`create: {conditions: {album: …}}`) is a boot error here, because create conditions judge the created model's own scalar fields only and everything crossing a relation belongs to `connect`.
+- **`setUserIdField` and `connect` documented together.** A server-set owner FK still needs a `connect` rule; the docs now show the relation-scoped self-connect (`relations.owner.connect: {conditions: {id: '$USER_ID'}}`) and explain why that is preferable to a blanket `connect: 'ALL'` on the target. The boot validator emits this same targeted hint when the offending column is the one named by `setUserIdField`.
+
+Drop-in: no changes required in existing projects.
+
+---
+
 ## [0.1.125] — 2026-07-29
 
 A string (uuid/cuid) `User.id` is now supported end-to-end, and the CLI's `create` gains a non-interactive mode plus far better failure diagnostics.

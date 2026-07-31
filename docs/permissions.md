@@ -59,6 +59,8 @@ Shape: `PermissionsConfig[Model][Role][action]`, where each `action` value is ei
 
 > `aggregate` is **not** a supported permission action yet — see [limitations.md](./limitations.md).
 
+> **Migrating from row-level security (Supabase/Postgres RLS)?** Read this section before transcribing your policies. An RLS `INSERT` policy routinely checks a *joined* table (`album.owner = auth.uid()`), so the natural first attempt is `create: {conditions: {album: canEditAlbum}}` — **that is a boot error here.** A `create` condition may only reference the created model's **own scalar fields**; everything that crosses a relation belongs in the [`connect`](#the-connect-action--authorizes-every-relationship-a-write-establishes) action instead. The split is deliberate: "may this row exist with these values" and "may this caller attach it to *that* row" are separate questions, and the second one is checked against the target's rule.
+
 ### The `connect` action — authorizes every relationship a write establishes
 
 A `create` condition judges the created model's **own scalar fields only** — it never reaches across a relation. All relationship authorization lives in the `connect` action. Whenever a **write** links a row to model `T` — a `create` that sets the association, **or an `update` that re-points a foreign key** — the framework checks **`T`'s `connect` rule**, a **dedicated** action separate from reads (*being able to see a record is not permission to associate it* — seeing a team ≠ being allowed to join it). This applies however the link is supplied:
@@ -128,7 +130,18 @@ So a minimal USER config often needs just `findMany`, `create`, `update`, `delet
 
 - **`/// @Role(ADMIN)` on a schema column** — only listed roles can *read* that field. For everyone else the proxy omits it from results (it comes back `undefined`). `/// @Role(none)` hides it from all roles. Applies at every depth, including nested relation selections.
 - **`/// @NoWrite` on a schema column** — excludes the field from generated create/update DTOs (all roles). Use it for privileged columns (e.g. `role`) that should be set out-of-band, not through generic CRUD.
-- **`setUserIdField: 'ownerId'`** — the framework sets that field to the caller's id server-side on create (so a client can't forge ownership).
+- **`setUserIdField: 'ownerId'`** — the framework sets that field to the caller's id server-side on create (so a client can't forge ownership). **It does not exempt the field from the `connect` requirement**: `ownerId` is still a foreign key, and every relationship a write establishes is authorized. Declare a **relation-scoped** self-connect rather than a blanket rule on the target:
+
+  ```ts
+  Album: {
+      USER: {
+          create: {setUserIdField: 'ownerId'},
+          relations: {owner: {connect: {conditions: {id: '$USER_ID'}}}},
+      },
+  },
+  ```
+
+  Prefer that over `User.USER.connect: 'ALL'`, which would let the role attach *any* user — much wider than a self-owned create needs.
 
 > For the generated request-body DTOs — their structure, and the ways to **remove a writable field** (`OmitType`, `/// @NoWrite`), including how to handle per-role differences — see **[dtos.md](./dtos.md)**. (The old per-role `restrictedFields` strip has been removed — see the migration note there.)
 

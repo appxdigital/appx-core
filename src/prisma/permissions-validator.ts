@@ -154,7 +154,19 @@ export function validatePermissionsConfig(
                 }
                 if (relRule || hasConnectRule(r.model, role)) continue;
 
-                const fix = `Declare '${r.model}.${role}.connect' (or 'ALL'), or scope it to this relation with '${modelKey}.${role}.relations.${r.field}.connect'.`;
+                // A server-set owner FK (`setUserIdField`) still needs a connect
+                // rule — the value is trusted, but the framework authorizes every
+                // relationship a write establishes, uniformly. Point at the
+                // relation-scoped self-connect rather than a blanket rule on the
+                // target: `connect: 'ALL'` on User would let this role attach ANY
+                // user, which is far wider than what a self-owned create needs.
+                const createRule = rules?.create;
+                const ownerField = typeof createRule === 'object' && createRule
+                    ? (createRule as any).setUserIdField
+                    : undefined;
+                const fix = ownerField === col
+                    ? `'${col}' is server-set via setUserIdField, but the relationship it creates still needs a connect rule. Scope it to the caller with '${modelKey}.${role}.relations.${r.field}.connect: {conditions: {id: "$USER_ID"}}' — prefer that over a blanket '${r.model}.${role}.connect', which would allow connecting to any ${r.model}.`
+                    : `Declare '${r.model}.${role}.connect' (or 'ALL'), or scope it to this relation with '${modelKey}.${role}.relations.${r.field}.connect'.`;
                 if (settableOnCreate && r.isRequired) {
                     issues.push({
                         level: 'error',

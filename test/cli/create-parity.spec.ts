@@ -292,5 +292,8 @@ describe('§5 — cli/cli.js create produces the committed fixture (parity)', ()
             );
         }
         expect(contentMismatches).toEqual([]);
-    }, 5 * 60_000);    // 5 min — npm install dominates
+    // 8 min — npm install dominates, and this runs LAST (see the sequencer)
+    // after the other create E2E has already done a full install + migrate. On
+    // a cold CI runner the two together pushed this past the old 5 min budget.
+    }, 8 * 60_000);
 });

@@ -9,7 +9,7 @@
  * Writable-field policy (schema-derived): excludes @id, server-managed
  * timestamps, /// @NoWrite, and /// @Role(none). Exercised here on TypeSample:
  * `id` (@id), `secret` (@Role(none)) and `internalNote` (@NoWrite) are not
- * accepted by POST /typesamples; every scalar-typed writable field is.
+ * accepted by POST /type-samples; every scalar-typed writable field is.
  *
  * Boots with the hardened pipe to mirror the shipped scaffold.
  */
@@ -33,7 +33,7 @@ const validTypeSample = () => ({
     big: 42,
 });
 
-describe('POST /typesamples body validation on generated CRUD', () => {
+describe('POST /type-samples body validation on generated CRUD', () => {
     let booted: BootedApp;
     let adminJwt: string;
 
@@ -76,10 +76,10 @@ describe('POST /typesamples body validation on generated CRUD', () => {
 
     afterAll(async () => { await booted?.close(); });
 
-    test('ADMIN POST /typesamples with a client-supplied id is rejected (400)', async () => {
+    test('ADMIN POST /type-samples with a client-supplied id is rejected (400)', async () => {
         // id is @id — excluded from the DTO. forbidNonWhitelisted → 400.
         const res = await request(booted.server)
-            .post('/typesamples')
+            .post('/type-samples')
             .set('Authorization', `Bearer ${adminJwt}`)
             .send({ id: 9999, ...validTypeSample() });
         expect(res.status).toBe(400);
@@ -92,7 +92,7 @@ describe('POST /typesamples body validation on generated CRUD', () => {
 
     test('non-writable field secret (@Role(none)) is rejected at the HTTP layer', async () => {
         const res = await request(booted.server)
-            .post('/typesamples')
+            .post('/type-samples')
             .set('Authorization', `Bearer ${adminJwt}`)
             .send({ ...validTypeSample(), secret: 'irrelevant' });
         expect(res.status).toBe(400);
@@ -101,7 +101,7 @@ describe('POST /typesamples body validation on generated CRUD', () => {
 
     test('non-writable field internalNote (@NoWrite) is rejected at the HTTP layer', async () => {
         const res = await request(booted.server)
-            .post('/typesamples')
+            .post('/type-samples')
             .set('Authorization', `Bearer ${adminJwt}`)
             .send({ ...validTypeSample(), internalNote: 'irrelevant' });
         expect(res.status).toBe(400);
@@ -110,7 +110,7 @@ describe('POST /typesamples body validation on generated CRUD', () => {
 
     test('arbitrary unknown field is rejected by the app (400), not by Prisma', async () => {
         const res = await request(booted.server)
-            .post('/typesamples')
+            .post('/type-samples')
             .set('Authorization', `Bearer ${adminJwt}`)
             .send({ ...validTypeSample(), unexpectedField: 'x' });
         expect(res.status).toBe(400);
@@ -118,7 +118,7 @@ describe('POST /typesamples body validation on generated CRUD', () => {
 
     test('a legitimate create with only writable fields succeeds (and DateTime coerces from an ISO string)', async () => {
         const res = await request(booted.server)
-            .post('/typesamples')
+            .post('/type-samples')
             .set('Authorization', `Bearer ${adminJwt}`)
             .send(validTypeSample());
         expect([200, 201]).toContain(res.status);
@@ -141,7 +141,7 @@ describe('POST /typesamples body validation on generated CRUD', () => {
 
     test('a non-numeric Decimal is rejected at the HTTP layer (400)', async () => {
         const res = await request(booted.server)
-            .post('/typesamples')
+            .post('/type-samples')
             .set('Authorization', `Bearer ${adminJwt}`)
             .send({ ...validTypeSample(), amount: 'not-a-number' });
         expect(res.status).toBe(400);
@@ -150,7 +150,7 @@ describe('POST /typesamples body validation on generated CRUD', () => {
 
     test('a non-integer BigInt is rejected at the HTTP layer (400)', async () => {
         const res = await request(booted.server)
-            .post('/typesamples')
+            .post('/type-samples')
             .set('Authorization', `Bearer ${adminJwt}`)
             .send({ ...validTypeSample(), big: 'nope' });
         expect(res.status).toBe(400);
