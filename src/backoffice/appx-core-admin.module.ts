@@ -3,8 +3,7 @@ process.env.ADMIN_JS_TMP_DIR ??= 'tmp/adminjs';
 
 import {DynamicModule, Global, Module} from '@nestjs/common';
 import {createActions, dynamicImport} from './utils';
-import {readFileSync} from 'fs';
-import {getDMMF} from '@prisma/sdk';
+import {loadAllModels} from '../config/utils';
 import {RequestContextMiddleware} from 'nestjs-request-context';
 import {BaseRecord} from 'adminjs';
 import * as argon2 from 'argon2';
@@ -41,10 +40,11 @@ async function createAdminJsModule(
     const {default: passwordFeature} =
         await dynamicImport('@adminjs/passwords');
 
-    // This gets the models from the Prisma schema, and then creates the AdminJS resources
-    const schemaPath = './prisma/schema.prisma';
-    const schema = readFileSync(schemaPath, 'utf-8');
-    const dmmf = await getDMMF({datamodel: schema});
+    // Model definitions come from the consumer's generated Prisma client
+    // (Prisma.dmmf) — the same source of truth the generators use — so the
+    // backoffice neither re-parses the schema at runtime nor depends on
+    // @prisma/internals. @adminjs/prisma consumes these DMMF models natively.
+    const allModels = loadAllModels();
 
     const models: {
         model: any;
@@ -53,7 +53,7 @@ async function createAdminJsModule(
     }[] = [];
 
     for (const resource of adminConfig.resources) {
-        const model = dmmf.datamodel.models.find(
+        const model = allModels.find(
             (model) => model.name === resource.name,
         );
 

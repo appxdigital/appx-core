@@ -76,7 +76,6 @@
         "@paljs/plugins": "~8.1.0",
         "@paralleldrive/cuid2": "~2.2.2",
         "@prisma/client": "~6.5.0",
-        "@prisma/sdk": "~3.15.2",
         "@types/bcrypt": "~5.0.2",
         "@types/express": "~5.0.0",
         "argon2": "~0.41.1",

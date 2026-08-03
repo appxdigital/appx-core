@@ -14,6 +14,20 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.127] — 2026-08-03
+
+### Changed
+
+- **The AdminJS backoffice reads model definitions from the generated Prisma client instead of re-parsing the schema at boot.** It previously called `getDMMF()` from **`@prisma/sdk`** — a package Prisma **deprecated and renamed** (its `latest` is frozen at the Prisma-4 era) — to parse `prisma/schema.prisma` on every admin boot. It now reads `Prisma.dmmf` from your generated `@prisma/client`, the same source of truth the code generators already use and exactly what `@adminjs/prisma` consumes. Result: no runtime schema parse, no heavy Prisma query engine spun up at admin boot, identical resources, and one fewer dependency.
+
+### Migration
+
+> **The deprecated `@prisma/sdk` peer dependency is gone.** Nothing replaces it — the backoffice uses your existing `@prisma/client`.
+
+Drop-in for almost everyone (`@prisma/sdk` was an auto-installed peer, not a direct dependency). If you added `@prisma/sdk` to your project's `package.json` explicitly, you can now remove it: `npm remove @prisma/sdk`.
+
+---
+
 ## [0.1.126] — 2026-07-31
 
 ### Fixed
