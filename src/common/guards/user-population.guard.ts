@@ -3,6 +3,7 @@ import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../../modules/auth/auth.service';
+import { transformContext } from '../utils/context-transformer.util';
 
 @Injectable()
 export class UserPopulationGuard implements CanActivate {
@@ -13,7 +14,10 @@ export class UserPopulationGuard implements CanActivate {
     ) {}
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
-        const request = context.switchToHttp().getRequest();
+        // Resolve the request across transports (HTTP and GraphQL) so JWT/session
+        // population also applies to GraphQL requests — otherwise a GraphQL query
+        // would reach the ABAC proxy with no user and be treated as a GUEST.
+        const { req: request } = transformContext(context);
 
         if (request.isAuthenticated && request.isAuthenticated()) {
             return true;

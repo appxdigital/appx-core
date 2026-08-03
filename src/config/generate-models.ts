@@ -26,7 +26,6 @@ import {generateDtoBases, scaffoldDtoSubclass} from './generate-dtos';
 import {registerModulesInAppModule, scaffoldModule} from './generate-modules';
 import {scaffoldService} from './generate-services';
 import {scaffoldController} from './generate-controllers';
-import {scaffoldResolver} from './generate-resolvers';
 
 // inquirer is ESM-only; this file compiles to CommonJS, where tsc would
 // down-level a normal `import('inquirer')` into `require()` (ERR_REQUIRE_ESM at
@@ -100,7 +99,6 @@ async function main(): Promise<void> {
         scaffoldModule(name);
         scaffoldService(name);
         scaffoldController(name);
-        scaffoldResolver(name);
         scaffoldDtoSubclass(name);
     }
     registerModulesInAppModule(selected);

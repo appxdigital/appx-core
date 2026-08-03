@@ -188,6 +188,33 @@ export function runFixtureGenerate(): void {
     // safe-pass-only regression is visible independently of the scaffold step.
     sh(`node ${path.join(configDir, 'generate-all.js')}`, FIXTURE_DIR);
     sh(`node ${path.join(configDir, 'generate-models.js')} --all`, FIXTURE_DIR);
+    // GraphQL is opt-in per module. Enable it for Project so the GraphQL ABAC
+    // spec has a model to query (relations + a role-gated field to prove
+    // nested/field omission). Mirrors the documented one-line opt-in.
+    enableFixtureGraphql(['Project']);
+}
+
+/**
+ * Turn on the per-module GraphQL opt-in for the given models by uncommenting the
+ * copy-paste-ready lines the module template ships (the two imports + the
+ * `CoreGraphqlResolver(...)` provider). Mirrors exactly what a developer does by
+ * hand — no bespoke test wiring.
+ */
+export function enableFixtureGraphql(models: string[]): void {
+    for (const model of models) {
+        const folder = model.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        const modulePath = path.join(FIXTURE_DIR, 'src/modules', folder, `${folder}.module.ts`);
+        const src = fs
+            .readFileSync(modulePath, 'utf8')
+            .split('\n')
+            .map((line) =>
+                /^\s*\/\/\s*(import \{ CoreGraphqlResolver|import \{ \w+Graphql|CoreGraphqlResolver\()/.test(line)
+                    ? line.replace(/^(\s*)\/\/\s?/, '$1')
+                    : line,
+            )
+            .join('\n');
+        fs.writeFileSync(modulePath, src);
+    }
 }
 
 /**

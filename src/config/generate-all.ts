@@ -16,12 +16,18 @@
  */
 import {loadAllModels, runProjectBin} from './utils';
 import {generateDtoBases} from './generate-dtos';
+import {generateGraphqlBundles} from './generate-graphql';
 
 console.log('Running Prisma Generate (client + GraphQL artifacts)...');
 // Project-local prisma: the CLI is usually global, so PATH has no project .bin.
 runProjectBin('prisma', 'generate');
 
+const allModels = loadAllModels();
+
 console.log('Generating DTO base classes...');
-generateDtoBases(loadAllModels());
+generateDtoBases(allModels);
+
+console.log('Generating GraphQL bundles...');
+generateGraphqlBundles(allModels);
 
 console.log('Deploy-safe generation complete — src/generated only, no code changes.');

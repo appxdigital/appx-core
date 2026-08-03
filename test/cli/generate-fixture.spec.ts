@@ -26,12 +26,15 @@ describe('appx-core generate — real fixture output (end-to-end)', () => {
     // scalar type plus non-writable fields (`secret` @Role(none), `internalNote`
     // @NoWrite). (User is framework-owned and no longer scaffolded, so it isn't a
     // generatable module.)
-    test('TypeSample module directory + four canonical files exist after globalSetup', () => {
+    test('TypeSample module directory + three canonical files exist after globalSetup', () => {
+        // GraphQL is now opt-in per module (add CoreGraphqlResolver to providers),
+        // so no per-module resolver file is scaffolded anymore.
         const dir = path.join(SCAFFOLD, 'src', 'modules', 'type-sample');
         expect(fs.existsSync(dir)).toBe(true);
-        for (const f of ['type-sample.module.ts', 'type-sample.controller.ts', 'type-sample.service.ts', 'type-sample.resolver.ts']) {
+        for (const f of ['type-sample.module.ts', 'type-sample.controller.ts', 'type-sample.service.ts']) {
             expect(fs.existsSync(path.join(dir, f))).toBe(true);
         }
+        expect(fs.existsSync(path.join(dir, 'type-sample.resolver.ts'))).toBe(false);
     });
 
     test('type-sample.controller.ts wires CoreController<TypeSample> with the right entity name and route', () => {
@@ -121,11 +124,25 @@ describe('appx-core generate — real fixture output (end-to-end)', () => {
         expect(s).toMatch(/class TypeSampleService extends CoreService<TypeSample>/);
     });
 
-    test('type-sample.module.ts wires controller + service + resolver via PrismaModule', () => {
+    test('type-sample.module.ts wires controller + service via PrismaModule, with a commented GraphQL opt-in', () => {
         const m = fs.readFileSync(path.join(SCAFFOLD, 'src/modules/type-sample/type-sample.module.ts'), 'utf8');
         expect(m).toMatch(/PrismaModule/);
         expect(m).toMatch(/controllers:\s*\[TypeSampleController\]/);
-        expect(m).toMatch(/providers:\s*\[TypeSampleService,\s*TypeSampleResolver\]/);
+        // Service is a real provider; the GraphQL resolver is present only as a
+        // commented, copy-paste-ready opt-in line (no resolver registered by default).
+        expect(m).toMatch(/providers:\s*\[\s*TypeSampleService,/);
+        expect(m).toMatch(/\/\/\s*CoreGraphqlResolver\(TypeSampleGraphql\),/);
+        expect(m).not.toMatch(/^\s*TypeSampleResolver\b/m);
+    });
+
+    test('deploy-safe pass emits a GraphQL bundle (src/generated/type-sample/graphql.ts)', () => {
+        const bundle = path.join(SCAFFOLD, 'src/generated/type-sample/graphql.ts');
+        expect(fs.existsSync(bundle)).toBe(true);
+        const b = fs.readFileSync(bundle, 'utf8');
+        expect(b).toMatch(/export const TypeSampleGraphql/);
+        expect(b).toMatch(/model:\s*TypeSample/);
+        expect(b).toMatch(/findManyArgs:\s*FindManyTypeSampleArgs/);
+        expect(b).toMatch(/findFirstArgs:\s*FindFirstTypeSampleArgs/);
     });
 
     test('app.module.ts has TypeSampleModule added by the module wizard', () => {

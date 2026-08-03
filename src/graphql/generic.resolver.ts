@@ -1,233 +1,103 @@
-import {Args, Info, Query, Resolver} from '@nestjs/graphql';
+import {Args, Info, Int, ObjectType, Query, ResolveField, Resolver} from '@nestjs/graphql';
 import {Type} from '../common/types';
 import {PrismaSelect} from '@paljs/plugins';
 import {GraphQLResolveInfo} from 'graphql';
-import {applyMethodGuards} from '../common/decorators/guard.decorator';
 import {PrismaService} from '../prisma/prisma.service';
 
-export function GenericResolverFactory<ModelType,
-    CreateInput,
-    UpdateInput,
-    WhereInput,
-    WhereUniqueInput,
-    FindManyArgsType,
-    AggregateArgsType,
-    AggregateOutputType,
-    CreateManyArgsType,
-    CreateManyInput,
-    >(
-    model: string,
-    returnType: Type<ModelType>,
-    createInputType: Type<CreateInput>,
-    updateInputType: Type<UpdateInput>,
-    whereInputType: Type<WhereInput>,
-    whereUniqueInputType: Type<WhereUniqueInput>,
-    findManyArgsType: Type<FindManyArgsType>,
-    aggregateArgsType: Type<AggregateArgsType>,
-    aggregateOutputType: Type<AggregateOutputType>,
-    createManyArgsType: Type<CreateManyArgsType>,
-    createManyInputType: Type<CreateManyInput>,
-    guardedMethods?: {[key: string]: string[]},
-) {
-    @Resolver({isAbstract: true})
-    class GenericResolverClass {
-        constructor(public readonly prisma: PrismaService) {
-            if (guardedMethods) {
-                applyMethodGuards(GenericResolverClass, guardedMethods);
-            }
+/**
+ * The generated `prisma-nestjs-graphql` types a model needs to expose its
+ * read API. Produced per model by the deploy-safe generator as
+ * `src/generated/<model>/graphql.ts` (see `generate-graphql.ts`).
+ */
+export interface GraphqlModelBundle<ModelType = any> {
+    /** The `@ObjectType()` model class (also used to derive the root field name). */
+    model: Type<ModelType>;
+    /** Root query field name. Defaults to camelCase(model name), e.g. `project`. */
+    name?: string;
+    /** `FindMany<Model>Args` — arguments for `find`. */
+    findManyArgs: Type<any>;
+    /** `FindFirst<Model>Args` — arguments for `get`. */
+    findFirstArgs: Type<any>;
+    /** `<Model>WhereInput` — the `where` argument for `count`. */
+    whereInput: Type<any>;
+}
+
+/**
+ * Build a **namespaced, read-only** GraphQL resolver for one model.
+ *
+ * Every model contributes a single root query field (its camelCase name) that
+ * returns a per-model namespace type exposing three operations:
+ *
+ *   query {
+ *     project {                         # one root field per model — collision-free
+ *       find(where, orderBy, take, …)   # → [Project]   (Prisma findMany)
+ *       get(where, …)                   # → Project|null (Prisma findFirst)
+ *       count(where)                    # → Int          (Prisma count)
+ *     }
+ *   }
+ *
+ * Because the operation names (`find`/`get`/`count`) live on the namespace type
+ * rather than the root, they repeat freely across models and aliases work as
+ * expected (`recent: find(...)`, plus multiple models in one request).
+ *
+ * Every operation routes through `PrismaService.getModelDelegate`, so the exact
+ * same ABAC applies as for REST: row-level filtering, field omission (`@Role`),
+ * and nested-relation filtering. `PrismaSelect` turns the GraphQL selection set
+ * (including nested relations/children) into a Prisma `select`, so a single
+ * query resolves relations in one authorized round-trip.
+ *
+ * Returned value is a NestJS provider — add it to a module's `providers` to
+ * opt that model into GraphQL:
+ *
+ *   import { CoreGraphqlResolver } from '@appxdigital/appx-core';
+ *   import { ProjectGraphql } from '../../generated/project/graphql';
+ *   providers: [ProjectService, CoreGraphqlResolver(ProjectGraphql)]
+ */
+export function CoreGraphqlResolver<ModelType>(bundle: GraphqlModelBundle<ModelType>): Type<any> {
+    const {model, findManyArgs, findFirstArgs, whereInput} = bundle;
+    const modelName = model.name; // Pascal, e.g. 'Project'
+    const rootName = bundle.name ?? modelName.charAt(0).toLowerCase() + modelName.slice(1);
+
+    @ObjectType(`${modelName}Queries`)
+    class ModelQueries {}
+
+    @Resolver(() => ModelQueries)
+    class ModelQueriesResolver {
+        constructor(public readonly prisma: PrismaService) {}
+
+        // The root field. Returns an empty object; the operations below are
+        // resolved lazily as fields of the namespace, so `project { count }`
+        // never runs `find`/`get`.
+        @Query(() => ModelQueries, {name: rootName})
+        namespace(): ModelQueries {
+            return {} as ModelQueries;
         }
 
-        @Query(() => [returnType], {
-            name: `findAll${model.charAt(0).toUpperCase() + model.slice(1)}s`,
-        })
-        async findAll(
-            @Args({type: () => findManyArgsType, nullable: true})
-                args: FindManyArgsType,
+        @ResolveField(() => [model], {name: 'find'})
+        async find(
+            @Args({type: () => findManyArgs, nullable: true}) args: any,
             @Info() info: GraphQLResolveInfo,
         ): Promise<ModelType[]> {
             const select = new PrismaSelect(info).value;
-            const modelDelegate = this.prisma.getModelDelegate(model);
-            return await modelDelegate.findMany({
-                ...args,
-                ...select,
-            });
+            return this.prisma.getModelDelegate(modelName as any).findMany({...args, ...select});
         }
 
-        @Query(() => returnType, {
-            name: `findOne${model.charAt(0).toUpperCase() + model.slice(1)}`,
-        })
-        async findOne(
-            @Args('where', {type: () => whereUniqueInputType, nullable: false})
-                where: WhereUniqueInput,
+        @ResolveField(() => model, {name: 'get', nullable: true})
+        async get(
+            @Args({type: () => findFirstArgs, nullable: true}) args: any,
             @Info() info: GraphQLResolveInfo,
-        ): Promise<ModelType> {
+        ): Promise<ModelType | null> {
             const select = new PrismaSelect(info).value;
-            const modelDelegate = this.prisma.getModelDelegate(model);
-            return modelDelegate.findFirst({
-                where,
-                ...select,
-            });
+            return this.prisma.getModelDelegate(modelName as any).findFirst({...args, ...select});
         }
 
-        @Query(() => returnType, {
-            name: `findFirst${model.charAt(0).toUpperCase() + model.slice(1)}`,
-        })
-        async findFirst(
-            @Args({type: () => findManyArgsType, nullable: true})
-                args: FindManyArgsType,
-            @Info() info: GraphQLResolveInfo,
-        ): Promise<ModelType> {
-            const select = new PrismaSelect(info).value;
-            const modelDelegate = this.prisma.getModelDelegate(model);
-            return modelDelegate.findFirst({
-                ...args,
-                ...select,
-            });
+        @ResolveField(() => Int, {name: 'count'})
+        async count(
+            @Args('where', {type: () => whereInput, nullable: true}) where: any,
+        ): Promise<number> {
+            return this.prisma.getModelDelegate(modelName as any).count({where});
         }
-
-        @Query(() => aggregateOutputType, {
-            name: `aggregate${model.charAt(0).toUpperCase() + model.slice(1)}`,
-        })
-        async aggregate(
-            @Args({type: () => aggregateArgsType, nullable: true})
-                args: AggregateArgsType,
-            @Info() info: GraphQLResolveInfo,
-        ): Promise<AggregateOutputType> {
-            const select = new PrismaSelect(info).value;
-            const modelDelegate = this.prisma.getModelDelegate(model);
-            return modelDelegate.aggregate({
-                ...args,
-                ...select,
-            });
-        }
-
-        /*
-                @Mutation(() => returnType, {
-                    name: `delete${model.charAt(0).toUpperCase() + model.slice(1)}`,
-                })
-                async delete(
-                    @Args('where', {type: () => whereUniqueInputType, nullable: false})
-                        where: WhereUniqueInput,
-                    @Info() info: GraphQLResolveInfo,
-                ): Promise<ModelType> {
-                    const select = new PrismaSelect(info).value;
-                    const modelDelegate = this.prisma.getModelDelegate(model);
-                    return modelDelegate.delete({
-                        where,
-                        ...select,
-                    });
-                }
-
-                @Mutation(() => returnType, {
-                    name: `create${model.charAt(0).toUpperCase() + model.slice(1)}`,
-                })
-                async create(
-                    @Args('data', {type: () => createInputType}) data: CreateInput,
-                    @Info() info: GraphQLResolveInfo,
-                    @Context() ctx: any,
-                ): Promise<ModelType> {
-                    const select = new PrismaSelect(info).value;
-                    const prisma = ctx.prisma || this.prisma.getModelDelegate(model);
-                    return prisma.create({
-                        data,
-                        ...select,
-                    });
-                }
-
-                @Mutation(() => returnType, {
-                    name: `update${model.charAt(0).toUpperCase() + model.slice(1)}`,
-                })
-                async update(
-                    @Args('where', {type: () => whereUniqueInputType, nullable: false})
-                        where: WhereUniqueInput,
-                    @Args('data', {type: () => updateInputType}) data: UpdateInput,
-                    @Info() info: GraphQLResolveInfo,
-                    @Context() ctx: any,
-                ): Promise<ModelType> {
-                    const select = new PrismaSelect(info).value;
-                    const prisma = ctx.prisma || this.prisma.getModelDelegate(model);
-                    return prisma.update({
-                        where,
-                        data,
-                        ...select,
-                    });
-                }
-
-                @Mutation(() => BatchPayload, {
-                    name: `createMany${model.charAt(0).toUpperCase() + model.slice(1)}s`,
-                })
-                async createMany(
-                    @Context() ctx: any,
-                    @Args('data', {type: () => [createManyInputType]})
-                        data: CreateManyInput[],
-                    @Args('skipDuplicates', {type: () => Boolean, nullable: true})
-                        skipDuplicates?: boolean,
-                ): Promise<BatchPayload> {
-                    const prisma = ctx.prisma || this.prisma.getModelDelegate(model);
-                    if (!prisma) {
-                        throw new Error('Transaction Prisma client not available in context.');
-                    }
-                    return prisma.createMany({
-                        data,
-                        skipDuplicates: skipDuplicates ?? false,
-                    });
-                }
-
-                @Mutation(() => BatchPayload, {
-                    name: `updateMany${model.charAt(0).toUpperCase() + model.slice(1)}s`,
-                })
-                async updateMany(
-                    @Context() ctx: any,
-                    @Args('where', {type: () => whereInputType, nullable: true})
-                        where: WhereInput,
-                    @Args('data', {type: () => updateInputType, nullable: false})
-                        data: UpdateInput,
-                ): Promise<BatchPayload> {
-                    const prisma = ctx.prisma || this.prisma.getModelDelegate(model);
-                    return prisma.updateMany({
-                        where,
-                        data,
-                    });
-                }
-
-                @Mutation(() => BatchPayload, {
-                    name: `deleteMany${model.charAt(0).toUpperCase() + model.slice(1)}s`,
-                })
-                async deleteMany(
-                    @Context() ctx: any,
-                    @Args('where', {type: () => whereInputType, nullable: true})
-                        where: WhereInput,
-                ): Promise<BatchPayload> {
-                    const prisma = ctx.prisma || this.prisma.getModelDelegate(model);
-                    return prisma.deleteMany({
-                        where,
-                    });
-                }
-
-                @Mutation(() => returnType, {
-                    name: `upsert${model.charAt(0).toUpperCase() + model.slice(1)}`,
-                })
-                async upsert(
-                    @Context() ctx: any,
-                    @Args('where', {type: () => whereUniqueInputType, nullable: false})
-                        where: WhereUniqueInput,
-                    @Args('create', {type: () => createInputType}) create: CreateInput,
-                    @Args('update', {type: () => updateInputType}) update: UpdateInput,
-                    @Info() info: GraphQLResolveInfo,
-                ): Promise<ModelType> {
-                    const select = new PrismaSelect(info).value;
-                    const prisma = ctx.prisma || this.prisma.getModelDelegate(model);
-                    return prisma.upsert({
-                        where,
-                        create,
-                        update,
-                        ...select,
-                    });
-                }
-            }
-            */
-
     }
 
-    return GenericResolverClass;
+    return ModelQueriesResolver;
 }

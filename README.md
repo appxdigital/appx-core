@@ -614,7 +614,7 @@ Operational guidance:
 
 ### GraphQL status
 
-GraphQL is part of the direction, but is **not fully ready** in the current release. REST CRUD + AdminJS are the primary integration surfaces for now.
+GraphQL exposes a **read-only** API — `find` / `get` / `count`, namespaced per model and **opt-in per module** (one line) — that runs through the same ABAC proxy as REST, so row filtering, field omission, and nested-relation filtering all apply. See **[docs/graphql.md](./docs/graphql.md)**. Not yet: mutations and full aggregates. One caveat before exposing sensitive models to untrusted roles — the generated `where`/`orderBy` inputs still include restricted columns (a filter-oracle; output values are omitted). REST CRUD + AdminJS remain the primary write surfaces.
 
 ---
 

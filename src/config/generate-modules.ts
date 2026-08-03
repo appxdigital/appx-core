@@ -10,20 +10,29 @@ const appModulePath = path.join(process.cwd(), 'src/app.module.ts');
  * @param model
  * @param folder
  */
-const moduleTemplate = (model: string, folder: string) => `
+const moduleTemplate = (model: string, folder: string) => {
+    const camel = model.charAt(0).toLowerCase() + model.slice(1);
+    return `
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { ${model}Controller } from './${folder}.controller';
 import { ${model}Service } from './${folder}.service';
-import { ${model}Resolver } from './${folder}.resolver';
+// To expose this model over GraphQL (read-only: \`${camel} { find get count }\`),
+// uncomment the two imports and the provider line below. See docs/graphql.md.
+// import { CoreGraphqlResolver } from '@appxdigital/appx-core';
+// import { ${model}Graphql } from '../../generated/${folder}/graphql';
 
 @Module({
   imports: [PrismaModule],
   controllers: [${model}Controller],
-  providers: [${model}Service, ${model}Resolver],
+  providers: [
+    ${model}Service,
+    // CoreGraphqlResolver(${model}Graphql),
+  ],
 })
 export class ${model}Module {}
 `;
+};
 
 /** Scaffold the module file for a single model (once; never overwritten). */
 export function scaffoldModule(modelName: string): void {
