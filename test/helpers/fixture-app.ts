@@ -190,8 +190,11 @@ export function runFixtureGenerate(): void {
     sh(`node ${path.join(configDir, 'generate-models.js')} --all`, FIXTURE_DIR);
     // GraphQL is opt-in per module. Enable it for Project so the GraphQL ABAC
     // spec has a model to query (relations + a role-gated field to prove
-    // nested/field omission). Mirrors the documented one-line opt-in.
-    enableFixtureGraphql(['Project']);
+    // nested/field omission), and ProjectMember — a COMPOUND-name model — so the
+    // spec proves the delegate lookup handles internal capitals (regression for
+    // `getModelDelegate` whole-lowercasing `AlbumMember` → `albummember`).
+    // Mirrors the documented one-line opt-in.
+    enableFixtureGraphql(['Project', 'ProjectMember']);
 }
 
 /**

@@ -231,7 +231,15 @@ export class PrismaService {
      * @param model
      */
     getModelDelegate<M extends ModelKey>(model: M): CorePrismaModel<M> {
-        const modelName = (model as string).toLowerCase();
+        // Prisma exposes delegates in camelCase (`client.albumMember`), lowercasing
+        // only the FIRST character of the model name. Callers pass the PascalCase
+        // class name (`model.name`), so lowercase just the first char — NOT the
+        // whole string, which would flatten any internal capital (`AlbumMember` →
+        // `albummember`) and miss the delegate. (The framework's own model-name
+        // namespace is deliberately whole-lowercase for case-insensitivity, but
+        // that is a separate lookup; this one indexes the real Prisma client.)
+        const name = model as string;
+        const modelName = name.charAt(0).toLowerCase() + name.slice(1);
 
         const client = this.prismaClient;
 

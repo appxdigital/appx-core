@@ -62,11 +62,15 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
             const bob = await c.user.findFirst({ where: { email: 'bob@example.com' } });
             const alice = await c.user.create({ data: { email: 'alice@example.com', password: 'x', role: 'USER' } });
             await c.project.create({ data: { name: 'Bob Proj', ownerId: bob.id, secretApiKey: 'BOB_SECRET' } });
-            await c.project.create({ data: { name: 'Alice Proj', ownerId: alice.id, secretApiKey: 'ALICE_SECRET' } });
+            const aliceProj = await c.project.create({ data: { name: 'Alice Proj', ownerId: alice.id, secretApiKey: 'ALICE_SECRET' } });
             // Owned by alice, but bob is a MEMBER: bob can access the project record
             // (membership) yet not its owner alice (User read is self-only).
             const shared = await c.project.create({ data: { name: 'Shared Proj', ownerId: alice.id, secretApiKey: 'SHARED_SECRET' } });
             await c.projectMember.create({ data: { projectId: shared.id, userId: bob.id, role: 'contributor' } });
+            // A second membership on a project bob CANNOT access — so ProjectMember
+            // (a compound-name model) reads are provably ABAC-filtered: admin sees
+            // both rows, bob sees only his Shared-Proj membership.
+            await c.projectMember.create({ data: { projectId: aliceProj.id, userId: alice.id, role: 'contributor' } });
         });
 
         const loginBob = await request(booted.server)
@@ -91,6 +95,36 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         expect(res.status).toBe(200);
         expect(res.body.errors).toBeUndefined();
         expect(res.body.data.project.count).toBe(3);
+    });
+
+    // ── compound-name model resolves + is ABAC-filtered ─────────────────────
+    // `getModelDelegate` must map the PascalCase class name to Prisma's camelCase
+    // delegate (`ProjectMember` → `projectMember`). Whole-lowercasing produced
+    // `projectmember`, which isn't a delegate key, so every op 500'd with
+    // "Model ProjectMember not found in PrismaClient." (single-word `project`
+    // survived by coincidence). These assert the delegate resolves AND that ABAC
+    // still filters across the compound-name path.
+    test('compound-name model (ProjectMember) resolves — no "not found in PrismaClient"', async () => {
+        const res = await gql('query { projectMember { count } }', adminJwt);
+        expect(res.status).toBe(200);
+        expect(res.body.errors).toBeUndefined();
+        expect(res.body.data.projectMember.count).toBe(2);
+    });
+
+    test('ProjectMember reads are ABAC-filtered — USER sees only accessible memberships', async () => {
+        const userCount = await gql('query { projectMember { count } }', userJwt);
+        expect(userCount.body.errors).toBeUndefined();
+        expect(userCount.body.data.projectMember.count).toBe(1); // only bob's Shared-Proj membership
+
+        const res = await gql(
+            'query { projectMember { find { role project { name } user { email } } } }',
+            userJwt,
+        );
+        expect(res.body.errors).toBeUndefined();
+        const rows = res.body.data.projectMember.find;
+        expect(rows).toHaveLength(1);
+        expect(rows[0].project.name).toBe('Shared Proj'); // nested to-one resolves through the compound delegate
+        expect(rows[0].user.email).toBe('bob@example.com'); // bob may read his own User row
     });
 
     // ── unauthorized ROWS are not returned ───────────────────────────────────

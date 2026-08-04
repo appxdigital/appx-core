@@ -30,6 +30,10 @@ Read-only GraphQL, reworked into a **namespaced, opt-in-per-module** API.
 - **Self-documenting operations.** `find` / `get` / `count` and their `where` arg carry GraphQL descriptions (visible in the Apollo Sandbox); model-field descriptions come from Prisma `///` doc comments as before. See [docs/graphql.md](./docs/graphql.md) for the full `where`/`orderBy`/pagination reference.
 - **Malformed filter values return `400`, not `500`.** A `where`/`orderBy` value Prisma can't parse (e.g. `createdAt: { gt: 2024 }` — a number where a date is expected) now surfaces a clean `400`, instead of an internal error that leaked the raw Prisma invocation.
 
+### Fixed
+
+- **Compound-name models now work over GraphQL.** `getModelDelegate` lowercased the whole model name (`AlbumMember` → `albummember`) instead of just the first character, so it missed Prisma's camelCase delegate key (`albumMember`) and every `find`/`get`/`count` on a model with an internal capital threw `Model <X> not found in PrismaClient.`. Single-word models (`Album`) worked only by coincidence. It now lowercases only the first character, matching Prisma's delegate naming (and the resolver's own root-name rule). REST was never affected. Regression covered by a compound-name model (`ProjectMember`) in `test/http/graphql-abac.spec.ts`.
+
 ### Changed / Removed
 
 - The old root-level `findAll<Model>s` / `findOne<Model>` / `findFirst<Model>` queries and the `GenericResolverFactory` export are **removed**, replaced by the generated per-model `<Model>Resolver` (built on the exported `CoreGraphqlResolver`).
