@@ -60,3 +60,77 @@ export function generateGraphqlBundles(allModels: {name: string}[]): void {
         fs.writeFileSync(path.join(dir, 'graphql.ts'), bundleTemplate(name, folder));
     }
 }
+
+/**
+ * `prisma-nestjs-graphql` emits the full CRUD surface per model
+ * (create/update/upsert/delete/aggregate/groupBy inputs), but the read-only
+ * GraphQL API only ever imports the model + find/where/orderBy read types. Prune
+ * the rest so `src/generated/` stays small and `tsc` doesn't compile dozens of
+ * unused files per model.
+ *
+ * Method: keep the transitive relative-import closure of the generated
+ * `graphql.ts` bundles (the read entrypoints), delete every other `.ts` under
+ * the model folders + shared `prisma/` folder. The DTO tree (`dto/`, generated
+ * by this framework and independent of these types) is preserved untouched.
+ */
+export function pruneGeneratedGraphql(): void {
+    if (!fs.existsSync(generatedRoot)) return;
+    const dtoDir = path.resolve(generatedRoot, 'dto');
+
+    // Every prunable .ts under src/generated, excluding the DTO tree.
+    const allFiles = new Set<string>();
+    const walk = (dir: string): void => {
+        for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+            const p = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                if (path.resolve(p) === dtoDir) continue; // preserve DTOs
+                walk(p);
+            } else if (entry.name.endsWith('.ts')) {
+                allFiles.add(path.resolve(p));
+            }
+        }
+    };
+    walk(generatedRoot);
+
+    const roots = [...allFiles].filter((f) => path.basename(f) === 'graphql.ts');
+    if (roots.length === 0) return; // nothing to anchor the closure — leave as-is
+
+    // BFS the relative-import graph from the bundles.
+    const keep = new Set<string>();
+    const queue = [...roots];
+    const importRe = /(?:from|import)\s+['"](\.[^'"]+)['"]/g;
+    while (queue.length) {
+        const file = queue.pop() as string;
+        if (keep.has(file)) continue;
+        keep.add(file);
+        let src: string;
+        try {
+            src = fs.readFileSync(file, 'utf8');
+        } catch {
+            continue;
+        }
+        importRe.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = importRe.exec(src)) !== null) {
+            const spec = m[1].endsWith('.ts') ? m[1] : `${m[1]}.ts`;
+            const resolved = path.resolve(path.dirname(file), spec);
+            if (allFiles.has(resolved) && !keep.has(resolved)) queue.push(resolved);
+        }
+    }
+
+    let removed = 0;
+    for (const f of allFiles) {
+        if (!keep.has(f)) {
+            fs.rmSync(f);
+            removed++;
+        }
+    }
+    // Drop now-empty model dirs (never the DTO tree).
+    for (const entry of fs.readdirSync(generatedRoot, {withFileTypes: true})) {
+        if (!entry.isDirectory()) continue;
+        const p = path.join(generatedRoot, entry.name);
+        if (path.resolve(p) === dtoDir) continue;
+        if (fs.existsSync(p) && fs.readdirSync(p).length === 0) fs.rmdirSync(p);
+    }
+    console.log(`Pruned ${removed} unused GraphQL type file(s) from src/generated (read-only API).`);
+}

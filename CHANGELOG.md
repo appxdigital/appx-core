@@ -25,6 +25,7 @@ Read-only GraphQL, reworked into a **namespaced, opt-in-per-module** API.
 - **`/graphql` mounted by default** in new projects (Apollo; Sandbox on `GET /graphql`). The schema stays valid before any model opts in.
 - **Same ABAC as REST, verified end-to-end** (`test/http/graphql-abac.spec.ts`): unauthorized rows aren't returned (`count` included — it's filtered to accessible rows), restricted fields (`@Role`) come back null at the top level and nested, and an inaccessible nested **record** is filtered while the parent stays accessible. GraphQL requests now populate the user across transports (`UserPopulationGuard` uses `transformContext`).
 - **Filter/sort limited to readable fields.** A client `where` / `orderBy` / `distinct` that references a field the caller's role can't read is **rejected** (`403`), recursing through relations and `AND`/`OR`/`NOT` — the input-side counterpart to output field omission, applied in `PrismaService` for every transport.
+- **Slimmer generated output.** The deploy-safe pass now prunes the `prisma-nestjs-graphql` types the read-only API never imports (create/update/upsert/delete/aggregate/groupBy inputs), keeping only the model + `find`/`where`/`orderBy` read types reachable from the generated resolvers — roughly **80% fewer files** under `src/generated/`, so `tsc` and your editor do far less work. The DTO tree (`src/generated/dto/`) is untouched.
 
 ### Changed / Removed
 
@@ -42,6 +43,7 @@ Read-only GraphQL, reworked into a **namespaced, opt-in-per-module** API.
 4. **Expose each model** you want in GraphQL by adding one provider line to its module: import `<Model>Resolver` from `../../generated/<model>/graphql` and add it to `providers`. See [docs/graphql.md](./docs/graphql.md).
 5. **Update clients:** `findAllProjects(...)` → `project { find(...) }`, `findFirstProject` / `findOneProject` → `project { get(...) }`. Mutations remain REST-only.
 6. **If a client filtered or ordered by a field a role can't read, that now returns `403`** — move such queries to a role that may read the field, or don't reference it.
+7. **If your own code imported a generated write/aggregate GraphQL input** (e.g. `<Model>CreateInput`, `<Model>AggregateArgs`), it's no longer emitted (the read-only API doesn't use it). Use the REST DTOs under `src/modules/<model>/dto/` for writes.
 
 ---
 

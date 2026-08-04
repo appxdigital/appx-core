@@ -16,18 +16,35 @@
  */
 import {loadAllModels, runProjectBin} from './utils';
 import {generateDtoBases} from './generate-dtos';
-import {generateGraphqlBundles} from './generate-graphql';
+import {generateGraphqlBundles, pruneGeneratedGraphql} from './generate-graphql';
 
-console.log('Running Prisma Generate (client + GraphQL artifacts)...');
-// Project-local prisma: the CLI is usually global, so PATH has no project .bin.
-runProjectBin('prisma', 'generate');
+/**
+ * The deploy-safe pass, as a single reusable unit. `generate models` (the
+ * wizard) runs it too before scaffolding, so keeping it here — rather than
+ * duplicating the steps — stops the two paths from drifting (e.g. one pruning
+ * the GraphQL types and the other regenerating them unpruned).
+ */
+export function runDeploySafePass(): void {
+    console.log('Running Prisma Generate (client + GraphQL artifacts)...');
+    // Project-local prisma: the CLI is usually global, so PATH has no project .bin.
+    runProjectBin('prisma', 'generate');
 
-const allModels = loadAllModels();
+    const allModels = loadAllModels();
 
-console.log('Generating DTO base classes...');
-generateDtoBases(allModels);
+    console.log('Generating DTO base classes...');
+    generateDtoBases(allModels);
 
-console.log('Generating GraphQL bundles...');
-generateGraphqlBundles(allModels);
+    console.log('Generating GraphQL bundles...');
+    generateGraphqlBundles(allModels);
 
-console.log('Deploy-safe generation complete — src/generated only, no code changes.');
+    console.log('Pruning unused GraphQL types (read-only API)...');
+    pruneGeneratedGraphql();
+
+    console.log('Deploy-safe generation complete — src/generated only, no code changes.');
+}
+
+// Only run when invoked directly (`node generate-all.js`), not when imported by
+// the wizard (which calls runDeploySafePass() itself).
+if (require.main === module) {
+    runDeploySafePass();
+}

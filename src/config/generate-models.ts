@@ -21,8 +21,9 @@
  * It first runs the deploy-safe pass (prisma generate + DTO bases), so the
  * scaffolded resolver/controller imports resolve.
  */
-import {loadAllModels, loadModels, modelFolder, moduleExists, ownedModels, runProjectBin} from './utils';
-import {generateDtoBases, scaffoldDtoSubclass} from './generate-dtos';
+import {loadModels, modelFolder, moduleExists, ownedModels} from './utils';
+import {scaffoldDtoSubclass} from './generate-dtos';
+import {runDeploySafePass} from './generate-all';
 import {registerModulesInAppModule, scaffoldModule} from './generate-modules';
 import {scaffoldService} from './generate-services';
 import {scaffoldController} from './generate-controllers';
@@ -34,11 +35,10 @@ import {scaffoldController} from './generate-controllers';
 const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
 
 async function main(): Promise<void> {
-    // 1) Deploy-safe pass first — refresh client + GraphQL artifacts + DTO bases.
-    console.log('Running Prisma Generate (client + GraphQL artifacts)...');
-    // Project-local prisma: the CLI is usually global, so PATH has no project .bin.
-    runProjectBin('prisma', 'generate');
-    generateDtoBases(loadAllModels());
+    // 1) Deploy-safe pass first — refresh client + GraphQL artifacts + DTO bases
+    //    (+ prune unused GraphQL types). Shared with `appx generate` so the two
+    //    paths can't drift.
+    runDeploySafePass();
 
     // 2) Candidates = non-framework models with no module yet. "Has a module"
     //    means either the canonical folder exists OR some existing module already

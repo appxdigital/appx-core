@@ -150,6 +150,15 @@ describe('appx-core generate — real fixture output (end-to-end)', () => {
         expect(b).toMatch(/export const TypeSampleResolver = CoreGraphqlResolver\(TypeSampleGraphql\)/);
     });
 
+    test('read-only prune: unused create/update/aggregate GraphQL types are removed, read types kept', () => {
+        const dir = path.join(SCAFFOLD, 'src/generated/type-sample');
+        const files = fs.readdirSync(dir);
+        // Read types the API imports remain.
+        expect(files).toEqual(expect.arrayContaining(['type-sample.model.ts', 'type-sample-where.input.ts', 'find-many-type-sample.args.ts', 'graphql.ts']));
+        // Write/aggregate types the read-only API never imports are pruned.
+        expect(files.some((f) => /-create\.input\.ts$|-update\.input\.ts$|-aggregate\.args\.ts$|unchecked/.test(f))).toBe(false);
+    });
+
     test('app.module.ts has TypeSampleModule added by the module wizard', () => {
         const am = fs.readFileSync(path.join(SCAFFOLD, 'src/app.module.ts'), 'utf8');
         expect(am).toMatch(/import\s*\{\s*TypeSampleModule\s*\}\s*from\s*'\.\/modules\/type-sample\/type-sample\.module'/);
