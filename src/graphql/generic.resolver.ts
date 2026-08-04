@@ -4,7 +4,7 @@ import {Type} from '../common/types';
 import {PrismaSelect} from '@paljs/plugins';
 import {getNamedType, GraphQLObjectType, GraphQLResolveInfo} from 'graphql';
 import {PrismaService} from '../prisma/prisma.service';
-import {FIELD_REQUIRES_EXTENSION} from '../common/decorators/field-requires.decorator';
+import {getFieldRequires} from './field-requires.registry';
 
 /**
  * Run a read and translate a Prisma **validation** error into a `400`. A
@@ -26,35 +26,27 @@ async function readOrBadRequest<T>(op: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Turn a `PrismaSelect`-derived selection into the columns actually fetched,
- * resolving the source columns that custom `@ResolveField`s need.
+ * Build the Prisma `select` for a read so that every custom `@ResolveField` — at
+ * the top level and on nested relations — receives its source columns in
+ * `@Parent()`.
  *
- * `PrismaSelect` narrows the Prisma query to exactly the fields the GraphQL
- * request asked for. That breaks the standard NestJS code-first contract where a
- * `@ResolveField` on the model type receives the full entity as `@Parent()`: a
- * custom field (`coverUrl` derived from a `coverKey` column, or a signed-URL
- * transform of an existing field) can't read a source column the client didn't
- * also select. We restore that contract with a **hybrid** strategy that avoids
- * over-fetching:
+ * `PrismaSelect` narrows each query to the columns the GraphQL request selected,
+ * which breaks the standard NestJS contract that a `@ResolveField` receives the
+ * full entity: a transform or computed field can't read a column the client
+ * didn't also select, and on a nested relation not even its own key is
+ * guaranteed. Using the `@FieldRequires` registry (populated at bootstrap), each
+ * selected field that is a custom resolver contributes its declared source
+ * columns; a resolver that declared nothing falls back to the model's scalar
+ * columns. Plain columns are fetched as-is, so a query with no custom fields is
+ * exactly what was asked for. Relations stay selection-driven — only selected
+ * relations are fetched, and each is recursed into so its own resolvers get their
+ * columns too. ABAC field omission runs afterward in the proxy and strips
+ * `@Role`-restricted columns at select-time, so a caller — and a transform — only
+ * ever sees readable columns.
  *
- *   - A custom field can declare its source columns natively, via the standard
- *     NestJS field `extensions`:
- *         `@ResolveField(() => String, { extensions: { requires: ['coverKey'] } })`
- *     When declared, ONLY those columns are added — no over-fetch.
- *   - A custom field that declares nothing falls back to fetching all of the
- *     model's scalar columns (safe default: the resolver can read anything from
- *     `@Parent()`), at the cost of reading columns the query didn't select.
- *   - A query that selects no custom fields fetches exactly what was asked for.
- *
- * Relations stay selection-driven throughout (no unbounded relation fetching).
- * ABAC field omission runs afterward in the proxy and strips `@Role`-restricted
- * columns at select-time, so a caller still only ever receives — and a transform
- * only ever sees — the columns their role may read.
- *
- * Custom field names (no backing column) are dropped from the Prisma `select`:
- * `PrismaSelect` puts every requested GraphQL field there, and passing a name
- * Prisma doesn't recognise throws a validation error. They resolve from the
- * parent afterward, so they must not reach the query.
+ * Custom field names with no backing column are dropped: `PrismaSelect` puts every
+ * requested GraphQL field into the `select`, and passing a name Prisma doesn't
+ * recognise throws a validation error. They resolve from the parent afterward.
  */
 function selectReadColumns(
     select: any,
@@ -62,50 +54,82 @@ function selectReadColumns(
     prisma: PrismaService,
     modelName: string,
 ): any {
-    const scalars = new Set(prisma.getScalarFields(modelName));
-    const requested = select?.select && typeof select.select === 'object' ? select.select : {};
-
-    // The GraphQL type of the returned rows, to read each field's
-    // `extensions.requires` (find → [Model], get → Model; getNamedType unwraps).
     const named = getNamedType(info.returnType);
-    const gqlFields = named instanceof GraphQLObjectType ? named.getFields() : {};
+    const type = named instanceof GraphQLObjectType ? named : null;
+    const requested = select?.select && typeof select.select === 'object' ? select.select : {};
+    const resolved = resolveLevelColumns(requested, type, prisma, modelName);
+    return {...(select && typeof select === 'object' ? select : {}), select: resolved};
+}
 
+/**
+ * Per-level worker for {@link selectReadColumns}: resolve the columns fetched for
+ * one model, recursing into each selected relation against its own model type.
+ */
+function resolveLevelColumns(
+    requested: Record<string, any>,
+    type: GraphQLObjectType | null,
+    prisma: PrismaService,
+    modelName: string,
+): Record<string, any> {
+    const scalars = prisma.getScalarFields(modelName);
+    const scalarSet = new Set(scalars);
+    const fields = type ? type.getFields() : undefined;
     const out: Record<string, any> = {};
-    const requiredColumns = new Set<string>();
-    let needAllScalars = false;
+    const needed = new Set<string>();
+    let fetchAllScalars = false;
 
     for (const [key, value] of Object.entries(requested)) {
         if (value && typeof value === 'object') {
-            out[key] = value; // a relation (or `_count`) selection — keep as-is
-        } else if (scalars.has(key)) {
-            out[key] = value; // a real scalar column
-        } else {
-            // A custom field resolver (no backing column). Prefer its declared
-            // dependencies (@FieldRequires); otherwise fall back to all scalars.
-            const requires = (gqlFields as any)[key]?.extensions?.[FIELD_REQUIRES_EXTENSION];
-            if (Array.isArray(requires)) {
-                for (const col of requires) {
-                    if (scalars.has(col)) requiredColumns.add(col);
+            // A relation or `_count`. Recurse into a known relation model so its
+            // own field resolvers get their source columns (a relation's GraphQL
+            // type name is its Prisma model name); keep `_count`/opaque verbatim.
+            const relField = fields?.[key];
+            if (relField && value.select && typeof value.select === 'object') {
+                const relType = getNamedType(relField.type);
+                if (relType instanceof GraphQLObjectType && prisma.getScalarFields(relType.name).length) {
+                    out[key] = {
+                        ...value,
+                        select: resolveLevelColumns(value.select, relType, prisma, relType.name),
+                    };
+                    continue;
+                }
+            }
+            out[key] = value;
+            continue;
+        }
+
+        if (scalarSet.has(key)) {
+            out[key] = value; // a real scalar column — keep even if also overridden by a resolver
+        }
+
+        // Is this field a custom @ResolveField on this model (new field OR in-place
+        // override)? The registry knows, and knows its declared source columns.
+        const entry = getFieldRequires(modelName, key);
+        if (entry) {
+            if (entry.requires) {
+                for (const col of entry.requires) {
+                    if (scalarSet.has(col)) needed.add(col);
                 }
             } else {
-                needAllScalars = true;
+                fetchAllScalars = true; // a resolver that declared nothing — fetch all scalars
             }
         }
+        // else: a plain column (already added above) or an unknown non-column
+        // field name — dropped; it resolves from @Parent() afterward.
     }
 
-    if (needAllScalars) {
+    if (fetchAllScalars) {
         for (const field of scalars) out[field] = true;
     } else {
-        for (const col of requiredColumns) out[col] = true;
+        for (const col of needed) out[col] = true;
     }
 
-    // Guard against an empty select (e.g. only a custom field with `requires: []`)
-    // — an empty Prisma `select` is invalid; fall back to all scalars.
+    // An empty select is invalid Prisma; fall back to the model's scalar columns.
     if (Object.keys(out).length === 0) {
         for (const field of scalars) out[field] = true;
     }
 
-    return {...(select && typeof select === 'object' ? select : {}), select: out};
+    return out;
 }
 
 /**

@@ -249,10 +249,15 @@ import { Project } from '../../generated/project/project.model';
 
 @Resolver(() => Project)
 export class ProjectFieldsResolver {
-    // in-place transform of an existing column (already selected → no @FieldRequires)
+    // in-place override of an existing column that ALSO reads another column
+    // (name) via @FieldRequires — proves declared columns are honored even when
+    // the field is named after a real column, and (queried nested) that resolution
+    // recurses into relations. Without it, p.name is absent when only status is
+    // selected.
     @ResolveField(() => String, { name: 'status' })
+    @FieldRequires('name')
     status(@Parent() p: Project) {
-        return (p.status ?? '').toUpperCase();
+        return \`\${(p.status ?? '').toUpperCase()}:\${p.name ?? 'NONAME'}\`;
     }
 
     // computed field that DECLARES its source column — only \`name\` is fetched

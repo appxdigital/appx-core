@@ -1,7 +1,9 @@
 import {Module} from '@nestjs/common';
+import {DiscoveryModule} from '@nestjs/core';
 import {GraphQLModule, Query, Resolver} from '@nestjs/graphql';
 import {ApolloDriver, ApolloDriverConfig} from '@nestjs/apollo';
 import {Request, Response} from 'express';
+import {FieldRequiresScanner} from './field-requires.registry';
 
 /**
  * Always-present root query. GraphQL requires a non-empty `Query` type, but a
@@ -22,6 +24,8 @@ export class AppxCoreRootResolver {
 
 @Module({
     imports: [
+        // DiscoveryService/MetadataScanner power the @FieldRequires bootstrap scan.
+        DiscoveryModule,
         GraphQLModule.forRoot<ApolloDriverConfig>({
             driver: ApolloDriver,
             context: ({req, res}: {req: Request; res: Response}) => ({req, res}),
@@ -42,6 +46,6 @@ export class AppxCoreRootResolver {
                 process.env.APPX_GRAPHQL_INTROSPECTION === 'true',
         }),
     ],
-    providers: [AppxCoreRootResolver],
+    providers: [AppxCoreRootResolver, FieldRequiresScanner],
 })
 export class GraphqlModule {}

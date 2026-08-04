@@ -214,9 +214,9 @@ coverUrl(@Parent() p: Project) { … }
 fullName(@Parent() p: Project) { … }
 ```
 
-- **Declared** → only those columns are fetched for the field.
+- **Declared** → only those columns are fetched for the field. Works the same for a computed field, an in-place override, and a field on a nested relation.
 - **Not declared** → all of the model's scalar columns are fetched, so the field can read any of them from its parent.
-- **In-place transform** (a resolver reusing an existing field's name) → needs no declaration; that column is fetched whenever the client selects the field.
+- **In-place transform reading only its own column** → needs no declaration; that column is fetched whenever the client selects the field. Declare `@FieldRequires` for any *other* columns it reads.
 
 Read from `@Parent()`, not the raw Prisma client — re-querying bypasses ABAC. For key-to-URL transforms, reuse the existing field's name so the raw stored value never leaves the server.
 

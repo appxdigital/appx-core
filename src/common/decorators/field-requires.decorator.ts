@@ -1,25 +1,25 @@
-import {Extensions} from '@nestjs/graphql';
+import {SetMetadata} from '@nestjs/common';
 
 /**
- * The GraphQL schema-field `extensions` key under which {@link FieldRequires}
- * records the source columns. The generated read resolver reads it back from the
- * schema when deciding which columns to fetch
- * (see `generic.resolver.ts` → `selectReadColumns`).
+ * Reflect metadata key under which {@link FieldRequires} records a field
+ * resolver's source columns. Read at bootstrap by the GraphQL field-requires
+ * scanner (see `field-requires.registry.ts`) to build the model→field→columns
+ * registry the read resolver consults.
  */
-export const FIELD_REQUIRES_EXTENSION = 'requires';
+export const FIELD_REQUIRES_METADATA = 'appx:field_requires';
 
 /**
  * Declare the model columns a custom GraphQL `@ResolveField` reads from its
  * `@Parent()`, so the generated `find` / `get` fetches those columns even when
- * the client didn't select them.
+ * the client didn't select them — at the top level and on nested relations.
  *
- * Use it on a computed field whose value derives from a column — e.g. a signed
- * `coverUrl` built from a stored `coverKey`. Without it, only the columns the
- * client selected are fetched and `@Parent().coverKey` would be `undefined`.
+ * Use it on a computed field or an in-place transform whose value derives from a
+ * column, e.g. a signed `coverUrl` built from a stored `coverKey`. Without it,
+ * only the columns the client selected are fetched and `@Parent().coverKey` would
+ * be `undefined`.
  *
  * - Declared → only the listed columns are fetched for the field.
  * - Not declared → all of the model's scalar columns are fetched.
- * - Not needed for an in-place transform that reuses an existing field's name.
  *
  * ABAC applies: a column the caller's role may not read is omitted at query time,
  * so the resolver sees it as absent — a transform can never surface a
@@ -50,4 +50,4 @@ export const FIELD_REQUIRES_EXTENSION = 'requires';
  * ```
  */
 export const FieldRequires = (...columns: (string | string[])[]) =>
-    Extensions({[FIELD_REQUIRES_EXTENSION]: columns.flat()});
+    SetMetadata(FIELD_REQUIRES_METADATA, columns.flat());
