@@ -70,11 +70,18 @@ jobs:
                   echo "channel=$CH" >> "$GITHUB_OUTPUT"
                   echo "Publishing ${V} to dist-tag '${CH}'."
 
-    # Build + full suite against BOTH database providers before any publish —
-    # mirrors the CI matrix, so a provider-specific regression can never reach a
-    # dist-tag (including `latest`). Publishing depends on every leg passing.
+    # Build + full suite against BOTH database providers — the final gate before
+    # a PRODUCTION (`latest`) publish, mirroring the CI matrix so a
+    # provider-specific regression can never reach `latest`.
+    #
+    # Skipped for prereleases (alpha/beta/next): those are cut from
+    # already-CI-tested development work and published for validation, so they
+    # don't re-run the heavy matrix here. `ci.yml` still runs the suite on
+    # branch/PR pushes during development.
     test:
         name: build & test (${{ matrix.db }})
+        needs: verify
+        if: needs.verify.outputs.channel == 'latest'
         runs-on: ubuntu-latest
         strategy:
             fail-fast: false
@@ -128,7 +135,7 @@ jobs:
 
     publish-prerelease:
         name: publish ${{ needs.verify.outputs.channel }}
-        needs: [verify, test]
+        needs: [verify]
         if: needs.verify.outputs.channel != 'latest'
         runs-on: ubuntu-latest
         permissions:
