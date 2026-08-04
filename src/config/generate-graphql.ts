@@ -73,6 +73,60 @@ export function generateGraphqlBundles(allModels: {name: string}[]): void {
  * the model folders + shared `prisma/` folder. The DTO tree (`dto/`, generated
  * by this framework and independent of these types) is preserved untouched.
  */
+/**
+ * Hide **to-many (list) relations** from the generated GraphQL model types.
+ *
+ * Nested selection has no pagination, so selecting a to-many relation
+ * (`project { tasks { … } }`) could pull an unbounded number of rows. To-one
+ * relations (`project { owner { … } }`) return a single record and stay
+ * exposed; `_count` (relation counts, bounded) stays too. Fetch a list at the
+ * top level instead — `task { find(where: { projectId … }, take, skip) }` —
+ * where pagination + ABAC apply.
+ *
+ * Implementation: for each model, use the DMMF to find its `kind === 'object'
+ * && isList` fields and remove those `@Field(...) name?: Array<…>;` blocks from
+ * `<model>.model.ts`, then drop any import left unused. Only the OUTPUT model is
+ * touched — `where`/`orderBy` relation filters are unchanged (filtering by a
+ * relation returns the parent rows, not the list).
+ */
+export function hideListRelationsFromModels(allModels: {name: string; fields: any[]}[]): void {
+    for (const model of allModels) {
+        const listRelations = (model.fields || [])
+            .filter((f) => f.kind === 'object' && f.isList)
+            .map((f) => f.name as string);
+        if (listRelations.length === 0) continue;
+
+        const folder = modelFolder(model.name);
+        const modelFile = path.join(generatedRoot, folder, `${folder}.model.ts`);
+        if (!fs.existsSync(modelFile)) continue;
+
+        let lines = fs.readFileSync(modelFile, 'utf8').split('\n');
+        for (const field of listRelations) {
+            const propIdx = lines.findIndex((l) => new RegExp(`^\\s*${field}[?!]?\\s*:`).test(l));
+            if (propIdx === -1) continue;
+            let start = propIdx;
+            while (start - 1 >= 0 && /^\s*@/.test(lines[start - 1])) start--; // preceding decorators
+            let end = propIdx;
+            if (lines[end + 1] === '') end++; // absorb the trailing blank line
+            lines.splice(start, end - start + 1);
+        }
+
+        // Drop imports left unused after the removals (each import is a single name).
+        let content = lines.join('\n');
+        const importRe = /^import\s*\{\s*([A-Za-z0-9_]+)\s*\}\s*from\s*['"][^'"]+['"];?\s*$/;
+        content = content
+            .split('\n')
+            .filter((line) => {
+                const m = line.match(importRe);
+                if (!m) return true;
+                return new RegExp(`\\b${m[1]}\\b`).test(content.replace(line, ''));
+            })
+            .join('\n');
+
+        fs.writeFileSync(modelFile, content);
+    }
+}
+
 export function pruneGeneratedGraphql(): void {
     if (!fs.existsSync(generatedRoot)) return;
     const dtoDir = path.resolve(generatedRoot, 'dto');

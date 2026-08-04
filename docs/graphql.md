@@ -88,21 +88,61 @@ query {
 
 Each selected field resolves independently through the proxy (its own authorized query), so multiplexing never weakens enforcement. `count` is filtered too — it counts only the rows the caller may read, never the table total.
 
-### Nested relations & children
+### Nested relations
 
-Select related models inline, to any depth. The GraphQL selection is compiled into a single Prisma `select`, so relations come back in the same authorized query (no N+1):
+Select **to-one** relations inline — they return a single record, and the selection compiles into one Prisma `select` (no N+1):
 
 ```graphql
 query {
   album {
-    find {
+    get(where: { id: { equals: 1 } }) {
       title
-      tracks { title }              # to-many child
-      artist { name }               # to-one relation
+      artist { name }          # to-one relation — OK
     }
   }
 }
 ```
+
+**To-many relations are not nested-selectable** (`album.tracks`, `project.tasks`). Nested lists have no pagination, so an inline list could return unbounded rows. Query the list at the **top level** instead, where pagination applies:
+
+```graphql
+query {
+  album  { get(where: { id: { equals: 1 } }) { title } }
+  tracks: track { find(where: { albumId: { equals: 1 } }, take: 20, orderBy: { id: asc }) { id title } }
+}
+```
+
+You can still get a bounded **count** of a to-many relation via `_count` (`album { get { _count { tracks } } }`), and you can **filter** by a to-many relation in `where` (`some` / `every` / `none`) — that returns the parent rows, not the list.
+
+---
+
+## Filtering, sorting & pagination
+
+`find` / `get` take the generated Prisma-style arguments; `count` takes `where`.
+
+- **Pagination** (`find`): `take`, `skip`, `cursor: { <uniqueField>: … }`, `distinct: [field]`.
+- **Sorting** (`find`): `orderBy: { field: asc | desc }` — including nested to-one, `orderBy: { artist: { name: asc } }`.
+
+**`where` operators**, by field type:
+
+| Field type | Operators |
+|---|---|
+| `String` | `equals`, `not`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `contains`, `startsWith`, `endsWith`, `mode: insensitive` |
+| `Int` / `Float` / `Decimal` / `BigInt` | `equals`, `not`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte` |
+| `Boolean` | `equals`, `not` |
+| `DateTime` | `equals`, `not`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte` |
+| enum | `equals`, `not`, `in`, `notIn` |
+| nullable field | any of the above, plus `null` / `{ equals: null }` / `{ not: null }` |
+| to-one relation | `is: { … }`, `isNot: { … }` (a nested `where`) |
+| to-many relation | `some: { … }`, `every: { … }`, `none: { … }` |
+| logical | `AND`, `OR`, `NOT` |
+
+The **generated GraphQL input type is the authoritative allowlist** — an operator that isn't on a field's filter type is a GraphQL error, so unknown operators are rejected before they run. Browse the exact set per field in the Apollo Sandbox (`GET /graphql`).
+
+Two framework rules on top of that:
+
+- **You can only filter/sort by fields your role can read.** A `where`/`orderBy` on a `@Role`-hidden column is rejected with `403` — except a presence check (`{ field: null }` / `{ NOT: { field: null } }`), which reveals only whether a value is set.
+- **A malformed value returns a clean `400`.** `createdAt: { gt: 2024 }` (a number where a date is expected) is a `400`, never a `500` or a leaked Prisma error.
 
 ---
 

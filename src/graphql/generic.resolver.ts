@@ -1,8 +1,28 @@
 import {Args, Info, Int, ObjectType, Query, ResolveField, Resolver} from '@nestjs/graphql';
+import {BadRequestException} from '@nestjs/common';
 import {Type} from '../common/types';
 import {PrismaSelect} from '@paljs/plugins';
 import {GraphQLResolveInfo} from 'graphql';
 import {PrismaService} from '../prisma/prisma.service';
+
+/**
+ * Run a read and translate a Prisma **validation** error into a `400`. A
+ * malformed `where`/`orderBy` value (e.g. `createdAt: { gt: 2024 }` — a number
+ * where a DateTime is expected) can slip past GraphQL coercion and reach Prisma,
+ * which throws `PrismaClientValidationError`. That's bad client input, not a
+ * server fault: surface a clean `400` instead of a `500` that leaks the raw
+ * Prisma invocation. Genuine server errors are re-thrown unchanged.
+ */
+async function readOrBadRequest<T>(op: () => Promise<T>): Promise<T> {
+    try {
+        return await op();
+    } catch (e: any) {
+        if ((e?.name ?? e?.constructor?.name) === 'PrismaClientValidationError') {
+            throw new BadRequestException('Invalid query arguments (check where / orderBy types).');
+        }
+        throw e;
+    }
+}
 
 /**
  * The generated `prisma-nestjs-graphql` types a model needs to expose its
@@ -68,34 +88,58 @@ export function CoreGraphqlResolver<ModelType>(bundle: GraphqlModelBundle<ModelT
         // The root field. Returns an empty object; the operations below are
         // resolved lazily as fields of the namespace, so `project { count }`
         // never runs `find`/`get`.
-        @Query(() => ModelQueries, {name: rootName})
+        @Query(() => ModelQueries, {
+            name: rootName,
+            description: `Read queries for ${modelName} — find / get / count. All results are ABAC-filtered.`,
+        })
         namespace(): ModelQueries {
             return {} as ModelQueries;
         }
 
-        @ResolveField(() => [model], {name: 'find'})
+        @ResolveField(() => [model], {
+            name: 'find',
+            description:
+                `List ${modelName} records the caller may read. Paginate with take / skip / cursor; ` +
+                `filter with where; sort with orderBy. You can only filter/sort by fields your role can read.`,
+        })
         async find(
             @Args({type: () => findManyArgs, nullable: true}) args: any,
             @Info() info: GraphQLResolveInfo,
         ): Promise<ModelType[]> {
             const select = new PrismaSelect(info).value;
-            return this.prisma.getModelDelegate(modelName as any).findMany({...args, ...select});
+            return readOrBadRequest(() =>
+                this.prisma.getModelDelegate(modelName as any).findMany({...args, ...select}),
+            );
         }
 
-        @ResolveField(() => model, {name: 'get', nullable: true})
+        @ResolveField(() => model, {
+            name: 'get',
+            nullable: true,
+            description: `The first ${modelName} matching the arguments, or null.`,
+        })
         async get(
             @Args({type: () => findFirstArgs, nullable: true}) args: any,
             @Info() info: GraphQLResolveInfo,
         ): Promise<ModelType | null> {
             const select = new PrismaSelect(info).value;
-            return this.prisma.getModelDelegate(modelName as any).findFirst({...args, ...select});
+            return readOrBadRequest(() =>
+                this.prisma.getModelDelegate(modelName as any).findFirst({...args, ...select}),
+            );
         }
 
-        @ResolveField(() => Int, {name: 'count'})
+        @ResolveField(() => Int, {
+            name: 'count',
+            description: `Number of ${modelName} records matching where that the caller may read.`,
+        })
         async count(
-            @Args('where', {type: () => whereInput, nullable: true}) where: any,
+            @Args('where', {
+                type: () => whereInput,
+                nullable: true,
+                description: 'Filter. You can only filter by fields your role can read.',
+            })
+            where: any,
         ): Promise<number> {
-            return this.prisma.getModelDelegate(modelName as any).count({where});
+            return readOrBadRequest(() => this.prisma.getModelDelegate(modelName as any).count({where}));
         }
     }
 

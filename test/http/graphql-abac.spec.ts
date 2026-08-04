@@ -1,22 +1,24 @@
 /**
  * GraphQL read API goes through the SAME ABAC proxy as REST.
  *
- * The fixture opts `Project` into GraphQL (namespaced read resolver via
- * `CoreGraphqlResolver`), exposing `project { find get count }`. Every operation
- * resolves through `PrismaService.getModelDelegate`, so this proves end-to-end
- * that over GraphQL:
- *   - unauthorized ROWS are not returned (row-level filtering + `count`),
- *   - unauthorized FIELDS are not returned — a role-gated column
- *     (`Project.secretApiKey` @Role(ADMIN)) and a never-readable one
- *     (`User.password` @Role(none)) come back null even though the GraphQL type
- *     exposes them, at the top level AND nested,
- *   - relations / children are queryable (and themselves ABAC-filtered),
- *   - anonymous (GUEST) callers get nothing,
- *   - aliases + multiple operations in one request work.
+ * The fixture opts `Project` into GraphQL (namespaced read resolver via the
+ * generated `ProjectResolver`), exposing `project { find get count }`. Every
+ * operation resolves through `PrismaService.getModelDelegate`, so this proves
+ * end-to-end that over GraphQL:
+ *   - unauthorized ROWS are not returned (row filtering + `count`),
+ *   - unauthorized FIELDS come back null — role-gated (`secretApiKey` @Role(ADMIN))
+ *     and never-readable (`owner.password` @Role(none)), top level and nested,
+ *   - an inaccessible nested RECORD (to-one `owner`) is filtered while the parent
+ *     stays accessible,
+ *   - to-one relations are nested-selectable; to-many relations are NOT (no nested
+ *     pagination — query lists at the top level),
+ *   - you can only filter/sort by fields you can read (presence checks excepted),
+ *   - a malformed filter value is a clean error, not a 500 that leaks Prisma,
+ *   - GUEST gets nothing; aliases + multiple operations resolve in one request.
  *
- * User population for GraphQL relies on UserPopulationGuard resolving the request
- * across transports (see the transformContext change) — an unauthenticated query
- * is a GUEST, a Bearer-token query is that user.
+ * Seed: bob (USER) owns "Bob Proj"; alice (USER) owns "Alice Proj" (bob can't see)
+ * and "Shared Proj" (bob is a MEMBER, so he accesses the project but not its
+ * owner alice — User read is self-only). admin is an ADMIN.
  */
 import request from 'supertest';
 import { bootFixture, BootedApp } from '../helpers/fixture-bootstrap';
@@ -25,8 +27,6 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
     let booted: BootedApp;
     let userJwt: string; // "bob", a USER
     let adminJwt: string; // an ADMIN
-    let bobProjectId: number;
-    let aliceProjectId: number;
 
     const gql = (query: string, jwt?: string) => {
         const req = request(booted.server).post('/graphql').send({ query });
@@ -46,10 +46,8 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
 
     beforeAll(async () => {
         booted = await bootFixture();
-
         await booted.withFreshDb(cleanDb);
 
-        // bob = USER (via register), admin = promoted, alice = another USER.
         for (const email of ['bob@example.com', 'admin@example.com']) {
             const reg = await request(booted.server)
                 .post('/auth/register')
@@ -59,26 +57,17 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
             }
         }
 
-        ({ bobProjectId, aliceProjectId } = await booted.withFreshDb(async (c) => {
+        await booted.withFreshDb(async (c) => {
             await c.user.update({ where: { email: 'admin@example.com' }, data: { role: 'ADMIN' } });
             const bob = await c.user.findFirst({ where: { email: 'bob@example.com' } });
             const alice = await c.user.create({ data: { email: 'alice@example.com', password: 'x', role: 'USER' } });
-            const bobProject = await c.project.create({
-                data: { name: 'Bob Proj', ownerId: bob.id, secretApiKey: 'BOB_SECRET' },
-            });
-            const aliceProject = await c.project.create({
-                data: { name: 'Alice Proj', ownerId: alice.id, secretApiKey: 'ALICE_SECRET' },
-            });
-            // Child rows in bob's project. Both are readable by bob (Task access
-            // mirrors project access), but their nested `assignee` differs:
-            //  - 'Bob Task'    → assignee bob   (bob CAN read this user: self)
-            //  - 'Shared Task' → assignee alice (bob CANNOT read this user)
-            // so bob accesses the task RECORDS but not the alice assignee record.
-            await c.task.create({ data: { title: 'Bob Task', projectId: bobProject.id, assigneeId: bob.id } });
-            await c.task.create({ data: { title: 'Shared Task', projectId: bobProject.id, assigneeId: alice.id } });
-            await c.task.create({ data: { title: 'Alice Task', projectId: aliceProject.id, assigneeId: alice.id } });
-            return { bobProjectId: bobProject.id, aliceProjectId: aliceProject.id };
-        }));
+            await c.project.create({ data: { name: 'Bob Proj', ownerId: bob.id, secretApiKey: 'BOB_SECRET' } });
+            await c.project.create({ data: { name: 'Alice Proj', ownerId: alice.id, secretApiKey: 'ALICE_SECRET' } });
+            // Owned by alice, but bob is a MEMBER: bob can access the project record
+            // (membership) yet not its owner alice (User read is self-only).
+            const shared = await c.project.create({ data: { name: 'Shared Proj', ownerId: alice.id, secretApiKey: 'SHARED_SECRET' } });
+            await c.projectMember.create({ data: { projectId: shared.id, userId: bob.id, role: 'contributor' } });
+        });
 
         const loginBob = await request(booted.server)
             .post('/auth/login/jwt')
@@ -96,34 +85,34 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         await booted?.close();
     });
 
-    // ── sanity: the namespaced schema is live ────────────────────────────────
+    // ── sanity ───────────────────────────────────────────────────────────────
     test('the `project` namespace query is exposed', async () => {
         const res = await gql('query { project { count } }', adminJwt);
         expect(res.status).toBe(200);
         expect(res.body.errors).toBeUndefined();
-        expect(res.body.data.project.count).toBe(2);
+        expect(res.body.data.project.count).toBe(3);
     });
 
     // ── unauthorized ROWS are not returned ───────────────────────────────────
-    test('USER find returns only accessible rows (not another user\'s project)', async () => {
+    test('USER find returns only accessible rows (owned + member), not others', async () => {
         const res = await gql('query { project { find { id name } } }', userJwt);
         expect(res.body.errors).toBeUndefined();
-        const names = res.body.data.project.find.map((p: any) => p.name);
-        expect(names).toEqual(['Bob Proj']);
+        const names = res.body.data.project.find.map((p: any) => p.name).sort();
+        expect(names).toEqual(['Bob Proj', 'Shared Proj']);
         expect(names).not.toContain('Alice Proj');
     });
 
     test('ADMIN find returns all rows', async () => {
         const res = await gql('query { project { find { id name } } }', adminJwt);
         const names = res.body.data.project.find.map((p: any) => p.name).sort();
-        expect(names).toEqual(['Alice Proj', 'Bob Proj']);
+        expect(names).toEqual(['Alice Proj', 'Bob Proj', 'Shared Proj']);
     });
 
     test('count is ABAC-filtered — USER counts only accessible rows (no total leak)', async () => {
         const userCount = await gql('query { project { count } }', userJwt);
-        expect(userCount.body.data.project.count).toBe(1);
+        expect(userCount.body.data.project.count).toBe(2);
         const adminCount = await gql('query { project { count } }', adminJwt);
-        expect(adminCount.body.data.project.count).toBe(2);
+        expect(adminCount.body.data.project.count).toBe(3);
     });
 
     test('USER cannot fetch an unauthorized row even by direct where (get → null)', async () => {
@@ -147,50 +136,54 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         expect(asAdmin.body.data.project.get.secretApiKey).toBe('BOB_SECRET');
     });
 
-    test('nested restricted field (owner.password @Role(none)) is omitted, sibling fields present', async () => {
+    test('nested restricted field (owner.password @Role(none)) is omitted, sibling present', async () => {
         const res = await gql(
             'query { project { get(where: { name: { equals: "Bob Proj" } }) { owner { email password } } } }',
             userJwt,
         );
         expect(res.body.errors).toBeUndefined();
         const owner = res.body.data.project.get.owner;
-        expect(owner.email).toBe('bob@example.com'); // sibling readable
-        expect(owner.password).toBeNull(); // never returned over GraphQL
+        expect(owner.email).toBe('bob@example.com');
+        expect(owner.password).toBeNull();
     });
 
-    // ── relations / children resolve (and are themselves filtered) ───────────
-    test('relations / children are queryable in one request', async () => {
-        const res = await gql(
-            'query { project { get(where: { name: { equals: "Bob Proj" } }) { name tasks { title } } } }',
+    // ── nested relations: to-one selectable, to-many not ─────────────────────
+    test('to-one relations are nested-selectable; to-many relations are not', async () => {
+        const one = await gql(
+            'query { project { get(where: { name: { equals: "Bob Proj" } }) { name owner { email } } } }',
             userJwt,
         );
-        expect(res.body.errors).toBeUndefined();
-        const proj = res.body.data.project.get;
-        expect(proj.tasks.map((t: any) => t.title).sort()).toEqual(['Bob Task', 'Shared Task']);
-    });
+        expect(one.body.errors).toBeUndefined();
+        expect(one.body.data.project.get.owner.email).toBe('bob@example.com');
 
-    // ── access to a record, but NOT a nested record it relates to ────────────
-    test('accessible record, inaccessible nested record — the nested relation is filtered', async () => {
-        const res = await gql(
-            'query { project { get(where: { name: { equals: "Bob Proj" } }) { name tasks { title assignee { email } } } } }',
+        // `tasks` (to-many) is not exposed for nested selection → schema error.
+        const many = await gql(
+            'query { project { get(where: { name: { equals: "Bob Proj" } }) { tasks { title } } } }',
             userJwt,
         );
-        expect(res.body.errors).toBeUndefined();
-        const proj = res.body.data.project.get;
-        // The project record and its task records ARE accessible to bob.
-        expect(proj.name).toBe('Bob Proj');
-        expect(proj.tasks.length).toBeGreaterThan(0);
-        // 'Shared Task'.assignee is alice, whom bob may not read (User = self only).
-        // Whether the proxy nulls the relation or drops the row, alice must never
-        // appear — the nested RECORD is not returned.
-        expect(JSON.stringify(proj)).not.toContain('alice@example.com');
-        // ...while bob's OWN nested user record IS returned — proving genuine
-        // per-record filtering, not a blanket null.
-        const assignees = proj.tasks.map((t: any) => t.assignee).filter(Boolean);
-        expect(assignees.some((a: any) => a.email === 'bob@example.com')).toBe(true);
+        expect(many.body.errors).toBeDefined();
+        expect(many.body.data ?? null).toBeNull();
     });
 
-    // ── cannot filter / sort / distinct by a field the role can't read ───────
+    test('accessible record, inaccessible nested to-one record — the nested record is filtered', async () => {
+        // bob can access Shared Proj (member)...
+        const canSee = await gql(
+            'query { project { get(where: { name: { equals: "Shared Proj" } }) { name } } }',
+            userJwt,
+        );
+        expect(canSee.body.errors).toBeUndefined();
+        expect(canSee.body.data.project.get?.name).toBe('Shared Proj');
+        // ...but its owner alice is not readable to bob — the nested owner record
+        // must not leak (whether the proxy nulls it or drops the parent).
+        const nested = await gql(
+            'query { project { get(where: { name: { equals: "Shared Proj" } }) { name owner { email } } } }',
+            userJwt,
+        );
+        expect(nested.body.errors).toBeUndefined();
+        expect(JSON.stringify(nested.body.data)).not.toContain('alice@example.com');
+    });
+
+    // ── filter/sort limited to readable fields ───────────────────────────────
     test('USER cannot filter by a field it cannot read', async () => {
         const res = await gql(
             'query { project { get(where: { secretApiKey: { equals: "BOB_SECRET" } }) { id } } }',
@@ -218,10 +211,7 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
     });
 
     test('USER cannot order by an unreadable field', async () => {
-        const res = await gql(
-            'query { project { find(orderBy: { secretApiKey: asc }) { id } } }',
-            userJwt,
-        );
+        const res = await gql('query { project { find(orderBy: { secretApiKey: asc }) { id } } }', userJwt);
         expect(res.body.errors).toBeDefined();
     });
 
@@ -243,21 +233,15 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
     });
 
     test('presence/nullness check on a hidden field is allowed (no value revealed)', async () => {
-        // "has a secretApiKey" — presence-only, permitted though USER can't read it.
         const notNull = await gql(
             'query { project { find(where: { secretApiKey: { not: null } }) { name secretApiKey } } }',
             userJwt,
         );
         expect(notNull.body.errors).toBeUndefined();
         expect(notNull.body.data.project.find.map((p: any) => p.name)).toContain('Bob Proj');
-        // the value itself is still omitted on output
         expect(notNull.body.data.project.find.every((p: any) => p.secretApiKey === null)).toBe(true);
 
-        // "has no secretApiKey" — also allowed.
-        const isNull = await gql(
-            'query { project { count(where: { secretApiKey: { equals: null } }) } }',
-            userJwt,
-        );
+        const isNull = await gql('query { project { count(where: { secretApiKey: { equals: null } }) } }', userJwt);
         expect(isNull.body.errors).toBeUndefined();
         expect(typeof isNull.body.data.project.count).toBe('number');
     });
@@ -270,23 +254,29 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         expect(res.body.errors).toBeDefined();
     });
 
-    // ── anonymous callers get nothing ────────────────────────────────────────
+    // ── malformed input is a clean error, never a 500 / Prisma leak ──────────
+    test('a malformed filter value does not 500 or leak a Prisma error', async () => {
+        const res = await gql(
+            'query { project { find(where: { createdAt: { gt: 2024 } }) { id } } }',
+            userJwt,
+        );
+        expect(res.status).not.toBe(500);
+        expect(res.body.errors).toBeDefined();
+        expect(JSON.stringify(res.body.errors)).not.toMatch(/PrismaClientValidationError|invocation|prisma\./i);
+    });
+
+    // ── anonymous ────────────────────────────────────────────────────────────
     test('GUEST (no token) cannot read — errors, no data leak', async () => {
         const res = await gql('query { project { find { id name } } }');
-        // Project has no GUEST rule → the proxy denies; GraphQL surfaces an error
-        // and no rows.
         expect(res.body.errors).toBeDefined();
         expect(res.body.data?.project?.find ?? null).toBeNull();
     });
 
-    // ── aliases + multiple operations in one request ─────────────────────────
+    // ── aliases + multiple operations ────────────────────────────────────────
     test('aliases and multiple operations resolve in one request', async () => {
-        const res = await gql(
-            'query { project { mine: find { name } total: count } }',
-            userJwt,
-        );
+        const res = await gql('query { project { mine: find { name } total: count } }', userJwt);
         expect(res.body.errors).toBeUndefined();
-        expect(res.body.data.project.mine.map((p: any) => p.name)).toEqual(['Bob Proj']);
-        expect(res.body.data.project.total).toBe(1);
+        expect(res.body.data.project.mine.map((p: any) => p.name).sort()).toEqual(['Bob Proj', 'Shared Proj']);
+        expect(res.body.data.project.total).toBe(2);
     });
 });

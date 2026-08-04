@@ -16,7 +16,7 @@
  */
 import {loadAllModels, runProjectBin} from './utils';
 import {generateDtoBases} from './generate-dtos';
-import {generateGraphqlBundles, pruneGeneratedGraphql} from './generate-graphql';
+import {generateGraphqlBundles, hideListRelationsFromModels, pruneGeneratedGraphql} from './generate-graphql';
 
 /**
  * The deploy-safe pass, as a single reusable unit. `generate models` (the
@@ -36,6 +36,9 @@ export function runDeploySafePass(): void {
 
     console.log('Generating GraphQL bundles...');
     generateGraphqlBundles(allModels);
+
+    console.log('Hiding to-many relations from GraphQL models (nested lists have no pagination)...');
+    hideListRelationsFromModels(allModels);
 
     console.log('Pruning unused GraphQL types (read-only API)...');
     pruneGeneratedGraphql();
