@@ -472,6 +472,12 @@ export class PrismaService {
             }
             // Direct reference to a field the role can't read.
             if (omit.has(key)) {
+                // A presence/nullness check (`field: null`, `{ equals: null }`,
+                // `{ not: null }`) reveals only whether the value is set — not the
+                // value — so it stays allowed on a `where` (the `hasX` / `isDeleted`
+                // pattern, without needing BYPASS_OMISSION). Any value-bearing
+                // operator, and every `orderBy`/`distinct`, still leaks and is rejected.
+                if (kind === 'where' && this.isPresenceOnlyPredicate(value)) continue;
                 this.throwUnreadableFilterField(modelName, key, userRole, kind);
             }
             // Relation — recurse into the related model (unwrapping list/one filters).
@@ -489,6 +495,21 @@ export class PrismaService {
             // Otherwise: a readable scalar field. Its value is an operator object
             // (where) or 'asc'/'desc' (orderBy) — not a field map, so no recursion.
         }
+    }
+
+    /**
+     * True when a `where` predicate on a field checks only presence/nullness —
+     * `field: null`, `{ equals: null }`, `{ not: null }` — and therefore reveals
+     * whether the value is set but never the value itself. Anything with a
+     * non-null literal (`equals: "x"`, `contains`, `gt`, `in`, …) is not
+     * presence-only.
+     */
+    private isPresenceOnlyPredicate(value: any): boolean {
+        if (value === null) return true; // `field: null`
+        if (typeof value !== 'object' || Array.isArray(value)) return false; // a literal value
+        const keys = Object.keys(value);
+        if (keys.length === 0) return false;
+        return keys.every((k) => (k === 'equals' || k === 'not') && value[k] === null);
     }
 
     private throwUnreadableFilterField(modelName: string, field: string, userRole: string, kind: string): never {

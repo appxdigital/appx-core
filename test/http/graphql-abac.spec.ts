@@ -242,6 +242,34 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         expect(res.body.data.project.find.map((p: any) => p.name)).toEqual(['Bob Proj']);
     });
 
+    test('presence/nullness check on a hidden field is allowed (no value revealed)', async () => {
+        // "has a secretApiKey" — presence-only, permitted though USER can't read it.
+        const notNull = await gql(
+            'query { project { find(where: { secretApiKey: { not: null } }) { name secretApiKey } } }',
+            userJwt,
+        );
+        expect(notNull.body.errors).toBeUndefined();
+        expect(notNull.body.data.project.find.map((p: any) => p.name)).toContain('Bob Proj');
+        // the value itself is still omitted on output
+        expect(notNull.body.data.project.find.every((p: any) => p.secretApiKey === null)).toBe(true);
+
+        // "has no secretApiKey" — also allowed.
+        const isNull = await gql(
+            'query { project { count(where: { secretApiKey: { equals: null } }) } }',
+            userJwt,
+        );
+        expect(isNull.body.errors).toBeUndefined();
+        expect(typeof isNull.body.data.project.count).toBe('number');
+    });
+
+    test('a value-bearing predicate on a hidden field is still rejected (even via not)', async () => {
+        const res = await gql(
+            'query { project { find(where: { secretApiKey: { not: "BOB_SECRET" } }) { id } } }',
+            userJwt,
+        );
+        expect(res.body.errors).toBeDefined();
+    });
+
     // ── anonymous callers get nothing ────────────────────────────────────────
     test('GUEST (no token) cannot read — errors, no data leak', async () => {
         const res = await gql('query { project { find { id name } } }');
