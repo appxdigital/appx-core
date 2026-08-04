@@ -30,6 +30,16 @@ export class AppxCoreRootResolver {
             // `src/generated/` path at boot (CI, read-only deploys, tests).
             autoSchemaFile: true,
             sortSchema: true,
+            // Introspection powers the Apollo Sandbox (GET /graphql). It exposes
+            // the schema shape (not data — ABAC still governs every field), so we
+            // keep it ON in development for the Sandbox, and OFF in production as
+            // defense-in-depth (less recon surface). Opt back in for a production
+            // deployment with APPX_GRAPHQL_INTROSPECTION=true. Without this, Apollo
+            // Server v4 disables introspection under NODE_ENV=production and the
+            // Sandbox fails with `INTROSPECTION_DISABLED`.
+            introspection:
+                process.env.NODE_ENV !== 'production' ||
+                process.env.APPX_GRAPHQL_INTROSPECTION === 'true',
         }),
     ],
     providers: [AppxCoreRootResolver],
