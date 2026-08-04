@@ -195,6 +195,9 @@ export function runFixtureGenerate(): void {
     // `getModelDelegate` whole-lowercasing `AlbumMember` → `albummember`).
     // Mirrors the documented one-line opt-in.
     enableFixtureGraphql(['Project', 'ProjectMember']);
+    // Add a native field resolver on Project to exercise GraphQL output shaping
+    // (in-place transform + computed field + ABAC-restricted source).
+    enableFixtureProjectFields();
 }
 
 /**
@@ -218,6 +221,74 @@ export function enableFixtureGraphql(models: string[]): void {
             .join('\n');
         fs.writeFileSync(modulePath, src);
     }
+}
+
+/**
+ * Add a hand-written, NATIVE NestJS `@Resolver(() => Project)` field resolver to
+ * the fixture and register it — exactly what a developer does to shape GraphQL
+ * read output (the documented pattern; no framework-specific decorator). It
+ * exercises three things end-to-end:
+ *  - `status`    — transforms an EXISTING field in place (uppercased),
+ *  - `slug`      — a NEW computed field derived from `name`; querying only `slug`
+ *                  (not `name`) exercises the scalar gap-closer (`@Parent()` still
+ *                  carries the row's columns),
+ *  - `hasSecret` — derived from the `@Role(ADMIN)` `secretApiKey`; ABAC omits that
+ *                  column at select-time, so it is `false` for USER, `true` for
+ *                  ADMIN — a transform never sees data the role may not read.
+ *
+ * Written AFTER generation (which wipes `src/modules`), same as
+ * `enableFixtureGraphql`, so it survives the regen.
+ */
+export function enableFixtureProjectFields(): void {
+    const dir = path.join(FIXTURE_DIR, 'src/modules/project');
+    fs.writeFileSync(
+        path.join(dir, 'project-fields.resolver.ts'),
+        `import { Parent, ResolveField, Resolver } from '@nestjs/graphql';
+import { FieldRequires } from '@appxdigital/appx-core';
+import { Project } from '../../generated/project/project.model';
+
+@Resolver(() => Project)
+export class ProjectFieldsResolver {
+    // in-place transform of an existing column (already selected → no @FieldRequires)
+    @ResolveField(() => String, { name: 'status' })
+    status(@Parent() p: Project) {
+        return (p.status ?? '').toUpperCase();
+    }
+
+    // computed field that DECLARES its source column — only \`name\` is fetched
+    @ResolveField(() => String, { name: 'slug', nullable: true })
+    @FieldRequires('name')
+    slug(@Parent() p: Project) {
+        return p.name ? p.name.toLowerCase().replace(/\\s+/g, '-') : null;
+    }
+
+    // computed field with NO @FieldRequires → safe fallback fetches all scalars
+    // (incl. secretApiKey, which ABAC omits for USER); proves the undeclared path.
+    @ResolveField(() => Boolean, { name: 'hasSecret' })
+    hasSecret(@Parent() p: Project) {
+        return Boolean(p.secretApiKey);
+    }
+
+    // declares the WRONG dependency (list form) — reads name but requires status →
+    // proves precision: with @FieldRequires, ONLY those columns are fetched, so
+    // name is absent and this resolves null (no all-scalars fallback happened).
+    @ResolveField(() => String, { name: 'nameEchoMisdeclared', nullable: true })
+    @FieldRequires(['status'])
+    nameEchoMisdeclared(@Parent() p: Project) {
+        return p.name ?? null;
+    }
+}
+`,
+    );
+
+    const modulePath = path.join(dir, 'project.module.ts');
+    let src = fs.readFileSync(modulePath, 'utf8');
+    src = src.replace(
+        "import { ProjectResolver } from '../../generated/project/graphql';",
+        "$&\nimport { ProjectFieldsResolver } from './project-fields.resolver';",
+    );
+    src = src.replace(/(\n(\s*))ProjectResolver,/, `$1ProjectResolver,$1ProjectFieldsResolver,`);
+    fs.writeFileSync(modulePath, src);
 }
 
 /**

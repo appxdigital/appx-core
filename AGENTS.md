@@ -238,6 +238,16 @@ Consuming projects upgrade this package by bumping the npm version — they do *
 - **Scaffold-only fixes reach new projects automatically but not existing ones.** Call this out and give the by-hand steps in the Migration block.
 - `CHANGELOG.md` tracks *what shipped and what to do* — add an entry (with a `### Migration` block when consumers must act) whenever you change runtime or scaffold behaviour.
 
+### 8.2 Documentation style (`docs/`, README, public JSDoc)
+
+Documentation states **the use-case, the example, and the effect** — nothing else. For each feature: one line on when to use it, a focused example, then what it does.
+
+- **Don't survey alternatives.** No "you can also do X", "this is a thin alias over Y, use Y directly if you prefer". Document the one recommended way.
+- **Don't explain internals.** Skip "under the hood it stores Z on the field", metadata keys, and other implementation detail a consumer doesn't act on. Security/ABAC effects are *effects*, not internals — keep those.
+- **No editorialising.** Drop "that's the whole feature", "no framework-specific decorator needed", and similar filler.
+
+Keep it tight and declarative — the reader should learn when, how, and what happens, and stop there.
+
 **DO**
 - Treat `src/prisma/prisma.service.ts` as load-bearing. Read it before you change anything in `src/modules/core/` or the proxy.
 - When adding endpoints, use `@Permission('actionName')` and add an entry to `permissions.config.ts` for every role × action pair you want to allow. Default-deny is the existing behaviour: an undefined `[model][role]` throws 403.

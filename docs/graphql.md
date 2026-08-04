@@ -162,6 +162,68 @@ Always let the generated resolver serve the data — a custom resolver that reac
 
 ---
 
+## Shaping read output (transforms & computed fields)
+
+To transform a field on the way out (sign a stored S3 key into a URL, mask a value, format a date) or to add a computed field (`slug`, `fullName`), attach a field resolver to the generated model type in the model's module:
+
+```ts
+// src/modules/project/project.fields.ts
+import { Parent, ResolveField, Resolver } from '@nestjs/graphql';
+import { FieldRequires } from '@appxdigital/appx-core';
+import { Project } from '../../generated/project/project.model';
+import { UrlSigner } from '../../shared/url-signer.service';
+
+@Resolver(() => Project)
+export class ProjectFields {
+  constructor(private readonly urls: UrlSigner) {}
+
+  // transform an existing field in place — same name, same type
+  @ResolveField(() => String, { name: 'coverKey', nullable: true })
+  coverKey(@Parent() p: Project) {
+    return p.coverKey ? this.urls.sign(p.coverKey) : null;   // stored key → signed URL
+  }
+
+  // add a computed field — declare the column(s) it reads
+  @ResolveField(() => String, { nullable: true })
+  @FieldRequires('name')
+  slug(@Parent() p: Project) {
+    return p.name ? p.name.toLowerCase().replace(/\s+/g, '-') : null;
+  }
+}
+```
+```ts
+// project.module.ts
+providers: [ProjectService, ProjectResolver, ProjectFields]
+```
+
+The resolver runs wherever the model appears, including nested — `project { find { coverKey } }` and `projectMember { find { project { coverKey } } }` both return the transformed value.
+
+It reads from the already-filtered parent row, so it only ever sees columns the caller's role may read. A field computed from a `@Role`-restricted column receives that column as absent, so a transform cannot surface a value the role can't read.
+
+### `@FieldRequires` — declare a computed field's source columns
+
+A computed field reads columns from its parent, but the query fetches only the columns the client selected. Declare the columns the field reads so they are fetched even when the client didn't select them:
+
+```ts
+@ResolveField(() => String, { nullable: true })
+@FieldRequires('coverKey')                  // one column
+coverUrl(@Parent() p: Project) { … }
+
+@ResolveField(() => String, { nullable: true })
+@FieldRequires(['firstName', 'lastName'])   // a list, or @FieldRequires('firstName', 'lastName')
+fullName(@Parent() p: Project) { … }
+```
+
+- **Declared** → only those columns are fetched for the field.
+- **Not declared** → all of the model's scalar columns are fetched, so the field can read any of them from its parent.
+- **In-place transform** (a resolver reusing an existing field's name) → needs no declaration; that column is fetched whenever the client selects the field.
+
+Read from `@Parent()`, not the raw Prisma client — re-querying bypasses ABAC. For key-to-URL transforms, reuse the existing field's name so the raw stored value never leaves the server.
+
+> The REST CRUD endpoints return rows as stored; output shaping applies to the GraphQL read API.
+
+---
+
 ## Not available yet
 
 - **Mutations** (create/update/delete) — use REST.

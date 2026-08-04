@@ -127,6 +127,47 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         expect(rows[0].user.email).toBe('bob@example.com'); // bob may read his own User row
     });
 
+    // ── native field resolvers shape output (transform + computed field) ─────
+    // A hand-written `@Resolver(() => Project)` (see enableFixtureProjectFields)
+    // adds: status (in-place uppercase), slug (computed from name), hasSecret
+    // (computed from the @Role(ADMIN) secretApiKey). No framework-specific API —
+    // the standard NestJS field-resolver pattern, ABAC-safe.
+    test('in-place transform: status is uppercased by the field resolver', async () => {
+        const res = await gql('query { project { get(where: { name: { equals: "Bob Proj" } }) { status } } }', userJwt);
+        expect(res.body.errors).toBeUndefined();
+        expect(res.body.data.project.get.status).toBe('ACTIVE'); // stored 'active'
+    });
+
+    test('computed field derived from an unselected column resolves (scalar gap-closer)', async () => {
+        // Select ONLY slug — not name. Without the scalar gap-closer the parent
+        // would lack `name` and slug would be null; with it, the row carries name.
+        const res = await gql('query { project { get(where: { name: { equals: "Bob Proj" } }) { slug } } }', userJwt);
+        expect(res.body.errors).toBeUndefined();
+        expect(res.body.data.project.get.slug).toBe('bob-proj');
+    });
+
+    test('extensions.requires fetches only the declared column (precise, no over-fetch)', async () => {
+        // nameEchoMisdeclared declares requires:['status'] but reads `name`.
+        // With requires honored, only `status` is fetched, so `name` is absent
+        // and the field resolves null — proving no all-scalars fallback occurred.
+        const res = await gql(
+            'query { project { get(where: { name: { equals: "Bob Proj" } }) { nameEchoMisdeclared } } }',
+            adminJwt,
+        );
+        expect(res.body.errors).toBeUndefined();
+        expect(res.body.data.project.get.nameEchoMisdeclared).toBeNull();
+    });
+
+    test('computed field over a @Role-restricted column respects ABAC (never sees hidden data)', async () => {
+        const q = `query { project { get(where: { name: { equals: "Bob Proj" } }) { hasSecret } } }`;
+        const asUser = await gql(q, userJwt);
+        expect(asUser.body.errors).toBeUndefined();
+        expect(asUser.body.data.project.get.hasSecret).toBe(false); // secretApiKey omitted for USER → never fetched
+
+        const asAdmin = await gql(q, adminJwt);
+        expect(asAdmin.body.data.project.get.hasSecret).toBe(true); // ADMIN may read it
+    });
+
     // ── unauthorized ROWS are not returned ───────────────────────────────────
     test('USER find returns only accessible rows (owned + member), not others', async () => {
         const res = await gql('query { project { find { id name } } }', userJwt);

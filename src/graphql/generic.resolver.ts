@@ -2,8 +2,9 @@ import {Args, Info, Int, ObjectType, Query, ResolveField, Resolver} from '@nestj
 import {BadRequestException} from '@nestjs/common';
 import {Type} from '../common/types';
 import {PrismaSelect} from '@paljs/plugins';
-import {GraphQLResolveInfo} from 'graphql';
+import {getNamedType, GraphQLObjectType, GraphQLResolveInfo} from 'graphql';
 import {PrismaService} from '../prisma/prisma.service';
+import {FIELD_REQUIRES_EXTENSION} from '../common/decorators/field-requires.decorator';
 
 /**
  * Run a read and translate a Prisma **validation** error into a `400`. A
@@ -22,6 +23,89 @@ async function readOrBadRequest<T>(op: () => Promise<T>): Promise<T> {
         }
         throw e;
     }
+}
+
+/**
+ * Turn a `PrismaSelect`-derived selection into the columns actually fetched,
+ * resolving the source columns that custom `@ResolveField`s need.
+ *
+ * `PrismaSelect` narrows the Prisma query to exactly the fields the GraphQL
+ * request asked for. That breaks the standard NestJS code-first contract where a
+ * `@ResolveField` on the model type receives the full entity as `@Parent()`: a
+ * custom field (`coverUrl` derived from a `coverKey` column, or a signed-URL
+ * transform of an existing field) can't read a source column the client didn't
+ * also select. We restore that contract with a **hybrid** strategy that avoids
+ * over-fetching:
+ *
+ *   - A custom field can declare its source columns natively, via the standard
+ *     NestJS field `extensions`:
+ *         `@ResolveField(() => String, { extensions: { requires: ['coverKey'] } })`
+ *     When declared, ONLY those columns are added — no over-fetch.
+ *   - A custom field that declares nothing falls back to fetching all of the
+ *     model's scalar columns (safe default: the resolver can read anything from
+ *     `@Parent()`), at the cost of reading columns the query didn't select.
+ *   - A query that selects no custom fields fetches exactly what was asked for.
+ *
+ * Relations stay selection-driven throughout (no unbounded relation fetching).
+ * ABAC field omission runs afterward in the proxy and strips `@Role`-restricted
+ * columns at select-time, so a caller still only ever receives — and a transform
+ * only ever sees — the columns their role may read.
+ *
+ * Custom field names (no backing column) are dropped from the Prisma `select`:
+ * `PrismaSelect` puts every requested GraphQL field there, and passing a name
+ * Prisma doesn't recognise throws a validation error. They resolve from the
+ * parent afterward, so they must not reach the query.
+ */
+function selectReadColumns(
+    select: any,
+    info: GraphQLResolveInfo,
+    prisma: PrismaService,
+    modelName: string,
+): any {
+    const scalars = new Set(prisma.getScalarFields(modelName));
+    const requested = select?.select && typeof select.select === 'object' ? select.select : {};
+
+    // The GraphQL type of the returned rows, to read each field's
+    // `extensions.requires` (find → [Model], get → Model; getNamedType unwraps).
+    const named = getNamedType(info.returnType);
+    const gqlFields = named instanceof GraphQLObjectType ? named.getFields() : {};
+
+    const out: Record<string, any> = {};
+    const requiredColumns = new Set<string>();
+    let needAllScalars = false;
+
+    for (const [key, value] of Object.entries(requested)) {
+        if (value && typeof value === 'object') {
+            out[key] = value; // a relation (or `_count`) selection — keep as-is
+        } else if (scalars.has(key)) {
+            out[key] = value; // a real scalar column
+        } else {
+            // A custom field resolver (no backing column). Prefer its declared
+            // dependencies (@FieldRequires); otherwise fall back to all scalars.
+            const requires = (gqlFields as any)[key]?.extensions?.[FIELD_REQUIRES_EXTENSION];
+            if (Array.isArray(requires)) {
+                for (const col of requires) {
+                    if (scalars.has(col)) requiredColumns.add(col);
+                }
+            } else {
+                needAllScalars = true;
+            }
+        }
+    }
+
+    if (needAllScalars) {
+        for (const field of scalars) out[field] = true;
+    } else {
+        for (const col of requiredColumns) out[col] = true;
+    }
+
+    // Guard against an empty select (e.g. only a custom field with `requires: []`)
+    // — an empty Prisma `select` is invalid; fall back to all scalars.
+    if (Object.keys(out).length === 0) {
+        for (const field of scalars) out[field] = true;
+    }
+
+    return {...(select && typeof select === 'object' ? select : {}), select: out};
 }
 
 /**
@@ -106,7 +190,7 @@ export function CoreGraphqlResolver<ModelType>(bundle: GraphqlModelBundle<ModelT
             @Args({type: () => findManyArgs, nullable: true}) args: any,
             @Info() info: GraphQLResolveInfo,
         ): Promise<ModelType[]> {
-            const select = new PrismaSelect(info).value;
+            const select = selectReadColumns(new PrismaSelect(info).value, info, this.prisma, modelName);
             return readOrBadRequest(() =>
                 this.prisma.getModelDelegate(modelName as any).findMany({...args, ...select}),
             );
@@ -121,7 +205,7 @@ export function CoreGraphqlResolver<ModelType>(bundle: GraphqlModelBundle<ModelT
             @Args({type: () => findFirstArgs, nullable: true}) args: any,
             @Info() info: GraphQLResolveInfo,
         ): Promise<ModelType | null> {
-            const select = new PrismaSelect(info).value;
+            const select = selectReadColumns(new PrismaSelect(info).value, info, this.prisma, modelName);
             return readOrBadRequest(() =>
                 this.prisma.getModelDelegate(modelName as any).findFirst({...args, ...select}),
             );

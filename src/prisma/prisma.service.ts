@@ -1119,6 +1119,24 @@ export class PrismaService {
     }
 
     /**
+     * The scalar (and enum) field names of a model, as derived from the Prisma
+     * DMMF at bootstrap. Relations are excluded.
+     *
+     * Used by the GraphQL generic resolver to fetch the model's own columns even
+     * when a query only selects a subset, so that a custom `@ResolveField` on the
+     * model type (e.g. a signed-URL transform) can read its source column from
+     * `@Parent()`. ABAC field omission still runs afterward at select-time, so a
+     * `@Role`-restricted column is never actually fetched — callers only ever get
+     * the readable projection.
+     *
+     * @param modelName - The model name (any casing; matched case-insensitively).
+     * @returns The model's scalar field names, or `[]` if the model is unknown.
+     */
+    getScalarFields(modelName: string): string[] {
+        return this.fieldConfigs[modelName.toLowerCase()]?.scalarFields ?? [];
+    }
+
+    /**
      * Retrieves the list of fields to omit based on the user's role.
      * It checks the field configurations stored in `fieldConfigs` and compares them against the role.
      *
