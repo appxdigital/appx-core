@@ -81,7 +81,11 @@ AppX Core puts **security and data-access control first**, while keeping develop
   - JWT auth (recommended)
 - **Fast CRUD acceleration**
   - Generated modules, controllers, and services per model
-  - Standard REST CRUD endpoints
+  - Standard REST CRUD endpoints (the write surface)
+- **GraphQL read API — recommended for querying**
+  - Namespaced, **opt-in per model**: `model { find get count }`
+  - **Native pagination** (`take` / `skip` / `cursor`), nested relations, and several models per request — prefer it over the CRUD list endpoint for reads/filtering, and enable it on your main queryable models
+  - Same ABAC as REST (row / field / nested-record filtering; filter & sort limited to readable fields)
 - **Developer-friendly extension points**
   - Add custom endpoints with `@Permission(...)`
   - Use services for business logic, controllers as transport layer
@@ -614,7 +618,7 @@ Operational guidance:
 
 ### GraphQL status
 
-GraphQL exposes a **read-only** API — `find` / `get` / `count`, namespaced per model and **opt-in per module** (one line) — that runs through the same ABAC proxy as REST, so row filtering, field omission, and nested-relation filtering all apply. See **[docs/graphql.md](./docs/graphql.md)**. Not yet: mutations and full aggregates. One caveat before exposing sensitive models to untrusted roles — the generated `where`/`orderBy` inputs still include restricted columns (a filter-oracle; output values are omitted). REST CRUD + AdminJS remain the primary write surfaces.
+GraphQL exposes a **read-only** API — `find` / `get` / `count`, namespaced per model and **opt-in per module** (one line) — that runs through the same ABAC proxy as REST: row filtering, field omission, nested-relation filtering, and filter/sort limited to fields the role can read all apply. It supports nested selections and native pagination (`take`/`skip`/`cursor`), so it's the recommended surface for querying/filtering/paginating reads. See **[docs/graphql.md](./docs/graphql.md)**. Not yet: mutations and full aggregates — REST CRUD + AdminJS remain the write surfaces.
 
 ---
 

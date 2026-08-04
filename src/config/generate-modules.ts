@@ -18,16 +18,15 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { ${model}Controller } from './${folder}.controller';
 import { ${model}Service } from './${folder}.service';
 // To expose this model over GraphQL (read-only: \`${camel} { find get count }\`),
-// uncomment the two imports and the provider line below. See docs/graphql.md.
-// import { CoreGraphqlResolver } from '@appxdigital/appx-core';
-// import { ${model}Graphql } from '../../generated/${folder}/graphql';
+// uncomment the import and the provider line below. See docs/graphql.md.
+// import { ${model}Resolver } from '../../generated/${folder}/graphql';
 
 @Module({
   imports: [PrismaModule],
   controllers: [${model}Controller],
   providers: [
     ${model}Service,
-    // CoreGraphqlResolver(${model}Graphql),
+    // ${model}Resolver,
   ],
 })
 export class ${model}Module {}

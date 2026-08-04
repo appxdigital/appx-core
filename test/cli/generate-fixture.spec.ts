@@ -129,13 +129,16 @@ describe('appx-core generate — real fixture output (end-to-end)', () => {
         expect(m).toMatch(/PrismaModule/);
         expect(m).toMatch(/controllers:\s*\[TypeSampleController\]/);
         // Service is a real provider; the GraphQL resolver is present only as a
-        // commented, copy-paste-ready opt-in line (no resolver registered by default).
+        // commented, copy-paste-ready opt-in (import the generated resolver class,
+        // add it to providers) — nothing registered by default.
         expect(m).toMatch(/providers:\s*\[\s*TypeSampleService,/);
-        expect(m).toMatch(/\/\/\s*CoreGraphqlResolver\(TypeSampleGraphql\),/);
-        expect(m).not.toMatch(/^\s*TypeSampleResolver\b/m);
+        expect(m).toMatch(/\/\/\s*import \{ TypeSampleResolver \} from '\.\.\/\.\.\/generated\/type-sample\/graphql';/);
+        expect(m).toMatch(/\/\/\s*TypeSampleResolver,/);
+        // No uncommented resolver line by default.
+        expect(m).not.toMatch(/^\s*TypeSampleResolver,/m);
     });
 
-    test('deploy-safe pass emits a GraphQL bundle (src/generated/type-sample/graphql.ts)', () => {
+    test('deploy-safe pass emits a GraphQL bundle + resolver (src/generated/type-sample/graphql.ts)', () => {
         const bundle = path.join(SCAFFOLD, 'src/generated/type-sample/graphql.ts');
         expect(fs.existsSync(bundle)).toBe(true);
         const b = fs.readFileSync(bundle, 'utf8');
@@ -143,6 +146,8 @@ describe('appx-core generate — real fixture output (end-to-end)', () => {
         expect(b).toMatch(/model:\s*TypeSample/);
         expect(b).toMatch(/findManyArgs:\s*FindManyTypeSampleArgs/);
         expect(b).toMatch(/findFirstArgs:\s*FindFirstTypeSampleArgs/);
+        // Ready-to-register resolver class (the one-line opt-in target).
+        expect(b).toMatch(/export const TypeSampleResolver = CoreGraphqlResolver\(TypeSampleGraphql\)/);
     });
 
     test('app.module.ts has TypeSampleModule added by the module wizard', () => {

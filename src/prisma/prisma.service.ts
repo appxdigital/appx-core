@@ -187,6 +187,11 @@ export class PrismaService {
                                             // create/connect, or a raw foreign key).
                                             await this.enforceNestedWrites(String(propKey), params.data, user, userRole);
                                         } else {
+                                            // Reject a client where/orderBy/distinct that references a
+                                            // field this role can't read (input counterpart to output
+                                            // field omission). Runs on the client input, BEFORE the
+                                            // trusted ABAC conditions are injected below.
+                                            this.assertFilterFieldsReadable(String(propKey), userRole, params);
                                             params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
                                             // An update can re-point a foreign key (scalar column);
                                             // authorize those changes with the same connect rules as create.
@@ -423,6 +428,76 @@ export class PrismaService {
      * @returns The modified query arguments with the appropriate `where` conditions applied.
      * @throws ForbiddenException if no valid `where` conditions are present after applying permissions.
      */
+    /**
+     * Reject a client `where` / `orderBy` / `distinct` that references a field
+     * this role cannot read (per `@Role` / `getFieldsToOmit`) — the input-side
+     * counterpart to `applyFieldOmission` on output, so a field the caller can't
+     * read can't be used to filter or sort either. Recurses through relations and
+     * AND/OR/NOT. Runs on the CLIENT args, before the trusted author-defined
+     * conditions are injected, so it never blocks the framework's own conditions.
+     */
+    private assertFilterFieldsReadable(modelName: string, userRole: string, args: any): void {
+        if (!args || typeof args !== 'object') return;
+        if (args.where) this.assertClauseFieldsReadable(modelName, userRole, args.where, 'where');
+        if (args.orderBy) this.assertClauseFieldsReadable(modelName, userRole, args.orderBy, 'orderBy');
+        if (args.distinct) {
+            const omit = new Set(this.getFieldsToOmit(modelName, userRole));
+            for (const field of ([] as string[]).concat(args.distinct)) {
+                if (omit.has(field)) this.throwUnreadableFilterField(modelName, field, userRole, 'distinct');
+            }
+        }
+    }
+
+    /** Recursively assert no omitted field is referenced in a where/orderBy clause. */
+    private assertClauseFieldsReadable(
+        modelName: string,
+        userRole: string,
+        clause: any,
+        kind: 'where' | 'orderBy',
+    ): void {
+        if (Array.isArray(clause)) {
+            for (const c of clause) this.assertClauseFieldsReadable(modelName, userRole, c, kind);
+            return;
+        }
+        if (!clause || typeof clause !== 'object') return;
+
+        const omit = new Set(this.getFieldsToOmit(modelName, userRole));
+        for (const key of Object.keys(clause)) {
+            const value = clause[key];
+
+            // Logical grouping — recurse on the same model.
+            if (key === 'AND' || key === 'OR' || key === 'NOT') {
+                this.assertClauseFieldsReadable(modelName, userRole, value, kind);
+                continue;
+            }
+            // Direct reference to a field the role can't read.
+            if (omit.has(key)) {
+                this.throwUnreadableFilterField(modelName, key, userRole, kind);
+            }
+            // Relation — recurse into the related model (unwrapping list/one filters).
+            const relation = this.getRelation(modelName, key);
+            if (relation) {
+                const wrappers = ['some', 'every', 'none', 'is', 'isNot'];
+                const wrapped =
+                    value && typeof value === 'object' ? wrappers.filter((w) => w in value) : [];
+                if (wrapped.length) {
+                    for (const w of wrapped) this.assertClauseFieldsReadable(relation.model, userRole, value[w], kind);
+                } else {
+                    this.assertClauseFieldsReadable(relation.model, userRole, value, kind);
+                }
+            }
+            // Otherwise: a readable scalar field. Its value is an operator object
+            // (where) or 'asc'/'desc' (orderBy) — not a field map, so no recursion.
+        }
+    }
+
+    private throwUnreadableFilterField(modelName: string, field: string, userRole: string, kind: string): never {
+        throw new HttpException(
+            `Cannot ${kind === 'orderBy' ? 'order by' : 'filter by'} '${modelName}.${field}' — not readable by role ${userRole}.`,
+            HttpStatus.FORBIDDEN,
+        );
+    }
+
     private applyWhereConditions(
         modelName: string,
         userRole: string,

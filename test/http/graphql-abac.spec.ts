@@ -190,6 +190,58 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         expect(assignees.some((a: any) => a.email === 'bob@example.com')).toBe(true);
     });
 
+    // ── cannot filter / sort / distinct by a field the role can't read ───────
+    test('USER cannot filter by a field it cannot read', async () => {
+        const res = await gql(
+            'query { project { get(where: { secretApiKey: { equals: "BOB_SECRET" } }) { id } } }',
+            userJwt,
+        );
+        expect(res.body.errors).toBeDefined();
+        expect(res.body.data?.project?.get ?? null).toBeNull();
+    });
+
+    test('ADMIN (who can read the field) CAN filter by it', async () => {
+        const res = await gql(
+            'query { project { get(where: { secretApiKey: { equals: "BOB_SECRET" } }) { name } } }',
+            adminJwt,
+        );
+        expect(res.body.errors).toBeUndefined();
+        expect(res.body.data.project.get.name).toBe('Bob Proj');
+    });
+
+    test('USER cannot count filtered by an unreadable field', async () => {
+        const res = await gql(
+            'query { project { count(where: { secretApiKey: { contains: "SECRET" } }) } }',
+            userJwt,
+        );
+        expect(res.body.errors).toBeDefined();
+    });
+
+    test('USER cannot order by an unreadable field', async () => {
+        const res = await gql(
+            'query { project { find(orderBy: { secretApiKey: asc }) { id } } }',
+            userJwt,
+        );
+        expect(res.body.errors).toBeDefined();
+    });
+
+    test('USER cannot filter by an unreadable field on a nested relation', async () => {
+        const res = await gql(
+            'query { project { find(where: { owner: { is: { password: { startsWith: "x" } } } }) { id } } }',
+            userJwt,
+        );
+        expect(res.body.errors).toBeDefined();
+    });
+
+    test('filtering by a readable field still works', async () => {
+        const res = await gql(
+            'query { project { find(where: { name: { contains: "Bob" } }) { name } } }',
+            userJwt,
+        );
+        expect(res.body.errors).toBeUndefined();
+        expect(res.body.data.project.find.map((p: any) => p.name)).toEqual(['Bob Proj']);
+    });
+
     // ── anonymous callers get nothing ────────────────────────────────────────
     test('GUEST (no token) cannot read — errors, no data leak', async () => {
         const res = await gql('query { project { find { id name } } }');

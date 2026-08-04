@@ -208,7 +208,7 @@ export function enableFixtureGraphql(models: string[]): void {
             .readFileSync(modulePath, 'utf8')
             .split('\n')
             .map((line) =>
-                /^\s*\/\/\s*(import \{ CoreGraphqlResolver|import \{ \w+Graphql|CoreGraphqlResolver\()/.test(line)
+                /^\s*\/\/\s*(import \{ \w+Resolver \} from '\.\.\/\.\.\/generated\/|\w+Resolver,)/.test(line)
                     ? line.replace(/^(\s*)\/\/\s?/, '$1')
                     : line,
             )

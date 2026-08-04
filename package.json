@@ -59,6 +59,7 @@
         "@adminjs/nestjs": "~7.0.0",
         "@adminjs/passwords": "~4.0.0",
         "@adminjs/prisma": "~5.0.4",
+        "@apollo/server": "^4.11.3",
         "@as-integrations/express5": "~1.1.2",
         "@aws-sdk/client-s3": "~3.850.0",
         "@aws-sdk/s3-request-presigner": "~3.850.0",

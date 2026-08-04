@@ -21,26 +21,27 @@ Read-only GraphQL, reworked into a **namespaced, opt-in-per-module** API.
 ### Added
 
 - **Namespaced read API.** Each exposed model gets one root query field (its camelCase name) with three operations: `find` (→ list), `get` (→ first match or null), `count` (→ Int). Example: `query { project { find(where:{…}){ id } get(where:{…}){ id } count } }`. Short names live on the per-model namespace, so they never collide, aliases work (`recent: find(...)`), and several models can be queried in one request.
-- **Opt-in per module — one line, no resolver file.** Expose a model by adding `CoreGraphqlResolver(<Model>Graphql)` to its module `providers` (the generated module ships this commented, copy-paste-ready). `<Model>Graphql` is a generated bundle at `src/generated/<model>/graphql.ts` (deploy-safe pass). Remove the line to un-expose.
+- **Opt-in per module — one line, no resolver file.** Expose a model by importing its generated resolver and adding it to `providers`: `import { <Model>Resolver } from '../../generated/<model>/graphql'; providers: [<Model>Service, <Model>Resolver]`. The generated module ships this commented, copy-paste-ready. `<Model>Resolver` (and the underlying `<Model>Graphql` bundle) live at `src/generated/<model>/graphql.ts`, emitted by the deploy-safe pass. Remove the line to un-expose.
 - **`/graphql` mounted by default** in new projects (Apollo; Sandbox on `GET /graphql`). The schema stays valid before any model opts in.
-- **Same ABAC as REST, verified end-to-end** (`test/http/graphql-abac.spec.ts`): unauthorized rows aren't returned (incl. `count`, which is filtered — no total leak), restricted fields come back null at top level and nested (`@Role`), and an inaccessible nested **record** is filtered while the parent stays accessible. GraphQL requests now populate the user across transports (`UserPopulationGuard` uses `transformContext`).
+- **Same ABAC as REST, verified end-to-end** (`test/http/graphql-abac.spec.ts`): unauthorized rows aren't returned (`count` included — it's filtered to accessible rows), restricted fields (`@Role`) come back null at the top level and nested, and an inaccessible nested **record** is filtered while the parent stays accessible. GraphQL requests now populate the user across transports (`UserPopulationGuard` uses `transformContext`).
+- **Filter/sort limited to readable fields.** A client `where` / `orderBy` / `distinct` that references a field the caller's role can't read is **rejected** (`403`), recursing through relations and `AND`/`OR`/`NOT` — the input-side counterpart to output field omission, applied in `PrismaService` for every transport.
 
 ### Changed / Removed
 
-- The old root-level `findAll<Model>s` / `findOne<Model>` / `findFirst<Model>` queries and the `GenericResolverFactory` export are **removed**, replaced by `CoreGraphqlResolver`.
+- The old root-level `findAll<Model>s` / `findOne<Model>` / `findFirst<Model>` queries and the `GenericResolverFactory` export are **removed**, replaced by the generated per-model `<Model>Resolver` (built on the exported `CoreGraphqlResolver`).
 - `appx-core generate models` **no longer scaffolds a per-module `*.resolver.ts` file**; GraphQL is opt-in via the one-liner above.
+- **`@apollo/server` is now a declared peer dependency** (`GraphqlModule` mounts Apollo by default). A normal `npm install` pulls it — no manual install.
 
 ### Migration
 
 > **Behaviour change — the GraphQL resolver API changed and per-module resolver files are no longer generated.** Only relevant if you use GraphQL.
 
 1. **Delete the generated `src/modules/<model>/<model>.resolver.ts` files** — they import the removed `GenericResolverFactory` and will not compile. Remove `<Model>Resolver` from each module's `providers`.
-2. Run **`appx-core generate`** to emit the new `src/generated/<model>/graphql.ts` bundles.
+2. Run **`appx-core generate`** to emit the new `src/generated/<model>/graphql.ts` bundles, then **`npm install`** (pulls the newly-declared `@apollo/server` peer that `GraphqlModule` needs).
 3. Add **`GraphqlModule`** to your `app.module` imports (new projects already have it): `import { GraphqlModule } from '@appxdigital/appx-core';`.
-4. **Expose each model** you want in GraphQL by adding one provider line to its module: `CoreGraphqlResolver(<Model>Graphql)` (import `<Model>Graphql` from `../../generated/<model>/graphql`). See [docs/graphql.md](./docs/graphql.md).
+4. **Expose each model** you want in GraphQL by adding one provider line to its module: import `<Model>Resolver` from `../../generated/<model>/graphql` and add it to `providers`. See [docs/graphql.md](./docs/graphql.md).
 5. **Update clients:** `findAllProjects(...)` → `project { find(...) }`, `findFirstProject` / `findOneProject` → `project { get(...) }`. Mutations remain REST-only.
-
-> **Security caveat (unchanged, still open):** generated `where`/`orderBy` inputs include `@Role`/`@NoWrite` columns (a filter-oracle; output values are omitted). Don't expose models with sensitive filterable columns to untrusted roles until the input scrub lands.
+6. **If a client filtered or ordered by a field a role can't read, that now returns `403`** — move such queries to a role that may read the field, or don't reference it.
 
 ---
 
