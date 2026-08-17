@@ -42,7 +42,7 @@ Shape: `PermissionsConfig[Model][Role][action]`, where each `action` value is ei
 
 - **`'ALL'`** — unrestricted for that action, or
 - **`{ conditions: <where> }`** — an ABAC rule. `conditions` is Prisma `where`-syntax (`AND`/`OR`/`NOT`, relation filters `some`/`every`/`none`, operators `in`/`not`/`lt`/…). `$USER_ID` is substituted with the caller's id at query time.
-- Optionally with **`restrictedFields`** and/or **`setUserIdField`** (see below).
+- Optionally with **`setUserIdField`** (see below).
 
 **Model and role keys are matched case-insensitively** against the model name and the caller's role string.
 

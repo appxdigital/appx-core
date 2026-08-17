@@ -31,7 +31,7 @@ appx-core-package/
 │   │   └── appx-core-admin.module.ts # AdminJS @ /admin (dynamic ESM imports)
 │   ├── graphql/
 │   │   ├── graphql.module.ts         # Apollo driver
-│   │   └── generic.resolver.ts       # Read queries only — mutations are commented out
+│   │   └── generic.resolver.ts       # Namespaced read API (find / get / count)
 │   ├── config/
 │   │   ├── generate-all.ts           # `appx-core generate` orchestrator
 │   │   ├── generate-modules.ts
@@ -74,7 +74,7 @@ On every model method call, the proxy does, in order:
 
 | Step | Code | What it does |
 |---|---|---|
-| 1. **Blacklist** | `prisma.service.ts:86-95` | Throws if you call `findUnique`, `findUniqueOrThrow`, `delete`, or `update`. Use `findFirst` / `deleteMany` / `updateMany` instead — they accept arbitrary `where` so the proxy can inject permission filters. |
+| 1. **Method redirect** | `prisma.service.ts:162-173` | Aliases the single-record methods to their filter-compatible equivalents (`findUnique` → `findFirst`, `findUniqueOrThrow` → `findFirstOrThrow`, `update` → `updateMany`, `delete` → `deleteMany`) — they accept arbitrary `where` so the proxy can inject permission filters. Types match via `ProxiedDelegate`. |
 | 2. **Field omission** | `prisma.service.ts:231-266` (skipped for `create*`/`update*`/`delete*`) | Reads `@Role(...)` annotations from Prisma schema field doc-comments. Removes from `select` (or rewrites `include` → `select`) any field the current role isn't allowed to read. |
 | 3. **Where filtering** | `prisma.service.ts:288-460` (skipped for `create`/`createMany`) | Looks up `permissionsConfig[modelLowercase][role][action]`. If `'ALL'` → no-op. If `{conditions: {...}}` → ANDs the conditions into the existing `where`. Recurses for nested relations. |
 | 4. **Substitute placeholders** | `prisma.service.ts:494-519` | Replaces `PermissionPlaceholder.USER_ID` (`'$USER_ID'`) with the current user's id from `RequestContext`. |
@@ -168,7 +168,7 @@ Three commands exposed by `cli/cli.js`:
   - `src/generated/dto/<model>/<action>-<model>.generated.dto.ts` — base, **always overwritten**, gitignored (under `src/generated/`), carries the `@Generated` banner. Never hand-edit. Uses `writeGeneratedFile` (overwrite), not `createFileIfNotExists`.
   - `src/modules/<model>/dto/<action>-<model>.dto.ts` — hand-owned subclass, generated **once** (`createFileIfNotExists`), committed. Add custom validation here.
   The generated controller **overrides** `create`/`update` with the concrete DTO type so `ValidationPipe` (`whitelist`) can strip unknown fields. **Schema is the source of truth** for the writable field set.
-- **Writable-field policy** (what appears in a DTO): all scalars except `@id`, server-managed timestamps (`@default(now())` / `@updatedAt`), `/// @NoWrite`, and `/// @Role(none)`. Relation navigation fields are excluded; their scalar FKs are kept. To make a field non-writable via CRUD, annotate it `/// @NoWrite` (all roles) or use `restrictedFields` on the permission (per role).
+- **Writable-field policy** (what appears in a DTO): all scalars except `@id`, server-managed timestamps (`@default(now())` / `@updatedAt`), `/// @NoWrite`, and `/// @Role(none)`. Relation navigation fields are excluded; their scalar FKs are kept. To make a field non-writable via CRUD, annotate it `/// @NoWrite` (all roles) or `/// @Role(none)` (also unreadable). There is no per-role write strip on a generated DTO — for a per-role difference use `OmitType`, `setUserIdField`, or a dedicated endpoint (see `docs/dtos.md`).
 - **`dto` is in `IGNORE_FOLDERS`** — the model generators scan `src/generated`'s top-level dirs as model names, so the `src/generated/dto/` dir must be skipped or they emit a bogus `dto` module.
 
 ---
@@ -200,11 +200,11 @@ The test suite under `test/` exercises both MySQL and PostgreSQL via `testcontai
 
 ## 7. Known limitations
 
-These are intentional or known-broken and should be respected when changing code:
+These are intentional or known limitations and should be respected when changing code:
 
-1. **Prisma single-record methods are blocked.** `findUnique`, `findUniqueOrThrow`, `delete`, `update` all throw at runtime. Use `findFirst`, `findFirstOrThrow`, `deleteMany`, `updateMany` with a restrictive `where`. *(Reason: the proxy needs a `where` to inject filters.)*
-2. **`create` / `createMany` validate conditions before insert** (there is no existing row for a `where`). The proxy checks the incoming data satisfies the create permission's `conditions` and default-denies create when the model/role has no `create` permission. Unsupported condition shapes (list-relation `some`/`every`/`none`, exotic operators) fail **closed** — for those, use `setUserIdField` + `restrictedFields` and validate input in DTOs.
-3. **GraphQL mutations are commented out** (`src/graphql/generic.resolver.ts:105-228`). Only `findAll` / `findOne` / `findFirst` / `aggregate` queries are wired. README acknowledges "not fully ready".
+1. **Prisma single-record methods are aliases.** `findUnique` → `findFirst`, `findUniqueOrThrow` → `findFirstOrThrow`, `update` → `updateMany`, `delete` → `deleteMany` — re-aliased in the types (`ProxiedDelegate`, `src/prisma/prisma.service.ts`) and redirected at runtime, with ABAC conditions applied on the redirected call. Each takes the target method's arguments and returns its result (`{ count }` for `update`/`delete`). *(Reason: the proxy needs a non-unique `where` to inject filters.)* Pinned by `test/abac/method-redirect.spec.ts`.
+2. **`create` / `createMany` validate conditions before insert** (there is no existing row for a `where`). The proxy checks the incoming data satisfies the create permission's `conditions` and default-denies create when the model/role has no `create` permission. Unsupported condition shapes (list-relation `some`/`every`/`none`, exotic operators) fail **closed** — for those, use `setUserIdField` and validate input in DTOs.
+3. **GraphQL is read-only by design.** The namespaced per-model API (`<model> { find get count }`, built by `CoreGraphqlResolver` in `src/graphql/generic.resolver.ts`) exposes no mutations; writes go through REST.
 4. **`RbacGuard` only checks existence**, not conditions. The proxy enforces conditions on reads/updates/deletes. There is **no defence-in-depth at the controller layer** — if you bypass the proxy (e.g., raw SQL, direct client access), you bypass ABAC entirely.
 5. **Permission config is keyed by role string, with no type safety.** `DefaultRole` enum exists but isn't enforced; configs use bare strings like `'ADMIN'` / `'USER'` / `'GUEST'`. Typos in a role string silently fall through to "no permissions defined" → 403.
 6. **AdminJS uses its own auth path** (`appx-core-admin.module.ts:141-176`) and globally exposes the `User` model during login via `withExposedModels(['User'])`. It does **not** reuse main auth sessions.
@@ -212,7 +212,7 @@ These are intentional or known-broken and should be respected when changing code
 8. **CORS** is read from `CORS_ORIGIN` (via `setupCoreSecurity`) in the scaffold; set it to your real origin in production. `origin: '*'` combined with `credentials: true` throws at boot.
 9. **The global `ValidationPipe` whitelist** is applied by `setupCoreSecurity` (`{ transform, whitelist, forbidNonWhitelisted }`). Combined with the generated per-model DTOs, unknown body fields are rejected (`400`). Keep DTO classes declaring every accepted field with class-validator decorators.
 10. **No audit logging** of permission denials. Diagnostic logging is opt-in via `prismaService.debugQueries(true)` per-request.
-11. **Default permissions config in the scaffold** (`cli/scaffold/src/config/permissions.config.ts`) gives `ADMIN` `create: 'ALL'` and `updateMany: 'ALL'` on the User model with **no `restrictedFields`**. An ADMIN-callable endpoint with that config will accept arbitrary fields, including `role`. Customize per-model before going live.
+11. **Default permissions config in the scaffold** (`cli/scaffold/src/config/permissions.config.ts`) gives `ADMIN` `create: 'ALL'` and `updateMany: 'ALL'` on the User model. An ADMIN-callable endpoint with that config accepts every DTO-writable field, including `role` (the schema template does not annotate it `/// @NoWrite`). Customize per-model before going live.
 12. **Including a to-one relation is inner-join filtered against the viewer's read rules.** When a query includes a `belongsTo` / to-one relation (e.g. `include: { assignee: true }`), the proxy merges the *related* model's read `conditions` into the **parent row's `where`** — not into a nested relation filter, because Prisma does not allow a `where` on a to-one relation inside `include`/`select`. Two consequences: (a) if the related model has **no** read rule for the role, including the relation **throws 403** (`Missing permissions on model X`); (b) if it has a **conditional** rule and the related row is non-null but doesn't satisfy it, the **whole parent row is excluded** (`findFirst` → `null`, `findMany` → the row is omitted) — the parent is *not* returned with the relation set to `null`. To-*many* relations differ: they are filtered in place and the parent is preserved with an empty/partial list. This is intentional (inner-join semantics, fails closed); write queries with it in mind. Pinned by `test/abac/relations.spec.ts` §1.4/§1.7/§1.8/§1.9.
 
 ---
@@ -224,7 +224,7 @@ These are intentional or known-broken and should be respected when changing code
 This package is **in production, consumed by many projects**. Every change ships to real deployments, so the bar is:
 
 1. **Change only what is absolutely necessary.** If a finding can be addressed without touching adjacent code, don't touch adjacent code. No opportunistic refactors, renames, or style cleanups riding along with a fix — big refactors introduce fragilities that are worse than the issue being fixed.
-2. **Surgical fixes.** Prefer the smallest diff that closes the issue. If the minimal fix and the "right" long-term design differ, do the minimal fix and record the long-term option in `ROADMAP.md`.
+2. **Surgical fixes.** Prefer the smallest diff that closes the issue. If the minimal fix and the "right" long-term design differ, do the minimal fix and record the long-term option in the local `ROADMAP.md` (untracked working notes at the repo root; create it if absent).
 3. **Tests come first.** Before changing behaviour, a test must pin the current behaviour and flip when the fix lands. This is why the test suite (ROADMAP §1–§4) precedes remediation work.
 4. **Atomic commits, committed separately.** One logical change per commit, with a short message. Never bundle an unrelated fix, a test, and a refactor into one commit.
 5. **A human reviews and tests every change** in a production project locally before the package is deployed. Write changes to be reviewable: small, self-explanatory diffs whose intent is obvious from the commit message.
@@ -251,16 +251,16 @@ Keep it tight and declarative — the reader should learn when, how, and what ha
 **DO**
 - Treat `src/prisma/prisma.service.ts` as load-bearing. Read it before you change anything in `src/modules/core/` or the proxy.
 - When adding endpoints, use `@Permission('actionName')` and add an entry to `permissions.config.ts` for every role × action pair you want to allow. Default-deny is the existing behaviour: an undefined `[model][role]` throws 403.
-- Use `findFirst` / `deleteMany` / `updateMany` everywhere. If you find a `findUnique` or bare `update`/`delete` in `src/` or in generated code, that's a bug — file or fix it.
+- Use the explicit `findFirst` / `deleteMany` / `updateMany` names in `src/` and generated code. Through the proxy the single-record names are safe aliases, but a `findUnique` or bare `update`/`delete` on a **raw** client call site gets no redirect and no ABAC — treat those as bugs.
 - When you must skip ABAC (auth flows, session store, scheduled tasks), pass `{ BYPASS_FILTERING: true }` or `{ BYPASS_OMISSION: true }` explicitly. Don't introduce new global escape hatches.
 - Update `AGENTS.md` when you change permission, proxy, or auth behaviour.
 - **Configure a scaffolded app's boot via the setup helpers**, not inline: `setupCoreSecurity(app, …)` (hardened ValidationPipe + CORS + Helmet), `buildCoreSessionOptions(…)` (throws on a missing/weak `SESSION_SECRET`, sets secure cookie flags), `coreEnvFilePath()` (throws if `NODE_ENV` unset). These fail fast on insecure config by design — don't reintroduce an inline `ValidationPipe`, a `secret ?? '…'` fallback, or a `NODE_ENV || 'development'` default.
-- **Write to `ROADMAP.md` when you finish a turn knowing about work you didn't do.** Anything in the "I did not do …" category at end-of-turn belongs in `ROADMAP.md`'s "Suggestions / loose ends" section (with the date and the section/issue that prompted it). Anything that needs a human decision before being implemented goes in "Open questions for the team". Don't leave these as implicit-knowledge — future sessions won't know.
+- **Write to the local `ROADMAP.md` when you finish a turn knowing about work you didn't do** (untracked working notes at the repo root; create it if absent). Anything in the "I did not do …" category at end-of-turn belongs in its "Open / deferred items" section (dated, with the section/issue that prompted it). Anything that needs a human decision before being implemented goes in "Open questions for the team". Don't leave these as implicit knowledge — future sessions won't know.
 
 **DON'T**
 - Don't mock `PrismaService` in tests. The proxy *is* the behaviour. Use the testcontainers harness under `test/`.
 - Don't add features to `RbacGuard` that duplicate the proxy. The guard's job is to refuse unknown action/role pairs early; data filtering stays at the data layer.
-- `create` permission `conditions` are validated against the incoming data before insert (own-scalar fields and belongsTo relations). For per-role field restrictions use `restrictedFields`; to set an owner id server-side use `setUserIdField`. Validate inputs in DTOs.
+- `create` permission `conditions` are validated against the incoming data before insert (own scalar fields only; every relationship the write establishes is authorized via the target's `connect` rule). To set an owner id server-side use `setUserIdField`; there is no per-role field strip (`/// @NoWrite` / `OmitType` / dedicated endpoint instead). Validate inputs in DTOs.
 - Don't read secrets from `process.env` directly in framework code; use `ConfigService`.
 - Don't write to paths under `src/generated/` by hand; that directory is owned by `prisma generate` / `prisma-nestjs-graphql`.
 - Don't change the public API surface in `src/index.ts` without bumping the version in `package.json` and noting it in commit history.

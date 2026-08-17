@@ -46,8 +46,8 @@ The proxy can only enforce ABAC on methods that accept a `where` it can inject c
 **Consequences:**
 
 - `update()` / `delete()` return `{ count }`, **not** the affected record. Re-read if you need the row.
-- These operate on **all matching rows**, not one — always pass a `where`. With ABAC conditions injected, a cross-owner `update({ where: { id } })` simply affects `{ count: 0 }` rather than erroring.
-- The TypeScript types reflect this: calling `update()` with a lone unique `where` and expecting a record back is a **compile error**, not a runtime surprise.
+- These operate on **all matching rows**, not one — always pass a `where`. With ABAC conditions injected, a cross-owner `update({ where: { id } })` affects `{ count: 0 }` rather than erroring.
+- The TypeScript types reflect this: calling `update()` with a lone unique `where` and expecting a record back is a **compile error**.
 
 Use `findMany` / `findFirst` / `findFirstOrThrow` / `updateMany` / `deleteMany` directly if you prefer the explicit names.
 

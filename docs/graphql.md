@@ -224,10 +224,9 @@ Read from `@Parent()`, not the raw Prisma client — re-querying bypasses ABAC. 
 
 ---
 
-## Not available yet
+## Aggregations
 
-- **Mutations** (create/update/delete) — use REST.
-- **Full `aggregate`** (sum/avg/min/max/groupBy) — only `count` is exposed today.
+Full `aggregate` (sum/avg/min/max/groupBy) is not available yet — `count` and nested `_count` are exposed today.
 
 ---
 

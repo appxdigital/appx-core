@@ -13,12 +13,11 @@ Read this before using any method or surface not explicitly covered in [permissi
 - Need a count? Use `count(...)` — it **is** supported and falls back to your `findMany` rule.
 - Need a genuine aggregate behind trusted access? Compute it inside a `withExposedModels(...)` block (or a bypass) with your own authorization, and never expose it to untrusted roles until aggregate ABAC lands.
 
-### GraphQL — writes and `aggregate`
+### GraphQL — `aggregate`
 
-GraphQL currently supports **read queries only** (`findAll<Model>s` / `findFirst<Model>` / `findOne<Model>`), with ABAC applied. See **[graphql.md](./graphql.md)** for how to use it, including nested queries.
+GraphQL is a read-only API — namespaced `find` / `get` / `count` per model, with ABAC applied. See **[graphql.md](./graphql.md)** for how to use it, including nested queries.
 
-- **Mutations (create / update / delete) are not available yet** — use the REST CRUD endpoints for writes.
-- **`aggregate` is not ready** — same caveat as REST above.
+- **`aggregate` is not ready** — same caveat as REST above; `count` and nested `_count` are available.
 
 Let the generated resolvers serve the data (they go through `PrismaService`); a custom resolver that reaches the raw Prisma client would not get ABAC.
 

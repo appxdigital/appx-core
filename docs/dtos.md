@@ -159,7 +159,7 @@ Consequence for CRUD requests:
 Note the two layers behave differently on purpose:
 
 - **The proxy enforcement is fully recursive** — it authorizes nested `create`/`connect` at *any* depth (each level checked against that model's `create` / `connect` rule). So deep nesting is safe wherever it can reach the proxy.
-- **The generated DTOs cap the HTTP surface at one level.** Deep nesting simply isn't expressible through generic CRUD.
+- **The generated DTOs cap the HTTP surface at one level.** Deep nesting isn't expressible through generic CRUD.
 
 **To do multi-level nested writes, use an explicit controller/service method** that calls `prismaService.model.<x>.create(...)` with the deep payload — the proxy still enforces the `create`/`connect` allowlist recursively there. Do not try to widen the generated DTOs to accept deeper nesting.
 

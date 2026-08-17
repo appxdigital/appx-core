@@ -160,7 +160,7 @@ appx-core create --yes \
   --db-user root --db-password secret --db-name my_app_db
 ```
 
-Flags: `--name`, `--db-provider mysql|postgresql`, `--db-host`, `--db-port`, `--db-user`, `--db-password`, `--db-name`, `--show-output`. File upload isn't configured on this path — run `appx-core setup:fileupload` inside the project afterwards.
+Flags: `--name`, `--db-provider mysql|postgresql`, `--db-host`, `--db-port`, `--db-user`, `--db-password`, `--db-name`, `--show-output`. File upload isn't configured on this path — run `appx-core setup:fileupload` inside the project afterwards (see [docs/storage.md](./docs/storage.md)).
 
 ### 3) Configure Environment
 
@@ -487,7 +487,7 @@ model User {
 }
 ```
 
-Use `/// @NoWrite` to exclude a field for **all** roles. For **per-role** control (e.g. only ADMIN may set `role`), use `restrictedFields` on the permission instead of `@NoWrite`.
+A field is either CRUD-writable or it isn't — there is no per-role write control on a generated endpoint. For a privileged field (e.g. `role`), annotate it `/// @NoWrite` and set it through a dedicated endpoint. See [docs/dtos.md](./docs/dtos.md).
 
 ---
 
@@ -558,7 +558,7 @@ export const PermissionsConfig = {
 };
 ```
 
-Service (Prisma query remains straightforward; ABAC filtering is applied by the core):
+Service (ABAC filtering is applied by the core):
 
 ```ts
 async getMyProfile() {
@@ -603,22 +603,21 @@ This pattern should be used sparingly and intentionally.
 
 ## Limitations
 
-### Prisma method restrictions (permission safety)
+### Single-record methods are aliases
 
-Avoid these Prisma methods because they can bypass or complicate granular permission filtering:
+The single-record Prisma methods are aliases to their filter-compatible equivalents — in the TypeScript types and at runtime — and take that method's arguments and return its result. ABAC applies to every call.
 
-- `findUnique` → use `findFirst`
-- `delete` → use `deleteMany` with a single-item filter
-- `update` → use `updateMany` with a single-item filter
+- `findUnique()` / `findUniqueOrThrow()` run `findFirst()` / `findFirstOrThrow()`
+- `update()` runs `updateMany()` — returns `{ count }`, not the record
+- `delete()` runs `deleteMany()` — returns `{ count }`
 
-Operational guidance:
+They act on **all** matching rows, so pass a restrictive `where` when you intend a single record; a call reaching outside your permissions affects `{ count: 0 }`. Full contract in [docs/data-access.md](./docs/data-access.md#method-contract-important).
 
-- Prefer `findMany`, `findFirst`, `updateMany`, and `deleteMany`.
-- When you intend a single-record operation, use a restrictive `where` clause.
+### GraphQL
 
-### GraphQL status
+GraphQL exposes a **read-only** API — `find` / `get` / `count`, namespaced per model and **opt-in per module** (one line) — that runs through the same ABAC proxy as REST: row filtering, field omission, nested-relation filtering, and filter/sort limited to fields the role can read all apply. It supports nested selections and native pagination (`take`/`skip`/`cursor`), so it's the recommended surface for querying/filtering/paginating reads. See **[docs/graphql.md](./docs/graphql.md)**.
 
-GraphQL exposes a **read-only** API — `find` / `get` / `count`, namespaced per model and **opt-in per module** (one line) — that runs through the same ABAC proxy as REST: row filtering, field omission, nested-relation filtering, and filter/sort limited to fields the role can read all apply. It supports nested selections and native pagination (`take`/`skip`/`cursor`), so it's the recommended surface for querying/filtering/paginating reads. See **[docs/graphql.md](./docs/graphql.md)**. Not yet: mutations and full aggregates — REST CRUD + AdminJS remain the write surfaces.
+Aggregations are not yet available (on the roadmap); `count` and nested `_count` cover the common cases today.
 
 ---
 
@@ -636,15 +635,13 @@ No. Generated NestJS modules are **editable** and intended to be extended.
 
 Planned and under consideration:
 
-- Production-ready GraphQL
-- Object storage patterns (S3-friendly out-of-the-box support)
+- GraphQL aggregations
 - Forgot-password flow
 - Email templates + sending primitives
 - Push notifications primitives
 - WebSockets support
-- Stronger testing baseline (unit tests scaffolding and patterns)
-- “Agent-ready” development guidance (`agents.txt`, conventions for coding agents)
-- Optional AI-assisted project scaffolding
+- Test scaffolding for generated projects (jest config + unit-test patterns from `appx-core create`)
+- Scaffolded `AGENTS.md` for generated projects (conventions for coding agents)
 
 ---
 

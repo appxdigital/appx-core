@@ -1,6 +1,6 @@
 # Code generation — `generate` and `generate models`
 
-AppX Core generates code from your Prisma schema through **two commands with different responsibilities**. The split exists so that keeping generated types in sync (safe to automate) is separate from scaffolding CRUD modules (which writes code you own and edits `app.module.ts`).
+AppX Core generates code from your Prisma schema through **two commands with different responsibilities**. The split exists so that keeping generated types in sync (automatable) is separate from scaffolding CRUD modules (which writes code you own and edits `app.module.ts`).
 
 | Command | What it does | Writes | Safe in CI? |
 |---|---|---|---|
@@ -13,7 +13,7 @@ AppX Core generates code from your Prisma schema through **two commands with dif
 appx-core generate
 ```
 
-Runs `prisma generate` (which emits both the Prisma client and the prisma-nestjs-graphql artifacts) and regenerates the DTO base classes under `src/generated/dto/**`. It **never** writes `src/modules/**` and **never** edits `src/app.module.ts`, so it is safe to run in CI, a `postinstall`, or a predeploy step, and safe to re-run any number of times.
+Runs `prisma generate` (which emits both the Prisma client and the prisma-nestjs-graphql artifacts) and regenerates the DTO base classes under `src/generated/dto/**`. It **never** writes `src/modules/**` and **never** edits `src/app.module.ts`, so it can run in CI, a `postinstall`, or a predeploy step, and is idempotent.
 
 Run it **every time you change the Prisma schema** — it refreshes the client, GraphQL types, and DTO bases in one step (no separate `prisma generate` needed). Because everything it writes lives under the gitignored `src/generated/`, it never produces a diff in your committed code.
 
