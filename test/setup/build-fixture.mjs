@@ -97,6 +97,8 @@ async function writePackageJson() {
             start: 'nest start',
             'start:dev': 'cross-env NODE_ENV=development nest start --watch',
             'start:prod': 'cross-env NODE_ENV=production node dist/main',
+            test: 'vitest run',
+            'test:watch': 'vitest',
             generate: 'appx-core generate',
         },
         dependencies: {
@@ -112,6 +114,16 @@ async function writePackageJson() {
             // these via peerDependency auto-install (npm 7+).
             'prisma': '~6.5.0',
             'prisma-nestjs-graphql': '21.1.1',
+            // The scaffold's vitest devDeps (vitest, supertest, testcontainers,
+            // @nestjs/testing, …) are intentionally NOT installed here. The
+            // fixture's file: symlink makes the framework resolve classes from
+            // the repo root's node_modules while fixture code resolves its own
+            // — two Nest instances — so the scaffolded vitest suite cannot run
+            // in the fixture. It runs in a real `create`d project instead
+            // (create.spec.ts non-interactive E2E). Installing them here would
+            // also hoist Nest versions newer than the framework's peer ranges
+            // (the fixture otherwise borrows root's copies via directory
+            // walk-up, which keeps type identities unified for tsc).
         },
         engines: { node: '>=20.0.0' },
     };
@@ -150,7 +162,7 @@ async function writeTsConfigs() {
     };
     const tsconfigBuild = {
         extends: './tsconfig.json',
-        exclude: ['node_modules', 'test', 'dist', '**/*spec.ts'],
+        exclude: ['node_modules', 'test', 'dist', '**/*spec.ts', 'vitest.config.ts'],
     };
     await fs.writeFile(
         path.join(FIXTURE_DEST, 'tsconfig.json'),

@@ -16,6 +16,9 @@ module.exports = {
     rootDir: '.',
     roots: ['<rootDir>/test'],
     testMatch: ['**/*.spec.ts'],
+    // The scaffold-app fixture ships its own vitest suite (copied from
+    // cli/scaffold/test/) — jest must not try to run those specs.
+    testPathIgnorePatterns: ['/node_modules/', '/fixtures/scaffold-app/'],
     moduleFileExtensions: ['ts', 'js', 'json'],
     transform: {
         // diagnostics: false — type-checking of framework source happens at

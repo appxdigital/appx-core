@@ -629,6 +629,8 @@ function createPackageJson(projectPath, projectName) {
             "start:dev": "cross-env NODE_ENV=development nest start --watch",
             "start:prod": "cross-env NODE_ENV=production node dist/main",
             "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+            "test": "vitest run",
+            "test:watch": "vitest",
             "db-pull": "npm run db-pull --prefix ./node_modules/appx-core"
         },
         dependencies: {
@@ -637,6 +639,15 @@ function createPackageJson(projectPath, projectName) {
         devDependencies: {
             "@nestjs/cli": "~11.0.0",
             "cross-env": "~10.1.0",
+            "@nestjs/testing": "^11.1.28",
+            "@swc/core": "^1.15.47",
+            "@testcontainers/mysql": "^10.28.0",
+            "@testcontainers/postgresql": "^10.28.0",
+            "@types/supertest": "^6.0.3",
+            "dotenv": "^16.4.5",
+            "supertest": "^7.2.2",
+            "unplugin-swc": "^1.5.9",
+            "vitest": "^4.1.10",
         },
         engines: {
             "node": ">=20.0.0"
@@ -717,6 +728,12 @@ function createTsConfig(projectPath) {
     tsConfig = tsConfig.replaceAll("<%= strict %>", 'false');
 
     let tsConfigBuild = fs.readFileSync(path.join(projectPath, 'node_modules/@nestjs/schematics/dist/lib/application/files/ts/tsconfig.build.json'), 'utf-8');
+
+    // Keep runner config out of `nest build` (vitest is a devDependency, so a
+    // production install has no types for it).
+    tsConfigBuild = JSON.parse(tsConfigBuild);
+    tsConfigBuild.exclude = [...new Set([...(tsConfigBuild.exclude || []), 'vitest.config.ts'])];
+    tsConfigBuild = JSON.stringify(tsConfigBuild, null, 2);
 
     // Ensure target is ES2017
     tsConfig = JSON.parse(tsConfig);
