@@ -5,13 +5,12 @@ import {DynamicModule, Global, Module} from '@nestjs/common';
 import {createActions, dynamicImport} from './utils';
 import {loadAllModels} from '../config/utils';
 import {RequestContextMiddleware} from 'nestjs-request-context';
-import {BaseRecord} from 'adminjs';
 import * as argon2 from 'argon2';
 import {PrismaService} from '../prisma/prisma.service';
 import {AdminConfigType} from "../common/config/adminConfigType";
 import {ILayer} from "express/node_modules/@types/express-serve-static-core";
 import {NextFunction, Request, Response} from "express";
-import {Property} from "@adminjs/prisma/lib/Property";
+import type {Property} from "@adminjs/prisma/lib/Property";
 import {PermissionsConfigType} from "../common/config/permissionsConfigTypes";
 
 @Global()
@@ -31,7 +30,7 @@ async function createAdminJsModule(
     permissionConfig: PermissionsConfigType,
 ): Promise<DynamicModule> {
     // Due to AdminJS only allowing ESM now, we need to use dynamic imports to load the modules, this function can be found within src/backoffice/utils.ts
-    const {default: AdminJS} = await dynamicImport('adminjs');
+    const {default: AdminJS, BaseRecord} = await dynamicImport('adminjs');
     const {Database, Resource, convertParam} = await dynamicImport('@adminjs/prisma');
     const {AdminModule} = await dynamicImport('@adminjs/nestjs');
     const {default: importExportFeature} = await dynamicImport(
