@@ -469,6 +469,7 @@ async function createProject(answers, fileUploadConfigData) {
     console.log(`Project path: ${projectPath}`);
 
     const project_config = {
+        PROJECT_NAME: projectName,
         DB_PROVIDER: answers.dbProvider === 'mysql' ? 'mysql' : 'postgresql',
         DB_HOST: answers.dbHost,
         DB_PORT: answers.dbPort,

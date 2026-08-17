@@ -41,6 +41,7 @@ const PROJECT_NAME = 'scaffold-app';
 // At test time, .env is REWRITTEN with the real testcontainer URL and freshly
 // generated secrets; these only live in the (gitignored) .env.example fallback.
 const PROJECT_CONFIG = {
+    PROJECT_NAME,
     DB_PROVIDER: 'mysql',
     DB_HOST: '127.0.0.1',
     DB_PORT: '3306',

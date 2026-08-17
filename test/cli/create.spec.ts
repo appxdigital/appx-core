@@ -23,6 +23,7 @@ const CLI_PATH = path.join(REPO_ROOT, 'cli', 'cli.js');
 const SCAFFOLD_DIR = path.join(REPO_ROOT, 'cli', 'scaffold');
 
 const KNOWN_PLACEHOLDERS = new Set([
+    'PROJECT_NAME',
     'DB_PROVIDER',
     'DB_HOST',
     'DB_PORT',
@@ -409,7 +410,7 @@ describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
         const projectPath = fs.existsSync(path.join(tmpdir, 'ni-target', 'package.json'))
             ? path.join(tmpdir, 'ni-target')
             : tmpdir;
-        for (const f of ['package.json', 'src/main.ts', 'src/app.module.ts', 'prisma/schema.prisma', '.env']) {
+        for (const f of ['package.json', 'src/main.ts', 'src/app.module.ts', 'prisma/schema.prisma', '.env', 'AGENTS.md']) {
             expect(fs.existsSync(path.join(projectPath, f))).toBe(true);
         }
         // Secrets are per-run random hex, exactly like the wizard path.
@@ -433,7 +434,9 @@ describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
             cwd: projectPath,
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'pipe'],
-            env: childEnv,
+            // NO_COLOR: vitest force-colors under GitHub Actions regardless of
+            // FORCE_COLOR=0; ANSI codes would break the summary assertion below.
+            env: { ...childEnv, NO_COLOR: '1' },
             timeout: 420_000,
         });
         if (testRes.status !== 0) {
@@ -441,7 +444,10 @@ describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
                 `scaffolded \`npm test\` exited ${testRes.status}.\n${(testRes.stdout + testRes.stderr).slice(-4000)}`,
             );
         }
-        expect(testRes.stdout + testRes.stderr).toMatch(/Test Files\s+3 passed/);
+        // Strip any residual ANSI escapes before matching the summary line.
+        // eslint-disable-next-line no-control-regex
+        const testOut = (testRes.stdout + testRes.stderr).replace(/\[[0-9;]*m/g, '');
+        expect(testOut).toMatch(/Test Files\s+3 passed/);
     }, 900_000);
 });
 
@@ -489,6 +495,21 @@ describe('cli/scaffold — test-suite template contract', () => {
         expect(harness).toMatch(/setupCoreSecurity\(app\)/);
         expect(harness).toMatch(/buildCoreSessionOptions/);
         expect(harness).toMatch(/passport\.initialize\(\)/);
+    });
+
+    test('the scaffold ships the agent guide', () => {
+        const agents = read('AGENTS.md');
+        // Personalized per project.
+        expect(agents).toContain('{{PROJECT_NAME}}');
+        // Points at the packaged docs as the source of truth.
+        expect(agents).toContain('node_modules/@appxdigital/appx-core/docs/');
+        // The placeholder endpoint must not reach production.
+        expect(agents).toMatch(/Remove the Hello-World placeholder/);
+        // Core rules of the road are stated.
+        expect(agents).toContain('prismaService.model.');
+        expect(agents).toContain('src/generated/**');
+        // Claude Code sessions load the same guidance.
+        expect(read('CLAUDE.md')).toContain('AGENTS.md');
     });
 });
 
