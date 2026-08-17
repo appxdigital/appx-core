@@ -362,16 +362,15 @@ describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
         const dbUser = decodeURIComponent(u.username);
         const dbPassword = decodeURIComponent(u.password);
         const dbName = `appx_ni_create_${Date.now()}`;
-        try {
-            execSync(
-                `mysql -h${dbHost} -P${dbPort} -u${dbUser} -p${dbPassword} -e "CREATE DATABASE ${dbName};"`,
-                { stdio: 'pipe' },
-            );
-        } catch {
-            // eslint-disable-next-line no-console
-            console.warn('[cli-create-ni] mysql client not on PATH — skipping E2E');
-            return;
-        }
+        // Create the one-off database with the CLI's own bundled mysql2 driver —
+        // no host mysql client needed, and no silent skip hiding a real failure.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const mysql = require(path.resolve(__dirname, '..', '..', 'cli', 'node_modules', 'mysql2', 'promise'));
+        const conn = await mysql.createConnection({
+            host: dbHost, port: Number(dbPort), user: dbUser, password: dbPassword,
+        });
+        await conn.query(`CREATE DATABASE \`${dbName}\``);
+        await conn.end();
 
         const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-ni-e2e-'));
         const childEnv: NodeJS.ProcessEnv = {
@@ -405,14 +404,92 @@ describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
             throw new Error(`non-interactive create exited ${res.status}.\n${(res.stdout + res.stderr).slice(-3000)}`);
         }
 
-        const projectPath = path.join(tmpdir, 'ni-target');
+        // `create` scaffolds IN PLACE when cwd is empty (only a non-empty cwd
+        // gets a <name> subdirectory) — tmpdir is fresh, so tmpdir IS the project.
+        const projectPath = fs.existsSync(path.join(tmpdir, 'ni-target', 'package.json'))
+            ? path.join(tmpdir, 'ni-target')
+            : tmpdir;
         for (const f of ['package.json', 'src/main.ts', 'src/app.module.ts', 'prisma/schema.prisma', '.env']) {
             expect(fs.existsSync(path.join(projectPath, f))).toBe(true);
         }
         // Secrets are per-run random hex, exactly like the wizard path.
         const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
         expect(env.match(/SESSION_SECRET="([^"]+)"/)?.[1]).toMatch(/^[a-f0-9]{64}$/);
-    }, 240_000);
+
+        // ── The scaffolded test suite passes out of the box ──
+        // `create` pins the *published* library; swap in the repo's local build
+        // so the suite runs against the code under test, then run `npm test`.
+        // The suite provisions its own throwaway DB container (Docker is
+        // already a requirement of this jest run).
+        const repoRoot = path.resolve(__dirname, '..', '..');
+        const packOut = execSync(`npm pack --silent --pack-destination ${tmpdir}`, {
+            cwd: repoRoot, encoding: 'utf8',
+        }).trim().split('\n').pop()!;
+        execSync(`npm install --loglevel=error ${path.join(tmpdir, packOut)}`, {
+            cwd: projectPath, stdio: 'pipe', timeout: 180_000,
+        });
+
+        const testRes = spawnSync('npm', ['test'], {
+            cwd: projectPath,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: childEnv,
+            timeout: 420_000,
+        });
+        if (testRes.status !== 0) {
+            throw new Error(
+                `scaffolded \`npm test\` exited ${testRes.status}.\n${(testRes.stdout + testRes.stderr).slice(-4000)}`,
+            );
+        }
+        expect(testRes.stdout + testRes.stderr).toMatch(/Test Files\s+3 passed/);
+    }, 900_000);
+});
+
+describe('cli/scaffold — test-suite template contract', () => {
+    const scaffoldDir = path.resolve(__dirname, '..', '..', 'cli', 'scaffold');
+    const read = (rel: string) => fs.readFileSync(path.join(scaffoldDir, rel), 'utf8');
+
+    test('the scaffold ships the vitest suite files', () => {
+        for (const f of [
+            'vitest.config.ts',
+            'test/setup.ts',
+            'test/global-setup.ts',
+            'test/helpers/harness.ts',
+            'test/app.spec.ts',
+            'test/auth.spec.ts',
+            'test/isolation.spec.ts',
+        ]) {
+            expect(fs.existsSync(path.join(scaffoldDir, f))).toBe(true);
+        }
+    });
+
+    test('createPackageJson emits the test scripts and vitest devDependencies', () => {
+        const cli = fs.readFileSync(CLI_PATH, 'utf8');
+        expect(cli).toMatch(/"test": "vitest run"/);
+        expect(cli).toMatch(/"test:watch": "vitest"/);
+        for (const dep of ['"vitest"', '"unplugin-swc"', '"@swc/core"', '"supertest"',
+            '"@testcontainers/mysql"', '"@testcontainers/postgresql"', '"@nestjs/testing"']) {
+            expect(cli).toContain(dep);
+        }
+        // Runner config stays out of `nest build` (vitest is a devDependency).
+        expect(cli).toContain("'vitest.config.ts'");
+    });
+
+    test('the suite only ever talks to the container database', () => {
+        // setup.ts overrides DB_URL before any app/PrismaClient exists…
+        const setup = read('test/setup.ts');
+        expect(setup).toMatch(/process\.env\.DB_URL = testDbUrl/);
+        // …and the harness refuses to run against anything else.
+        expect(read('test/helpers/harness.ts')).toMatch(/Refusing to run/);
+    });
+
+    test('the harness boots the app with the production middleware stack', () => {
+        const harness = read('test/helpers/harness.ts');
+        expect(harness).toMatch(/NestFactory\.create\(AppModule/);
+        expect(harness).toMatch(/setupCoreSecurity\(app\)/);
+        expect(harness).toMatch(/buildCoreSessionOptions/);
+        expect(harness).toMatch(/passport\.initialize\(\)/);
+    });
 });
 
 describe('cli/cli.js — projectName validation', () => {
