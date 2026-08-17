@@ -14,7 +14,7 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
-## [Unreleased]
+## [0.1.129] — 2026-08-17
 
 ### Added
 
