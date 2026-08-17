@@ -20,6 +20,8 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 - **Every new project ships a ready-to-run test suite.** `appx-core create` now scaffolds `vitest.config.ts` and `test/` (Vitest + SWC), with `npm test` / `npm run test:watch` scripts and the needed devDependencies. A run provisions a **throwaway database container** via Testcontainers (matching `DB_PROVIDER` — the database in `.env` is never touched; Docker is the only requirement), pushes the Prisma schema, and boots the real `AppModule` with the production middleware stack (session store, passport, `setupCoreSecurity`). Shipped specs: app boot, register (unknown-field rejection included), session login → `/auth/me`, JWT login → `/auth/refresh` — all asserted at the database level — plus a **route sweep** that probes every registered route as a guest and fails on anything non-public that answers `2xx`. See [docs/testing.md](./docs/testing.md).
 
+- **Every new project ships an agent guide.** `appx-core create` drops an `AGENTS.md` at the project root (plus a `CLAUDE.md` pointer) — the rules of the road for coding agents working in the project: proxy-only data access, default-deny permissions, generated-code ownership, read/write surfaces, test conventions, and the pre-production checklist (including removing the Hello-World placeholder). It points at `node_modules/@appxdigital/appx-core/docs/` as the source of truth instead of duplicating it.
+
 ### Fixed
 
 - **`POST /auth/refresh` now works under a default-deny permissions config.** The refresh-token user lookup runs as a framework auth flow (like login and JWT population). Previously, a permissions config with no `GUEST` read rule on `User` — including the scaffold default — returned `403` for every refresh.
@@ -33,6 +35,7 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 2. Add the scripts: `"test": "vitest run"`, `"test:watch": "vitest"`.
 3. `npm install -D vitest unplugin-swc @swc/core supertest @types/supertest @nestjs/testing @testcontainers/mysql @testcontainers/postgresql dotenv`.
 4. Run `npm test` (requires Docker). Extend `test/helpers/harness.ts`'s `truncateAll` and `test/isolation.spec.ts`'s `PUBLIC_ROUTES` as your schema and routes grow.
+5. Optionally copy `AGENTS.md` (and the `CLAUDE.md` pointer) from `cli/scaffold/`, replacing `{{PROJECT_NAME}}` with your project's name.
 
 ---
 

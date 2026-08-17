@@ -648,7 +648,6 @@ Planned and under consideration:
 - Email templates + sending primitives
 - Push notifications primitives
 - WebSockets support
-- Scaffolded `AGENTS.md` for generated projects (conventions for coding agents)
 
 ---
 
