@@ -4,14 +4,12 @@ import {ExtractJwt, Strategy} from 'passport-jwt';
 import {ConfigService} from '@nestjs/config';
 import {Request} from 'express';
 import {PrismaService} from '../../prisma/prisma.service';
-import {UserService} from '../user/user.service';
 
 @Injectable()
 export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
     constructor(
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
-        private readonly userService: UserService,
     ) {
         const refreshSecret = configService.get<string>('JWT_REFRESH_SECRET');
         if (!refreshSecret) {
@@ -29,7 +27,14 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
         const refreshToken = req.body.refreshToken;
         if (!refreshToken) throw new UnauthorizedException('Refresh token not found');
 
-        const user = await this.userService.findByField("id", payload.sub);
+        // Auth-flow lookup: the refresh request is unauthenticated (GUEST), so
+        // this must bypass ABAC like every other auth lookup in this module.
+        const user = await this.prisma.user.findFirst({
+            where: {id: payload.sub},
+            },
+            {
+                BYPASS_FILTERING: true,
+        });
         if (!user) {
             throw new UnauthorizedException('User not found');
         }
