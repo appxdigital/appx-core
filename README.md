@@ -86,6 +86,8 @@ AppX Core puts **security and data-access control first**, while keeping develop
   - Namespaced, **opt-in per model**: `model { find get count }`
   - **Native pagination** (`take` / `skip` / `cursor`), nested relations, and several models per request — prefer it over the CRUD list endpoint for reads/filtering, and enable it on your main queryable models
   - Same ABAC as REST (row / field / nested-record filtering; filter & sort limited to readable fields)
+- **Tests out of the box**
+  - `npm test` provisions a throwaway database container (Docker) and drives the real app over HTTP — register/login/refresh flows plus a route-sweep that denies guests everywhere non-public
 - **Developer-friendly extension points**
   - Add custom endpoints with `@Permission(...)`
   - Use services for business logic, controllers as transport layer
@@ -621,6 +623,12 @@ Aggregations are not yet available (on the roadmap); `count` and nested `_count`
 
 ---
 
+## Testing
+
+Every new project ships a ready-to-run suite: `npm test` starts a disposable database container matching your `DB_PROVIDER`, pushes the schema, boots the real `AppModule` with the production middleware stack, and runs HTTP-level specs — auth flows asserted at the database level, and a route sweep that probes every registered route as a guest. Docker is the only requirement; the database in `.env` is never touched. See **[docs/testing.md](./docs/testing.md)** for the harness API and how to write specs for your modules.
+
+---
+
 ## FAQ
 
 **Are CRUD endpoints only for AdminJS?**  
@@ -640,7 +648,6 @@ Planned and under consideration:
 - Email templates + sending primitives
 - Push notifications primitives
 - WebSockets support
-- Test scaffolding for generated projects (jest config + unit-test patterns from `appx-core create`)
 - Scaffolded `AGENTS.md` for generated projects (conventions for coding agents)
 
 ---
