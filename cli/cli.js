@@ -109,7 +109,6 @@ program
     .option('--db-name <name>', 'Database name (default: generic)')
     .option('--show-output', 'Show full command output instead of the progress bar')
     .action(async (options) => {
-        assertSupportedNpm();
         // Any value-bearing flag (or --yes) means the caller is scripting this —
         // never open the wizard, and never touch a prompt without a TTY.
         const nonInteractive = !!options.yes ||
@@ -532,7 +531,7 @@ async function createProject(answers, fileUploadConfigData) {
         if (!fsCore.existsSync(prismaBin)) {
             throw new Error(
                 `prisma was not installed into the project (expected ${prismaBin}).\n` +
-                `It is a peer dependency of @appxdigital/appx-core; npm installs peers automatically since v7 (yours: ${npmVersion()}, project requires >= ${MIN_NPM_MAJOR}).\n` +
+                `It is a peer dependency of @appxdigital/appx-core; npm installs peers automatically since v7 (yours: ${npmVersion()}, project requires >= 10).\n` +
                 `Check that your npm config does not set "legacy-peer-deps" or "omit=peer" (npm config list), then re-run in an empty directory.`
             );
         }
@@ -649,12 +648,15 @@ function createPackageJson(projectPath, projectName) {
             "@types/supertest": "^6.0.3",
             "dotenv": "^16.4.5",
             "supertest": "^7.2.2",
-            "unplugin-swc": "^1.5.9",
-            "vitest": "^4.1.10",
+            // Held below vite 8: vitest 4.1+ (vite 8) and unplugin-swc 1.5.11+
+            // (unplugin 3) bring peer graphs that npm 10 cannot resolve
+            // ("Cannot read properties of null (reading 'edgesOut')", fixed
+            // only in npm 11.6). vitest 4.0.x accepts vite 6/7 only.
+            "unplugin-swc": "1.5.10",
+            "vitest": "~4.0.18",
         },
         engines: {
-            "node": ">=20.0.0",
-            "npm": `>=${MIN_NPM_MAJOR}.0.0`
+            "node": ">=20.0.0"
         }
     };
 
@@ -759,23 +761,12 @@ function incrementProgress(showOutput, phase) {
     }
 }
 
-// npm 10 crashes resolving current dependency trees (vite 8's peer graph:
-// "Cannot read properties of null (reading 'edgesOut')"); npm 11 resolves them.
-const MIN_NPM_MAJOR = 11;
-
 function npmVersion() {
     try {
         return execSync('npm --version', {stdio: ['ignore', 'pipe', 'ignore']}).toString().trim();
     } catch {
         return 'unknown';
     }
-}
-
-function assertSupportedNpm() {
-    const version = npmVersion();
-    if (parseInt(version, 10) >= MIN_NPM_MAJOR) return;
-    console.error(`🚫 appx-core create needs npm ${MIN_NPM_MAJOR} or newer (yours: ${version}). Upgrade with: npm install -g npm@${MIN_NPM_MAJOR}`);
-    process.exit(1);
 }
 
 function executeCommand(command, showOutput = false) {

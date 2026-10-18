@@ -68,6 +68,47 @@ jobs:
               env:
                   DB_PROVIDER: ${{ matrix.db }}
 
+    # `appx-core create` + `npm ci` of the project it writes, on npm 10 (the
+    # npm bundled with Node 20/22). The jobs above run npm 11, which resolves
+    # trees npm 10 crashes on or writes lockfiles npm 10 rejects — this catches
+    # an upstream release that breaks npm 10 users.
+    create-npm10:
+        name: create on npm 10
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Upgrade npm (repo install)
+              run: npm install -g npm@11
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build
+              run: npm run build
+
+            - name: Install CLI dependencies
+              run: npm ci
+              working-directory: cli
+
+            - name: Configure git identity
+              run: |
+                  git config --global user.email "ci@appx-core.test"
+                  git config --global user.name "appx-core CI"
+
+            - name: Use npm 10 for create
+              run: npm install -g npm@10
+
+            - name: Test
+              run: npx jest test/cli/create.spec.ts -t "non-interactive end-to-end"
+              env:
+                  DB_PROVIDER: mysql
+
     cli-smoke:
         name: cli smoke
         runs-on: ubuntu-latest

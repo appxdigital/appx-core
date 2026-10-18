@@ -14,6 +14,29 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.131] — 2026-10-19
+
+### Changed
+
+- **`appx-core create` no longer requires npm 11.** New projects get `vitest ~4.0.18` and `unplugin-swc 1.5.10`: newer releases (vitest 4.1+ with vite 8, unplugin-swc 1.5.11+ with unplugin 3) bring peer graphs that npm 10 can't resolve (`Cannot read properties of null (reading 'edgesOut')` — an npm bug fixed only in npm 11.6). The created project no longer declares `engines.npm`.
+
+### Fixed
+
+- **A lockfile written by npm 10 now passes `npm ci` on npm 10.** npm 10 hoisted `ts-morph@16` (from `prisma-nestjs-graphql`) and `@opentelemetry/api@1.4.1` (from `prisma-case-format`) to the project root, where they don't satisfy the optional peer ranges of `@nestjs/graphql` (`ts-morph ^25`) and `vitest` (`@opentelemetry/api ^1.9`); its own `npm ci` then rejected the lockfile (`EUSAGE … does not satisfy`). The framework now depends on `ts-morph ^25.0.0` and `@opentelemetry/api ^1.9.0`, so those versions sit at the root and the older ones are nested — the layout npm 11 already produced. Projects declare nothing extra.
+- CI runs `appx-core create` and `npm ci` of the created project on npm 10.
+
+### Migration
+
+Drop-in for the framework. For **existing projects whose CI uses npm 10**: if `npm ci` fails with `EBADPLATFORM` (`@esbuild/*`) or `Missing: … from lock file` and the project uses vitest, either run CI with npm 11 (`npm install -g npm@11` before `npm ci`), or hold the test tooling the same way and regenerate the lockfile:
+
+```bash
+npm install -D vitest@~4.0.18 unplugin-swc@1.5.10
+```
+
+Update the lockfile in place (preferably with npm 11) — **don't delete it**: a fresh resolution re-pulls today's versions, and on npm 10 can hit the same crash.
+
+---
+
 ## [0.1.130] — 2026-10-18
 
 Relations reached by a query now take part only through the related rows the caller can read — in filters, in nested selections at any depth, in `orderBy` and in `_count`.

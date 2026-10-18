@@ -1,6 +1,6 @@
 {
     "name": "@appxdigital/appx-core",
-    "version": "0.1.130",
+    "version": "0.1.131",
     "description": "Appx Core is a library that provides a set of tools to help you build your application faster.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -31,7 +31,9 @@
     },
     "dependencies": {
         "@adminjs/nestjs": "~7.0.0",
-        "express": "^5.1.0"
+        "@opentelemetry/api": "^1.9.0",
+        "express": "^5.1.0",
+        "ts-morph": "^25.0.0"
     },
     "devDependencies": {
         "@nestjs/testing": "~11.0.0",

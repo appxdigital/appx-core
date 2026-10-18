@@ -45,28 +45,6 @@ function* walk(dir: string): Generator<string> {
     }
 }
 
-describe('cli/cli.js create — npm version requirement', () => {
-    // A fake `npm` first on PATH that reports the given version.
-    const runWithNpm = (version: string) => {
-        const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-fake-npm-'));
-        fs.writeFileSync(path.join(bin, 'npm'), `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
-        const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-npm-check-'));
-        return spawnSync('node', [CLI_PATH, 'create', '--yes', '--name', 'npmcheck'], {
-            cwd,
-            env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1' },
-            encoding: 'utf8',
-            timeout: 30_000,
-        });
-    };
-
-    test('npm 10 → refuses to start and says how to upgrade', () => {
-        const res = runWithNpm('10.8.2');
-        expect(res.status).toBe(1);
-        expect(res.stderr).toContain('needs npm 11 or newer (yours: 10.8.2)');
-        expect(res.stderr).toContain('npm install -g npm@11');
-    });
-});
-
 describe('cli/cli.js — scaffold template contract', () => {
     test('every {{KEY}} in scaffold/ is in the documented set', () => {
         const found = new Set<string>();
@@ -448,6 +426,11 @@ describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
         const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
         expect(env.match(/SESSION_SECRET="([^"]+)"/)?.[1]).toMatch(/^[a-f0-9]{64}$/);
 
+        // ── The lockfile `create` wrote is installable by `npm ci` (what CI runs) ──
+        // Run with the same npm that wrote it — npm 10 has rejected its own
+        // lockfiles when an optional peer range was left unsatisfied.
+        execSync('npm ci --dry-run --ignore-scripts --loglevel=error', { cwd: projectPath, env: childEnv, stdio: 'pipe', timeout: 180_000 });
+
         // ── The scaffolded test suite passes out of the box ──
         // The project already runs on the build under test (APPX_CORE_SPEC).
         // The suite provisions its own throwaway DB container (Docker is
@@ -502,6 +485,12 @@ describe('cli/scaffold — test-suite template contract', () => {
         }
         // Runner config stays out of `nest build` (vitest is a devDependency).
         expect(cli).toContain("'vitest.config.ts'");
+    });
+
+    test('the test tooling stays below vite 8 (npm 10 cannot resolve its peer graph)', () => {
+        const cli = fs.readFileSync(CLI_PATH, 'utf8');
+        expect(cli).toContain('"vitest": "~4.0.18"');
+        expect(cli).toContain('"unplugin-swc": "1.5.10"');
     });
 
     test('the suite only ever talks to the container database', () => {

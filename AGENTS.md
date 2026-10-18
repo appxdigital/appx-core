@@ -154,7 +154,7 @@ Three commands exposed by `cli/cli.js`:
 
 | Command | What it does |
 |---|---|
-| `appx-core create` | Interactive prompt → copies `cli/scaffold/` to target dir, replaces `{{KEY}}` placeholders, runs `npm install`. Generates `JWT_SECRET` / `SESSION_SECRET` via `crypto.randomBytes(32).toString('hex')` (not the README's `"change-me"` literal — those are illustrative). Requires npm ≥ 11 (checked at startup). Installs `@appxdigital/appx-core` from the public registry; `APPX_CORE_SPEC` (test hook) overrides the spec so the CLI E2Es install the local build. |
+| `appx-core create` | Interactive prompt → copies `cli/scaffold/` to target dir, replaces `{{KEY}}` placeholders, runs `npm install`. Generates `JWT_SECRET` / `SESSION_SECRET` via `crypto.randomBytes(32).toString('hex')` (not the README's `"change-me"` literal — those are illustrative). Holds the scaffold's test tooling below vite 8 (`vitest ~4.0.18`, `unplugin-swc 1.5.10`) so npm 10 can resolve it; the framework depends on `ts-morph ^25` and `@opentelemetry/api ^1.9` so npm 10 writes lockfiles its own `npm ci` accepts (CI job `create on npm 10` guards both). Installs `@appxdigital/appx-core` from the public registry; `APPX_CORE_SPEC` (test hook) overrides the spec so the CLI E2Es install the local build. |
 | `appx-core generate` | Delegates to `dist/config/generate-all.js`. Pipeline: `prisma generate` → `generate-modules.ts` → `generate-resolvers.ts` → `generate-services.ts` → `generate-dtos.ts` → `generate-controllers.ts`. Driven by `src/generated/` (output of `prisma-nestjs-graphql`) + the Prisma DMMF (for DTO field metadata). |
 | `appx-core setup:fileupload` | Interactive prompts in `cli/utils/fileUploadConfig.js`. Appends to `.env`, writes `src/config/file-upload.config.ts`. |
 
