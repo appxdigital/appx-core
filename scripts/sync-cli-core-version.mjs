@@ -41,7 +41,9 @@ const prevVersion = prev ? JSON.parse(prev).version : null;
  */
 const isPublished = (version) => {
     try {
-        const out = execFileSync('npm', ['view', `${PKG}@${version}`, 'version'], {
+        // The framework is on the public registry; a machine that maps the
+        // @appxdigital scope elsewhere (e.g. GitHub Packages) would 404 it.
+        const out = execFileSync('npm', ['view', `${PKG}@${version}`, 'version', '--@appxdigital:registry=https://registry.npmjs.org/'], {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
             timeout: 20_000,
