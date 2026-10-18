@@ -10,6 +10,8 @@ import {PERMISSION_METADATA_KEY} from '../decorators/permission.decorator';
 import {PERMISSIONS_CONFIG_TOKEN} from '../config/permissions.config.provider';
 import {PermissionsConfigType, RolePermissions, SINGULAR_ACTION} from "../config/permissionsConfigTypes";
 
+const READ_ACTIONS = ['findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow', 'count'];
+
 @Injectable()
 export class RbacGuard implements CanActivate {
     constructor(
@@ -47,6 +49,11 @@ export class RbacGuard implements CanActivate {
         let permission = rolePermissions[action];
         if (!permission && SINGULAR_ACTION[action as string]) {
             permission = rolePermissions[SINGULAR_ACTION[action as string] as keyof RolePermissions];
+        }
+        // Standard reads share one rule (count / findFirst / findUnique → findMany
+        // → findFirst), as in the proxy. Custom actions never inherit a read rule.
+        if (!permission && READ_ACTIONS.includes(action as string)) {
+            permission = rolePermissions.findMany || rolePermissions.findFirst;
         }
         if (!permission) {
             throw new ForbiddenException(

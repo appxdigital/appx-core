@@ -18,6 +18,15 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 Relations reached by a query now take part only through the related rows the caller can read — in filters, in nested selections at any depth, in `orderBy` and in `_count`.
 
+### Added
+
+- **`set` on a write rule — values the server writes.** `create: { set: { ownerId: '$USER_ID' } }`, `updateMany: { conditions: {…}, set: { updatedById: '$USER_ID' } }`, or a forced value (`status: 'draft'`). Applied in the data-access proxy on every write the rule allows — generated CRUD, service code and nested creates — overriding the client's value. Set values are authorized like any other: they must satisfy the rule's `conditions`, and a set foreign key needs an explicit `connect` rule (the app refuses to boot without one). Replaces `setUserIdField` (removed — see Migration).
+- **`appx-core create` requires npm 11.** It stops at startup with the upgrade command (`npm install -g npm@11`) when npm is older: npm 10 crashes resolving current dependency trees (`Cannot read properties of null (reading 'edgesOut')`). Created projects declare `engines.npm: ">=11.0.0"`.
+
+### Removed
+
+- **`setUserIdField`.** Use `set: { <column>: '$USER_ID' }` on the rule. A config that still contains `setUserIdField` refuses to boot (`removed-set-user-id-field`) with the exact replacement, so it can't be silently ignored.
+
 ### Fixed
 
 - **Client relation filters respect the related model's read rules.** A `where` that crosses a relation (`some`/`every`/`none`/`is`/`isNot`, or the to-one shorthand) — at the top level, inside a nested selection or inside a `_count` entry — is evaluated over the related rows the role can read. A relation into a model with **no** read rule for the role is rejected (`403`, `Cannot filter by 'model.relation' …`). Applies to every read and to `updateMany`/`deleteMany`, on every transport (REST, GraphQL, service code).
@@ -26,6 +35,9 @@ Relations reached by a query now take part only through the related rows the cal
 - **`orderBy` on a related to-one field** requires that record to be readable, like including it: rows whose related record isn't readable are left out. **`orderBy` a to-many `_count`** requires an unconditional (`'ALL'`) read rule on the related model, or the model to be exposed; otherwise `403`.
 - **A nested selection's `where` / `orderBy` / `distinct` can't reference a `@Role`-hidden field** (`403`), as at the top level.
 - **`BYPASS_OMISSION` no longer disables row filtering on `include`d relations**, and a bare to-many `select: { rel: true }` under it no longer throws a `TypeError`.
+- **`RbacGuard` applies the documented read fallback.** `findFirst` / `findFirstOrThrow` / `findUnique` / `findUniqueOrThrow` / `count` are allowed by a `findMany` rule (then `findFirst`), as in the proxy — a config with only `findMany` no longer `403`s `GET /:id`. Custom `@Permission` actions never inherit a read rule.
+- **Schema annotations quoted in backticks are ignored.** A `///` comment that mentions a tag in prose — `` /// unlike `role` (`@NoWrite`) … `` — no longer applies `@NoWrite` / `@Role(...)` to the field (runtime and generated DTOs). Unquoted tags apply as before.
+- **Installing the framework works again since NestJS 12.** `@adminjs/nestjs` accepts any `@nestjs/common` / `@nestjs/core` from 9 up; as a peer, npm resolved it to Nest 12 before the framework's `~11` ranges and the install failed (`ERESOLVE`) — `appx-core create`, and any fresh install without a lockfile. `@adminjs/nestjs` is now a framework **dependency**, so it resolves against the framework's Nest 11; projects declare nothing extra. `create` also installs `@appxdigital/appx-core` from the public registry even when the `@appxdigital` scope is mapped elsewhere (e.g. GitHub Packages).
 
 ### Changed
 
@@ -40,7 +52,15 @@ Relations reached by a query now take part only through the related rows the cal
 2. **New `403 Missing permissions on model X` / `Cannot filter by …` / `Cannot order by …`** — the role reaches model `X` (selected below another relation, filtered through, counted, or sorted by) but has no read rule for it. Add a `findMany`/`findFirst` rule for that role on `X`, or expose `X` for that one request (`@ExposeModels('X')` / `withExposedModels(['X'], …)`) when the endpoint authorizes it itself.
 3. **A row disappeared (e.g. `findFirst` now `null` → `404`)** — the query selects a to-one relation, possibly several levels deep (`team → owner → user`), whose record the role's read rule doesn't cover. Widen that model's read rule to cover the records the endpoint legitimately shows (e.g. "users who share a team with me"), or stop selecting the relation.
 4. **A nested list, a `_count` or a filtered result got smaller** — it now covers only related rows the role can read. Same fix: widen the related model's read rule if the endpoint should see those rows.
-5. **`orderBy: { rel: { _count: … } }` now `403`s** when the related model's read rule has conditions. Select the scoped `_count` and sort in code, or expose the model for that request.
+5. **Replace `setUserIdField` with `set`** (the app refuses to boot until you do — `removed-set-user-id-field`). For each rule:
+
+   ```ts
+   create: { conditions: {...}, setUserIdField: 'ownerId' }        // before
+   create: { conditions: {...}, set: { ownerId: '$USER_ID' } }     // after
+   ```
+
+   `set` applies on **every** create — generated `POST`, your services, nested creates — not only the generated `POST`. If a service creates these rows **on behalf of another user** under the same role, it now gets the caller's id instead: give that flow its own endpoint/rule or expose the model for it. The relationship still needs a `connect` rule (e.g. `relations: { owner: { connect: { conditions: { id: '$USER_ID' } } } }`); the boot error names it if missing.
+6. **`orderBy: { rel: { _count: … } }` now `403`s** when the related model's read rule has conditions. Select the scoped `_count` and sort in code, or expose the model for that request.
 
 > **For AI agents:** do not report this upgrade as complete after bumping the version. Run the project's tests and its main read flows per role, and list for the developer every new `403`, missing row and shrunken list you find, with the read rule that would restore it. Widening a read rule is a security decision — propose it, don't apply it silently.
 

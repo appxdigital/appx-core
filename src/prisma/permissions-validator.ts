@@ -36,6 +36,8 @@ export type IssueCode =
     | 'missing-connect-required'
     | 'missing-connect'
     | 'connect-on-unwritable'
+    | 'relation-in-set'
+    | 'removed-set-user-id-field'
     | 'unknown-relation';
 
 export interface ValidationIssue {
@@ -100,6 +102,9 @@ export function validatePermissionsConfig(
         !!rules && (rules.create !== undefined || rules.createMany !== undefined);
     const canUpdate = (rules: any): boolean =>
         !!rules && (rules.update !== undefined || rules.updateMany !== undefined);
+    // Columns a rule's `set` writes server-side.
+    const setColumns = (...actionRules: any[]): Set<string> =>
+        new Set(actionRules.flatMap((rule) => (rule && typeof rule === 'object' && rule.set ? Object.keys(rule.set) : [])));
 
     for (const modelKey of Object.keys(cfg)) {
         const roles = cfg[modelKey] || {};
@@ -109,6 +114,20 @@ export function validatePermissionsConfig(
 
         for (const role of Object.keys(roles)) {
             const rules = roles[role];
+            // `setUserIdField` was removed; left in a config it would silently stop
+            // forcing the column, so it is rejected with its replacement.
+            for (const action of Object.keys(rules || {})) {
+                const field = rules[action]?.setUserIdField;
+                if (field !== undefined) {
+                    issues.push({
+                        level: 'error',
+                        code: 'removed-set-user-id-field',
+                        model: modelKey,
+                        role,
+                        message: `${modelKey}.${role}.${action}.setUserIdField was removed. Replace it with '${action}: { set: { ${field}: '$USER_ID' } }' (applied on every write path; its foreign key needs a 'connect' rule).`,
+                    });
+                }
+            }
             const creatable = canCreate(rules);
             const updatable = canUpdate(rules);
             if (!creatable && !updatable) continue;
@@ -130,12 +149,26 @@ export function validatePermissionsConfig(
 
             // Every foreign key a write can SET must have a connect rule (target
             // or relation-scoped) — otherwise setting it is denied at runtime.
-            // A @NoWrite / @Role(none) column is never settable.
+            // A @NoWrite / @Role(none) column is never client-settable, but a
+            // column in the rule's `set` is written server-side.
+            const createSet = setColumns(rules.create, rules.createMany);
+            const updateSet = setColumns(rules.update, rules.updateMany);
+            for (const column of new Set([...createSet, ...updateSet])) {
+                if (relationFieldNames.has(column)) {
+                    issues.push({
+                        level: 'error',
+                        code: 'relation-in-set',
+                        model: modelKey,
+                        role,
+                        message: `'set' on ${modelKey}.${role} names relation '${column}'. Set its foreign key column instead.`,
+                    });
+                }
+            }
             for (const r of belongsTo) {
                 const col = r.referencingColumn as string;
                 const writable = r.fkWritable !== false; // not @NoWrite / @Role(none)
-                const settableOnCreate = writable && creatable;
-                const settableOnUpdate = writable && updatable;
+                const settableOnCreate = (writable || createSet.has(col)) && creatable;
+                const settableOnUpdate = (writable || updateSet.has(col)) && updatable;
                 const relRule = hasRelationConnect(rules, r.field);
 
                 if (!settableOnCreate && !settableOnUpdate) {
@@ -154,18 +187,14 @@ export function validatePermissionsConfig(
                 }
                 if (relRule || hasConnectRule(r.model, role)) continue;
 
-                // A server-set owner FK (`setUserIdField`) still needs a connect
-                // rule — the value is trusted, but the framework authorizes every
+                // A server-set owner FK (`set`) still needs a connect
+                // rule — the server chose the value, but the framework authorizes every
                 // relationship a write establishes, uniformly. Point at the
                 // relation-scoped self-connect rather than a blanket rule on the
                 // target: `connect: 'ALL'` on User would let this role attach ANY
                 // user, which is far wider than what a self-owned create needs.
-                const createRule = rules?.create;
-                const ownerField = typeof createRule === 'object' && createRule
-                    ? (createRule as any).setUserIdField
-                    : undefined;
-                const fix = ownerField === col
-                    ? `'${col}' is server-set via setUserIdField, but the relationship it creates still needs a connect rule. Scope it to the caller with '${modelKey}.${role}.relations.${r.field}.connect: {conditions: {id: "$USER_ID"}}' — prefer that over a blanket '${r.model}.${role}.connect', which would allow connecting to any ${r.model}.`
+                const fix = createSet.has(col) || updateSet.has(col)
+                    ? `'${col}' is server-set via 'set', but the relationship it creates still needs a connect rule. Scope it to the caller with '${modelKey}.${role}.relations.${r.field}.connect: {conditions: {id: "$USER_ID"}}' — prefer that over a blanket '${r.model}.${role}.connect', which would allow connecting to any ${r.model}.`
                     : `Declare '${r.model}.${role}.connect' (or 'ALL'), or scope it to this relation with '${modelKey}.${role}.relations.${r.field}.connect'.`;
                 if (settableOnCreate && r.isRequired) {
                     issues.push({

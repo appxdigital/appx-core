@@ -109,6 +109,7 @@ program
     .option('--db-name <name>', 'Database name (default: generic)')
     .option('--show-output', 'Show full command output instead of the progress bar')
     .action(async (options) => {
+        assertSupportedNpm();
         // Any value-bearing flag (or --yes) means the caller is scripting this —
         // never open the wizard, and never touch a prompt without a TTY.
         const nonInteractive = !!options.yes ||
@@ -512,7 +513,9 @@ async function createProject(answers, fileUploadConfigData) {
 
         // Install dependencies
         createPackageJson(projectPath, projectName);
-        executeCommand('npm --loglevel=error install', answers.showOutput);
+        // The framework is on the public registry; a machine that maps the
+        // @appxdigital scope elsewhere (e.g. GitHub Packages) would 404 it.
+        executeCommand('npm --loglevel=error install --@appxdigital:registry=https://registry.npmjs.org/', answers.showOutput);
         incrementProgress(answers?.showOutput, "installDependencies");
 
         // Update PATH to include local node_modules/.bin (Prisma spawns
@@ -527,13 +530,9 @@ async function createProject(answers, fileUploadConfigData) {
         // fail with an opaque error. Fail here, with the actual cause.
         const prismaBin = path.join(localBinPath, process.platform === 'win32' ? 'prisma.cmd' : 'prisma');
         if (!fsCore.existsSync(prismaBin)) {
-            const npmVersion = (() => {
-                try { return execSync('npm --version', {stdio: ['ignore', 'pipe', 'ignore']}).toString().trim(); }
-                catch { return 'unknown'; }
-            })();
             throw new Error(
                 `prisma was not installed into the project (expected ${prismaBin}).\n` +
-                `It is a peer dependency of @appxdigital/appx-core; npm installs peers automatically since v7 (yours: ${npmVersion}, project requires >= 10).\n` +
+                `It is a peer dependency of @appxdigital/appx-core; npm installs peers automatically since v7 (yours: ${npmVersion()}, project requires >= ${MIN_NPM_MAJOR}).\n` +
                 `Check that your npm config does not set "legacy-peer-deps" or "omit=peer" (npm config list), then re-run in an empty directory.`
             );
         }
@@ -608,6 +607,9 @@ async function createProject(answers, fileUploadConfigData) {
  * right channel — never a production project depending on a prerelease.
  */
 function coreDependencySpec() {
+    // Test hook: the CLI E2Es point this at a locally packed build, so `create`
+    // installs the code under test instead of the published release.
+    if (process.env.APPX_CORE_SPEC) return process.env.APPX_CORE_SPEC;
     const cliChannel = autoUpdate.inferChannel(packageJson.version);
     const coreChannel = autoUpdate.inferChannel(CORE_VERSION);
     if (cliChannel === 'beta') {
@@ -651,7 +653,8 @@ function createPackageJson(projectPath, projectName) {
             "vitest": "^4.1.10",
         },
         engines: {
-            "node": ">=20.0.0"
+            "node": ">=20.0.0",
+            "npm": `>=${MIN_NPM_MAJOR}.0.0`
         }
     };
 
@@ -754,6 +757,25 @@ function incrementProgress(showOutput, phase) {
         remainingETA -= phaseDurations[phase];
         progressBar.update(progressBar.value + phase === 'end' ? 0 : 1, {remainingETA});
     }
+}
+
+// npm 10 crashes resolving current dependency trees (vite 8's peer graph:
+// "Cannot read properties of null (reading 'edgesOut')"); npm 11 resolves them.
+const MIN_NPM_MAJOR = 11;
+
+function npmVersion() {
+    try {
+        return execSync('npm --version', {stdio: ['ignore', 'pipe', 'ignore']}).toString().trim();
+    } catch {
+        return 'unknown';
+    }
+}
+
+function assertSupportedNpm() {
+    const version = npmVersion();
+    if (parseInt(version, 10) >= MIN_NPM_MAJOR) return;
+    console.error(`🚫 appx-core create needs npm ${MIN_NPM_MAJOR} or newer (yours: ${version}). Upgrade with: npm install -g npm@${MIN_NPM_MAJOR}`);
+    process.exit(1);
 }
 
 function executeCommand(command, showOutput = false) {

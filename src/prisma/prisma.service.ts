@@ -7,6 +7,7 @@ import type {PrismaClient as RuntimeClient} from '.prisma/client';
 // @ts-ignore
 import {RuntimeDataModel} from "@prisma/client/runtime/edge";
 import {AsyncLocalStorage} from 'node:async_hooks';
+import {annotationText} from '../common/utils/schema-annotations.util';
 
 export const CorePrismaContext = new AsyncLocalStorage<{
     exposedModels: string[]
@@ -180,6 +181,7 @@ export class PrismaService {
                                     }
                                     if (!options?.BYPASS_FILTERING) {
                                         if (['create', 'createMany'].includes(methodKey.toString())) {
+                                            this.applySetValues(String(propKey), userRole, params.data, user, methodKey.toString());
                                             // Conditions can't be pushed into a WHERE on insert, so
                                             // validate the incoming data satisfies them before insert.
                                             await this.enforceCreateConditions(String(propKey), userRole, params, user, methodKey.toString());
@@ -199,6 +201,7 @@ export class PrismaService {
                                             // An update can re-point a foreign key (scalar column);
                                             // authorize those changes with the same connect rules as create.
                                             if (['update', 'updateMany'].includes(methodKey.toString())) {
+                                                this.applySetValues(String(propKey), userRole, params.data, user, methodKey.toString());
                                                 await this.enforceNestedWrites(String(propKey), params.data, user, userRole);
                                             }
                                         }
@@ -299,7 +302,7 @@ export class PrismaService {
                 let field_name = field.name;
 
                 const fieldType = field.type;
-                const commentPart = field.documentation || '';
+                const commentPart = annotationText(field.documentation);
 
                 if (commentPart) {
                     const roleMatch = commentPart.match(/@Role\((.*?)\)/);
@@ -944,6 +947,25 @@ export class PrismaService {
     }
 
     /**
+     * Writes the rule's `set` values into every row of a write's `data`,
+     * overriding what the client sent (placeholders such as `$USER_ID` are
+     * resolved). Runs before the write is authorized, so the set values are
+     * checked like any other: against the create `conditions`, and a set
+     * foreign key against its `connect` rule.
+     */
+    private applySetValues(modelName: string, userRole: string, data: any, user: any, action: string): void {
+        const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
+        if (exposedModels.includes(modelName.toLowerCase())) return;
+        const permissions = this.normalizedPermissionsConfig[modelName.toLowerCase()]?.[userRole] || {};
+        const set = this.selectPermission(permissions, action, modelName, userRole)?.set;
+        if (!set) return;
+        const values = PrismaService._buildConditions(set, user);
+        for (const row of Array.isArray(data) ? data : [data]) {
+            if (row && typeof row === 'object') Object.assign(row, values);
+        }
+    }
+
+    /**
      * Enforces permission `conditions` on `create` / `createMany`.
      *
      * Conditions cannot be pushed into a `WHERE` on insert, so instead we verify
@@ -991,7 +1013,7 @@ export class PrismaService {
         if (actionPermissions === 'ALL') return;
 
         const conditions = (actionPermissions as any).conditions;
-        if (!conditions) return; // permission defined but no conditions (e.g. setUserIdField only) → allow
+        if (!conditions) return; // permission defined but no conditions (e.g. `set` only) → allow
 
         const condObj = Array.isArray(conditions) ? {AND: conditions} : conditions;
         const resolved = PrismaService._buildConditions(condObj, user);
@@ -1082,6 +1104,7 @@ export class PrismaService {
             const items = Array.isArray(value) ? value : [value];
             if (op === 'create') {
                 for (const child of items) {
+                    this.applySetValues(relatedModel, userRole, child, user, 'create');
                     await this.enforceCreateConditions(relatedModel, userRole, {data: child}, user, 'create', backFk);
                     await this.enforceNestedWrites(relatedModel, child, user, userRole, backFk);
                 }
@@ -1294,7 +1317,7 @@ export class PrismaService {
                 case 'gte': if (!(actual >= opv)) return false; break;
                 default:
                     throw new ForbiddenException(
-                        `create on ${modelName}: unsupported operator '${op}' on field '${key}' in a create condition. Use a simpler condition or setUserIdField.`,
+                        `create on ${modelName}: unsupported operator '${op}' on field '${key}' in a create condition. Use a simpler condition or 'set'.`,
                     );
             }
         }

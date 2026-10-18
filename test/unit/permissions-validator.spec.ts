@@ -110,6 +110,83 @@ describe('validatePermissionsConfig (Option A)', () => {
         expect(issues[0].message).toMatch(/not writable/);
     });
 
+    describe('a @NoWrite foreign key written server-side by `set`', () => {
+        const ownerNoWrite: SchemaRelations = {
+            project: [
+                { field: 'owner', model: 'User', referencingColumn: 'ownerId', isRequired: true, kind: 'belongsTo', fkWritable: false },
+            ],
+        };
+
+        test('`set` foreign key with a relation-scoped self-connect → valid', () => {
+            const issues = validatePermissionsConfig(
+                {
+                    Project: {
+                        USER: {
+                            create: { set: { ownerId: $UID, status: 'draft' } },
+                            relations: { owner: { connect: { conditions: { id: $UID } } } },
+                        },
+                    },
+                },
+                ownerNoWrite,
+            );
+            expect(issues).toEqual([]);
+        });
+
+        test('ERROR: `set` foreign key on create with no connect rule', () => {
+            const issues = validatePermissionsConfig(
+                { Project: { USER: { create: { set: { ownerId: $UID } } } } },
+                ownerNoWrite,
+            );
+            expect(codes(issues)).toEqual(['missing-connect-required']);
+            expect(issues[0].message).toMatch(/server-set via 'set'/);
+        });
+
+        test('ERROR: `set` foreign key on update with no connect rule', () => {
+            const issues = validatePermissionsConfig(
+                { Project: { USER: { updateMany: { conditions: {}, set: { ownerId: $UID } } } } },
+                ownerNoWrite,
+            );
+            expect(codes(issues)).toEqual(['missing-connect']);
+            expect(issues[0].message).toMatch(/update/);
+        });
+
+        test('ERROR: `set` naming a relation instead of its foreign key column', () => {
+            const issues = validatePermissionsConfig(
+                {
+                    Project: {
+                        USER: {
+                            create: { set: { owner: $UID } },
+                            relations: { owner: { connect: 'ALL' } },
+                        },
+                    },
+                },
+                ownerNoWrite,
+            );
+            expect(codes(issues)).toEqual(['connect-on-unwritable', 'relation-in-set']);
+        });
+
+        test('ERROR: a leftover `setUserIdField` is rejected with its replacement', () => {
+            const issues = validatePermissionsConfig(
+                {
+                    Project: {
+                        USER: {
+                            create: { conditions: {}, setUserIdField: 'ownerId' },
+                            relations: { owner: { connect: { conditions: { id: $UID } } } },
+                        },
+                    },
+                } as any,
+                ownerNoWrite,
+            );
+            expect(codes(issues)).toContain('removed-set-user-id-field');
+            expect(issues.find((i) => i.code === 'removed-set-user-id-field')!.message).toMatch(/set: \{ ownerId: '\$USER_ID' \}/);
+        });
+
+        test('a @NoWrite FK not named by `set` stays unsettable (no requirement)', () => {
+            const issues = validatePermissionsConfig({ Project: { USER: { create: 'ALL' } } }, ownerNoWrite);
+            expect(issues).toEqual([]);
+        });
+    });
+
     test('ERROR: an update-only model with a settable FK and no connect rule', () => {
         const issues = validatePermissionsConfig(
             { Task: { USER: { updateMany: 'ALL' } }, Project: { USER: { connect: 'ALL' } } },

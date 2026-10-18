@@ -119,7 +119,7 @@ Used by `AuthService`, `SessionSerializer`, `CorePrismaSessionStore`, and AdminJ
 
 `selectPermission` (in `prisma.service.ts`) implements aliases so configs stay compact:
 - `count` falls back to `findMany` then `findFirst`
-- `findFirst` / `findUnique`-shape reads fall back to `findMany`
+- `findFirst` / `findUnique`-shape reads fall back to `findMany` (in both the proxy and `RbacGuard`; the guard only does this for the standard Prisma read names, never for custom `@Permission` actions)
 - `createMany` falls back to `create` (in both the data-access proxy and `RbacGuard`)
 
 This is convenient but means a single `findMany: 'ALL'` entry implicitly grants `count` and `findFirst`, and a single `create` entry implicitly grants `createMany`. The `createMany → create` fallback is **one-directional**: declaring only `createMany` does not enable `create`, so make `create` the canonical key.
@@ -154,7 +154,7 @@ Three commands exposed by `cli/cli.js`:
 
 | Command | What it does |
 |---|---|
-| `appx-core create` | Interactive prompt → copies `cli/scaffold/` to target dir, replaces `{{KEY}}` placeholders, runs `npm install`. Generates `JWT_SECRET` / `SESSION_SECRET` via `crypto.randomBytes(32).toString('hex')` (not the README's `"change-me"` literal — those are illustrative). |
+| `appx-core create` | Interactive prompt → copies `cli/scaffold/` to target dir, replaces `{{KEY}}` placeholders, runs `npm install`. Generates `JWT_SECRET` / `SESSION_SECRET` via `crypto.randomBytes(32).toString('hex')` (not the README's `"change-me"` literal — those are illustrative). Requires npm ≥ 11 (checked at startup). Installs `@appxdigital/appx-core` from the public registry; `APPX_CORE_SPEC` (test hook) overrides the spec so the CLI E2Es install the local build. |
 | `appx-core generate` | Delegates to `dist/config/generate-all.js`. Pipeline: `prisma generate` → `generate-modules.ts` → `generate-resolvers.ts` → `generate-services.ts` → `generate-dtos.ts` → `generate-controllers.ts`. Driven by `src/generated/` (output of `prisma-nestjs-graphql`) + the Prisma DMMF (for DTO field metadata). |
 | `appx-core setup:fileupload` | Interactive prompts in `cli/utils/fileUploadConfig.js`. Appends to `.env`, writes `src/config/file-upload.config.ts`. |
 
@@ -168,7 +168,7 @@ Three commands exposed by `cli/cli.js`:
   - `src/generated/dto/<model>/<action>-<model>.generated.dto.ts` — base, **always overwritten**, gitignored (under `src/generated/`), carries the `@Generated` banner. Never hand-edit. Uses `writeGeneratedFile` (overwrite), not `createFileIfNotExists`.
   - `src/modules/<model>/dto/<action>-<model>.dto.ts` — hand-owned subclass, generated **once** (`createFileIfNotExists`), committed. Add custom validation here.
   The generated controller **overrides** `create`/`update` with the concrete DTO type so `ValidationPipe` (`whitelist`) can strip unknown fields. **Schema is the source of truth** for the writable field set.
-- **Writable-field policy** (what appears in a DTO): all scalars except `@id`, server-managed timestamps (`@default(now())` / `@updatedAt`), `/// @NoWrite`, and `/// @Role(none)`. Relation navigation fields are excluded; their scalar FKs are kept. To make a field non-writable via CRUD, annotate it `/// @NoWrite` (all roles) or `/// @Role(none)` (also unreadable). There is no per-role write strip on a generated DTO — for a per-role difference use `OmitType`, `setUserIdField`, or a dedicated endpoint (see `docs/dtos.md`).
+- **Writable-field policy** (what appears in a DTO): all scalars except `@id`, server-managed timestamps (`@default(now())` / `@updatedAt`), `/// @NoWrite`, and `/// @Role(none)`. Relation navigation fields are excluded; their scalar FKs are kept. To make a field non-writable via CRUD, annotate it `/// @NoWrite` (all roles) or `/// @Role(none)` (also unreadable). There is no per-role write strip on a generated DTO — for a per-role difference use `OmitType`, `set`, or a dedicated endpoint (see `docs/dtos.md`).
 - **`dto` is in `IGNORE_FOLDERS`** — the model generators scan `src/generated`'s top-level dirs as model names, so the `src/generated/dto/` dir must be skipped or they emit a bogus `dto` module.
 
 ---
@@ -203,7 +203,7 @@ The test suite under `test/` exercises both MySQL and PostgreSQL via `testcontai
 These are intentional or known limitations and should be respected when changing code:
 
 1. **Prisma single-record methods are aliases.** `findUnique` → `findFirst`, `findUniqueOrThrow` → `findFirstOrThrow`, `update` → `updateMany`, `delete` → `deleteMany` — re-aliased in the types (`ProxiedDelegate`, `src/prisma/prisma.service.ts`) and redirected at runtime, with ABAC conditions applied on the redirected call. Each takes the target method's arguments and returns its result (`{ count }` for `update`/`delete`). *(Reason: the proxy needs a non-unique `where` to inject filters.)* Pinned by `test/abac/method-redirect.spec.ts`.
-2. **`create` / `createMany` validate conditions before insert** (there is no existing row for a `where`). The proxy checks the incoming data satisfies the create permission's `conditions` and default-denies create when the model/role has no `create` permission. Unsupported condition shapes (list-relation `some`/`every`/`none`, exotic operators) fail **closed** — for those, use `setUserIdField` and validate input in DTOs.
+2. **`create` / `createMany` validate conditions before insert** (there is no existing row for a `where`). The proxy checks the incoming data satisfies the create permission's `conditions` and default-denies create when the model/role has no `create` permission. Unsupported condition shapes (list-relation `some`/`every`/`none`, exotic operators) fail **closed** — for those, use `set` (server-written columns) and validate input in DTOs.
 3. **GraphQL is read-only by design.** The namespaced per-model API (`<model> { find get count }`, built by `CoreGraphqlResolver` in `src/graphql/generic.resolver.ts`) exposes no mutations; writes go through REST.
 4. **`RbacGuard` only checks existence**, not conditions. The proxy enforces conditions on reads/updates/deletes. There is **no defence-in-depth at the controller layer** — if you bypass the proxy (e.g., raw SQL, direct client access), you bypass ABAC entirely.
 5. **Permission config is keyed by role string, with no type safety.** `DefaultRole` enum exists but isn't enforced; configs use bare strings like `'ADMIN'` / `'USER'` / `'GUEST'`. Typos in a role string silently fall through to "no permissions defined" → 403.
@@ -261,7 +261,7 @@ Keep it tight and declarative — the reader should learn when, how, and what ha
 **DON'T**
 - Don't mock `PrismaService` in tests. The proxy *is* the behaviour. Use the testcontainers harness under `test/`.
 - Don't add features to `RbacGuard` that duplicate the proxy. The guard's job is to refuse unknown action/role pairs early; data filtering stays at the data layer.
-- `create` permission `conditions` are validated against the incoming data before insert (own scalar fields only; every relationship the write establishes is authorized via the target's `connect` rule). To set an owner id server-side use `setUserIdField`; there is no per-role field strip (`/// @NoWrite` / `OmitType` / dedicated endpoint instead). Validate inputs in DTOs.
+- `create` permission `conditions` are validated against the incoming data before insert (own scalar fields only; every relationship the write establishes is authorized via the target's `connect` rule). To set an owner id server-side use `set: { ownerId: '$USER_ID' }` on the rule (applied in the proxy on every write path; a set FK still needs an explicit `connect` rule — boot fails otherwise; the removed `setUserIdField` is rejected at boot); there is no per-role field strip (`/// @NoWrite` / `OmitType` / dedicated endpoint instead). Validate inputs in DTOs.
 - Don't read secrets from `process.env` directly in framework code; use `ConfigService`.
 - Don't write to paths under `src/generated/` by hand; that directory is owned by `prisma generate` / `prisma-nestjs-graphql`.
 - Don't change the public API surface in `src/index.ts` without bumping the version in `package.json` and noting it in commit history.

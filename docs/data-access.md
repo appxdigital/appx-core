@@ -105,7 +105,7 @@ Framework flows that must write without a permission (registration, sessions, to
 
 - Own-scalar conditions are checked against `data`; `belongsTo` relation conditions are checked by looking up the referenced parent.
 - A model/role with **no** `create` permission is **default-denied** (`403`).
-- It **fails closed**: unsupported condition shapes for create (list-relation `some`/`every`/`none`, exotic operators) throw rather than silently allow. For those, use `setUserIdField` to set an owner id server-side and validate inputs in DTOs.
+- It **fails closed**: unsupported condition shapes for create (list-relation `some`/`every`/`none`, exotic operators) throw rather than silently allow. For those, use `set` on the rule to write an owner id server-side and validate inputs in DTOs.
 - In development only, a warning fires if a just-created row wouldn't satisfy the model's *read* rule (i.e. the creator couldn't read it back).
 
 ---

@@ -6,6 +6,7 @@ import {
     pascalToKebabCase,
     writeGeneratedFile,
 } from './utils';
+import {annotationText} from '../common/utils/schema-annotations.util';
 
 /**
  * DTO generator.
@@ -63,7 +64,8 @@ type DmmfField = {
     relationFromFields?: string[];
 };
 
-function isNoWrite(doc?: string): boolean {
+export function isNoWrite(documentation?: string): boolean {
+    const doc = annotationText(documentation);
     if (!doc) return false;
     if (/@NoWrite\b/i.test(doc)) return true;
     // @Role(none): readable by nobody ⇒ treat as not CRUD-writable.

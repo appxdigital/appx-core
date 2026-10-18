@@ -61,3 +61,28 @@ describe('RbacGuard — create/createMany fallback', () => {
         ).rejects.toThrow(/not allowed/i);
     });
 });
+
+describe('RbacGuard — read action fallback (mirrors the data-access proxy)', () => {
+    const allowed = (action: string, rules: any) =>
+        new RbacGuard(reflector(action), { Post: { USER: rules } } as any).canActivate(ctx('USER', 'Post'));
+
+    test('findFirst / findUnique-shape reads and count are allowed by a `findMany` rule', async () => {
+        for (const action of ['findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow', 'count']) {
+            await expect(allowed(action, { findMany: { conditions: { authorId: 1 } } })).resolves.toBe(true);
+        }
+    });
+
+    test('findMany and count fall back to a `findFirst` rule', async () => {
+        await expect(allowed('findMany', { findFirst: 'ALL' })).resolves.toBe(true);
+        await expect(allowed('count', { findFirst: 'ALL' })).resolves.toBe(true);
+    });
+
+    test('a custom action is never granted by a read rule, even when named find*', async () => {
+        await expect(allowed('findAllInvoices', { findMany: 'ALL', findFirst: 'ALL' })).rejects.toThrow(/not allowed/i);
+        await expect(allowed('getTeam', { findMany: 'ALL' })).rejects.toThrow(/not allowed/i);
+    });
+
+    test('default-deny when no read rule is defined', async () => {
+        await expect(allowed('findFirst', { create: 'ALL' })).rejects.toThrow(/not allowed/i);
+    });
+});

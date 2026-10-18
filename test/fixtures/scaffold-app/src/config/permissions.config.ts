@@ -33,7 +33,7 @@ export const PermissionsConfig: PermissionsConfigType = {
       // A USER may be referenced as a relation target (project owner, task
       // assignee/reviewer, comment author, membership). Which USER is allowed is
       // constrained per-relation by the referencing model's create rule +
-      // `setUserIdField`, so the connect rule itself is open.
+      // its `set` values, so the connect rule itself is open.
       connect: 'ALL',
       updateMany: {
         // Even on self, USER cannot mutate role or move to another tenant —
@@ -77,7 +77,7 @@ export const PermissionsConfig: PermissionsConfigType = {
   // -------- Project --------
   // Exercises OR + list-relation `some` + tighter rules for write actions
   // (only owner can update/delete, but any member can read). `create` pins the
-  // owner to the caller (own-scalar condition + `setUserIdField`); `connect`
+  // owner to the caller (own-scalar condition + `set`); `connect`
   // governs attaching an existing project as a relation target (task/membership).
   Project: {
     ADMIN: {
@@ -97,7 +97,7 @@ export const PermissionsConfig: PermissionsConfigType = {
       deleteMany: { conditions: { ownerId: PermissionPlaceholder.USER_ID } },
       create: {
         conditions: { ownerId: PermissionPlaceholder.USER_ID },
-        setUserIdField: 'ownerId',
+        set: { ownerId: PermissionPlaceholder.USER_ID },
       },
     },
   },
@@ -169,10 +169,10 @@ export const PermissionsConfig: PermissionsConfigType = {
       // Attaching a parent comment (the optional self-relation) requires access
       // to a comment in a project you can see.
       connect: { conditions: { task: { project: ProjectAccessCondition } } },
-      // author is forced to the caller (setUserIdField); the comment's task is
+      // author is forced to the caller (`set`); the comment's task is
       // authorized via Task.connect (its taskId FK).
       create: {
-        setUserIdField: 'authorId',
+        set: { authorId: PermissionPlaceholder.USER_ID },
       },
     },
   },

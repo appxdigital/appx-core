@@ -102,7 +102,8 @@ export interface ActionPermission<
     A extends MethodsWithWhere<RuntimeClient, M> = MethodsWithWhere<RuntimeClient, M>
 > {
     conditions: FieldConditions<M, A> | FieldConditions<M, A>[];
-    setUserIdField?: string;
+    /** Column values the server sets on every write this rule allows (overriding the client's). */
+    set?: Record<string, unknown>;
 }
 
 /**
@@ -132,7 +133,7 @@ export type RolePermissions<
     // index collides with `relations?` above and forces `as any`.
     [custom: string]: 'ALL' | RelationConnectMap | {
         conditions?: unknown | unknown[];
-        setUserIdField?: string;
+        set?: Record<string, unknown>;
     };
 };
 

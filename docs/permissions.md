@@ -42,7 +42,7 @@ Shape: `PermissionsConfig[Model][Role][action]`, where each `action` value is ei
 
 - **`'ALL'`** — unrestricted for that action, or
 - **`{ conditions: <where> }`** — an ABAC rule. `conditions` is Prisma `where`-syntax (`AND`/`OR`/`NOT`, relation filters `some`/`every`/`none`, operators `in`/`not`/`lt`/…). `$USER_ID` is substituted with the caller's id at query time.
-- Optionally with **`setUserIdField`** (see below).
+- Optionally with **`set`** on a `create` / `update` rule — columns the server writes (see below).
 
 **Model and role keys are matched case-insensitively** against the model name and the caller's role string.
 
@@ -122,6 +122,8 @@ To keep configs compact, a missing action falls back:
 - **`findFirst` / `findUnique`-shape reads → `findMany`**.
 - **`createMany` → `create`**, **`updateMany` → `update`**, **`deleteMany` → `delete`** (a batch action inherits the singular rule).
 
+Both chains apply in the `RbacGuard` and in the proxy. A custom action (`@Permission('getTeam')`, `@Permission('findAllInvoices')`) never inherits a read rule — it needs its own entry.
+
 The `*Many` → singular fallback is **one-directional**: the singular is canonical. Declaring only `updateMany` does *not* enable `update`; declare `update` (or `create`/`delete`) and the `*Many` form is covered automatically. This holds in **both** the `RbacGuard` and the proxy.
 
 So a minimal USER config often needs just `findMany`, `create`, `update`, `delete`.
@@ -130,13 +132,19 @@ So a minimal USER config often needs just `findMany`, `create`, `update`, `delet
 
 - **`/// @Role(ADMIN)` on a schema column** — only listed roles can *read* that field. For everyone else the proxy omits it from results (it comes back `undefined`). `/// @Role(none)` hides it from all roles. Applies at every depth, including nested relation selections.
 - **`/// @NoWrite` on a schema column** — excludes the field from generated create/update DTOs (all roles). Use it for privileged columns (e.g. `role`) that should be set out-of-band, not through generic CRUD.
-- **`setUserIdField: 'ownerId'`** — the framework sets that field to the caller's id server-side on create (so a client can't forge ownership). **It does not exempt the field from the `connect` requirement**: `ownerId` is still a foreign key, and every relationship a write establishes is authorized. Declare a **relation-scoped** self-connect rather than a blanket rule on the target:
+- **`set: { ownerId: '$USER_ID' }`** on a `create` / `update` rule — values the server writes on every write that rule allows, overriding what the client sent (so a client can't forge ownership). Use it for the owner, audit columns (`updatedById`), or a value a role is forced to (`status: 'draft'`). It applies on every write path — generated CRUD, your services, nested creates. Pair the column with `/// @NoWrite` so the DTO doesn't accept it either.
+
+  Set values are authorized like any other: they must satisfy the rule's `conditions`, and **a set foreign key needs a `connect` rule** — the app refuses to boot without one. Declare a **relation-scoped** self-connect rather than a blanket rule on the target:
 
   ```ts
   Album: {
       USER: {
-          create: {setUserIdField: 'ownerId'},
-          relations: {owner: {connect: {conditions: {id: '$USER_ID'}}}},
+          create: {set: {ownerId: '$USER_ID'}},
+          updateMany: {conditions: {ownerId: '$USER_ID'}, set: {updatedById: '$USER_ID'}},
+          relations: {
+              owner: {connect: {conditions: {id: '$USER_ID'}}},
+              updatedBy: {connect: {conditions: {id: '$USER_ID'}}},
+          },
       },
   },
   ```

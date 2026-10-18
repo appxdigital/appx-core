@@ -23,6 +23,7 @@ import { spawn, execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { PUBLIC_APPX_SCOPE, packLocalFramework } from '../helpers/npm-env';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CLI_PATH = path.join(REPO_ROOT, 'cli', 'cli.js');
@@ -150,7 +151,14 @@ describe('§5 — cli/cli.js create produces the committed fixture (parity)', ()
         // specs) leaked in, migrate dev would RESET that shared database and
         // break other suites. Strip them so the scaffold's generated .env
         // (pointing at the isolated appx_parity) is authoritative.
-        const childEnv: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: '0', CI: '1' };
+        const childEnv: NodeJS.ProcessEnv = {
+            ...process.env,
+            ...PUBLIC_APPX_SCOPE,
+            // The created project installs the build under test (not the release).
+            APPX_CORE_SPEC: packLocalFramework(fs.mkdtempSync(path.join(os.tmpdir(), 'appx-pack-'))),
+            FORCE_COLOR: '0',
+            CI: '1',
+        };
         // Disable CLI self-update: the subprocess must not hit the registry or
         // trigger a real global `npm install -g` during the parity run.
         childEnv.APPX_CORE_NO_AUTO_UPDATE = '1';

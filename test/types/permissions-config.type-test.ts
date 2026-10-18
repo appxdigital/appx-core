@@ -29,6 +29,19 @@ const custom: RolePermissions = {
     publish: 'ALL',
 };
 
+// Server-set values on a write rule.
+const withSet: RolePermissions = {
+    create: { set: { ownerId: '$USER_ID', status: 'draft' } },
+    updateMany: { conditions: {} as any, set: { updatedById: '$USER_ID' } },
+};
+
+const badSet: RolePermissions = {
+    // @ts-expect-error — `set` maps columns to values, not a column name
+    create: { set: 'ownerId' },
+};
+
+void withSet;
+void badSet;
 void role;
 void relOnly;
 void custom;

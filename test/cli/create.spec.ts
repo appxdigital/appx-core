@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, spawnSync, execSync } from 'child_process';
 import * as os from 'os';
+import { PUBLIC_APPX_SCOPE, packLocalFramework } from '../helpers/npm-env';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CLI_PATH = path.join(REPO_ROOT, 'cli', 'cli.js');
@@ -43,6 +44,28 @@ function* walk(dir: string): Generator<string> {
         else yield full;
     }
 }
+
+describe('cli/cli.js create — npm version requirement', () => {
+    // A fake `npm` first on PATH that reports the given version.
+    const runWithNpm = (version: string) => {
+        const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-fake-npm-'));
+        fs.writeFileSync(path.join(bin, 'npm'), `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
+        const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-npm-check-'));
+        return spawnSync('node', [CLI_PATH, 'create', '--yes', '--name', 'npmcheck'], {
+            cwd,
+            env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1' },
+            encoding: 'utf8',
+            timeout: 30_000,
+        });
+    };
+
+    test('npm 10 → refuses to start and says how to upgrade', () => {
+        const res = runWithNpm('10.8.2');
+        expect(res.status).toBe(1);
+        expect(res.stderr).toContain('needs npm 11 or newer (yours: 10.8.2)');
+        expect(res.stderr).toContain('npm install -g npm@11');
+    });
+});
 
 describe('cli/cli.js — scaffold template contract', () => {
     test('every {{KEY}} in scaffold/ is in the documented set', () => {
@@ -138,6 +161,11 @@ describe('cli/cli.js — scaffold template contract', () => {
         expect(cli).toMatch(/existsSync\(prismaBin\)/);
     });
 
+    test('the baked release pin (cli/core-version.json) is a concrete version', () => {
+        const { version } = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'cli', 'core-version.json'), 'utf8'));
+        expect(version).toMatch(/^[0-9]+\.[0-9]+\.[0-9]+(-[0-9a-z.]+)?$/);
+    });
+
     test('create exposes the non-interactive flags (--yes + every wizard answer)', () => {
         const cli = fs.readFileSync(CLI_PATH, 'utf8');
         for (const flag of ['--yes', '--name <name>', '--db-provider <provider>', '--db-host <host>',
@@ -230,8 +258,9 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
             }
         }
 
-        // 2. tmpdir to host the new project.
+        // 2. tmpdir to host the new project; the project installs this build.
         const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-create-'));
+        const coreSpec = packLocalFramework(fs.mkdtempSync(path.join(os.tmpdir(), 'appx-pack-')));
 
         // 3. Spawn create. Feed answers in order:
         //    projectName, dbProvider, dbHost, dbPort, dbUser, dbPassword, dbName,
@@ -241,7 +270,7 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
             stdio: ['pipe', 'pipe', 'pipe'],
             // Disable CLI self-update: the subprocess must not hit the registry
             // or trigger a real global `npm install -g` during tests.
-            env: { ...process.env, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1' },
+            env: { ...process.env, ...PUBLIC_APPX_SCOPE, APPX_CORE_SPEC: coreSpec, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1' },
         });
 
         const answers = [
@@ -292,11 +321,11 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
         expect(jwtSecret).toMatch(/^[a-f0-9]{64}$/);
         expect(sessionSecret).not.toBe(jwtSecret);
 
-        // 6. Assert: package.json depends on @appxdigital/appx-core, pinned to
-        // a concrete version (the usual case) or, when the CLI's channel differs
-        // from the baked library channel, a channel dist-tag (beta/latest).
+        // 6. Assert: package.json depends on @appxdigital/appx-core only (here
+        // the build under test, via APPX_CORE_SPEC; the release pin is checked
+        // by the contract test on cli/core-version.json).
         const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
-        expect(pkg.dependencies['@appxdigital/appx-core']).toMatch(/^([0-9][0-9.~^-]*|beta|latest)$/);
+        expect(pkg.dependencies).toEqual({ '@appxdigital/appx-core': coreSpec });
 
         // Cleanup is fine; tmpdir gets reclaimed by the OS.
     }, 240_000);   // 4 minutes — npm install is slow on first run
@@ -320,7 +349,7 @@ describe('cli/cli.js create --yes — non-interactive validation (fast)', () => 
             cwd,
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'pipe'],   // stdin closed: a prompt would fail, not hang
-            env: { ...process.env, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1' },
+            env: { ...process.env, ...PUBLIC_APPX_SCOPE, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1' },
             timeout: 60_000,
         });
 
@@ -374,8 +403,10 @@ describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
         await conn.end();
 
         const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-ni-e2e-'));
+        // The created project installs the build under test (not the release).
+        const coreSpec = packLocalFramework(fs.mkdtempSync(path.join(os.tmpdir(), 'appx-pack-')));
         const childEnv: NodeJS.ProcessEnv = {
-            ...process.env, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1',
+            ...process.env, ...PUBLIC_APPX_SCOPE, APPX_CORE_SPEC: coreSpec, FORCE_COLOR: '0', APPX_CORE_NO_AUTO_UPDATE: '1',
         };
         // Same isolation as the wizard E2E: don't let the parent's DATABASE_URL
         // leak into the child's prisma migrate.
@@ -418,17 +449,9 @@ describe('cli/cli.js create --yes — non-interactive end-to-end', () => {
         expect(env.match(/SESSION_SECRET="([^"]+)"/)?.[1]).toMatch(/^[a-f0-9]{64}$/);
 
         // ── The scaffolded test suite passes out of the box ──
-        // `create` pins the *published* library; swap in the repo's local build
-        // so the suite runs against the code under test, then run `npm test`.
+        // The project already runs on the build under test (APPX_CORE_SPEC).
         // The suite provisions its own throwaway DB container (Docker is
         // already a requirement of this jest run).
-        const repoRoot = path.resolve(__dirname, '..', '..');
-        const packOut = execSync(`npm pack --silent --pack-destination ${tmpdir}`, {
-            cwd: repoRoot, encoding: 'utf8',
-        }).trim().split('\n').pop()!;
-        execSync(`npm install --loglevel=error ${path.join(tmpdir, packOut)}`, {
-            cwd: projectPath, stdio: 'pipe', timeout: 180_000,
-        });
 
         const testRes = spawnSync('npm', ['test'], {
             cwd: projectPath,

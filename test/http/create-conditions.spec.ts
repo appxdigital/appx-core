@@ -7,7 +7,7 @@
  * permission for the model.
  *
  * The fixture grants `ProjectMember.USER.create = { conditions: { project: {
- * ownerId: $USER_ID } } }` with no setUserIdField — a USER may only add a
+ * ownerId: $USER_ID } } }` with no `set` — a USER may only add a
  * member to a project they own. Tenant.USER has no create permission at all.
  *
  * Boots with the hardened pipe to mirror the shipped scaffold.
