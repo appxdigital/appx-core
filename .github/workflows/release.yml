@@ -129,7 +129,7 @@ jobs:
                   git config --global user.name "appx-core CI"
 
             - name: Test (${{ matrix.db }})
-              run: npm test
+              run: npm test -- --coverage
               env:
                   DB_PROVIDER: ${{ matrix.db }}
 

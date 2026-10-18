@@ -68,6 +68,22 @@ A column annotated `/// @Role(ADMIN)` is returned only to roles in the list; for
   - If the related model has **no** read rule for the role, including it throws `403`. Grant a read rule on every model you expose through an `include`.
   - If the related row exists but doesn't satisfy the rule, the **whole parent row is dropped** (`findFirst` → `null`, `findMany` → the row is omitted). The parent is **not** returned with the relation set to `null`. In short: you can't see a row whose related record you're not allowed to see. This is intentional and fails closed.
 - **To-many relations are filtered in place**: the parent is kept, and the child list is narrowed to the rows the caller may read (possibly empty).
+- **Both rules apply at every depth**, including below a to-one relation: in `include: { project: { include: { owner: true, tasks: true } } }`, `owner` gates the row like `project` does, and `tasks` is narrowed.
+- **`_count` counts readable rows only.** `select: { _count: { select: { tasks: true } } }` returns how many related tasks the caller may read. Counting a relation whose model has no read rule for the role throws `403`.
+
+### Filtering and ordering by a relation
+
+A client filter or sort that reaches into a related model only takes into account the related rows the caller can read:
+
+```ts
+// Projects with a task assigned to alice — evaluated over the tasks the caller can read.
+prisma.model.project.findMany({ where: { tasks: { some: { assignee: { email: 'alice@x.io' } } } } });
+```
+
+- `some` / `none` / `is` / `isNot` match readable related rows only; `every` must hold for every readable related row. The same applies to the `where` of a nested selection and of a `_count` entry, at any depth.
+- Filtering through a relation whose model has **no** read rule for the role throws `403` (`Cannot filter by 'project.tasks' …`). Give the role a read rule, or expose the model for that request.
+- **Ordering by a related to-one field** (`orderBy: { assignee: { name: 'asc' } }`) requires that record to be readable, like including it: rows whose related record isn't readable are left out (a null relation is kept). A related model with no read rule throws `403`.
+- **Ordering by a to-many count** (`orderBy: { tasks: { _count: 'desc' } }`) requires the related model to be readable without conditions (`'ALL'` or exposed); otherwise it throws `403`.
 
 ---
 
@@ -75,8 +91,8 @@ A column annotated `/// @Role(ADMIN)` is returned only to roles in the list; for
 
 Use sparingly and deliberately; each disables part of the protection.
 
-- **Per-call options** — `prisma.<accessor>.<method>(args, { BYPASS_FILTERING, BYPASS_OMISSION })`. `BYPASS_FILTERING` skips condition injection (and create-enforcement); `BYPASS_OMISSION` skips field omission. Available on the typed accessors (`prisma.user`, `prisma.session`, `prisma.userRefreshToken`).
-- **`@ExposeModels(...)` / `@Permission(action, [models])`** — expose models for a request so they skip row/field filtering, scoped to the handler. See [permissions.md](./permissions.md).
+- **Per-call options** — `prisma.<accessor>.<method>(args, { BYPASS_FILTERING, BYPASS_OMISSION })`. `BYPASS_FILTERING` skips condition injection (and create-enforcement); `BYPASS_OMISSION` skips field omission (relations are still row-filtered). Accepted as the second argument of every proxied model method, but not declared in the method types.
+- **`@ExposeModels(...)` / `@Permission(action, [models])`** — expose models for a request so they skip row filtering, scoped to the handler. Field omission (`@Role`) still applies; combine with `BYPASS_OMISSION` to read hidden columns. See [permissions.md](./permissions.md).
 - **`prismaService.withExposedModels(models, async () => { ... })`** — service-level scoped exposure for a block of code (e.g. registration pre-checks). Model names are lowercased/case-insensitive.
 
 Framework flows that must write without a permission (registration, sessions, tokens) use `BYPASS_FILTERING`.

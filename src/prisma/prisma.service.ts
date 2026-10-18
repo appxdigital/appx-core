@@ -192,6 +192,9 @@ export class PrismaService {
                                             // field omission). Runs on the client input, BEFORE the
                                             // trusted ABAC conditions are injected below.
                                             this.assertFilterFieldsReadable(String(propKey), userRole, params);
+                                            // Scope the client's relation filters to related rows this
+                                            // role can read — also on the client input, before injection.
+                                            params = this.scopeClientFilters(String(propKey), userRole, params, user);
                                             params = this.applyWhereConditions(String(propKey), userRole, params, user, methodKey);
                                             // An update can re-point a foreign key (scalar column);
                                             // authorize those changes with the same connect rules as create.
@@ -290,6 +293,7 @@ export class PrismaService {
             const scalarFields: string[] = [];
             const relationFields: Record<string, any> = {};
             const noWriteFields: string[] = [];
+            const nullableFields: string[] = [];
 
             for (const field of fields) {
                 let field_name = field.name;
@@ -313,6 +317,9 @@ export class PrismaService {
 
                 if (field.kind === 'scalar' || field.kind === 'enum') {
                     scalarFields.push(field_name);
+                    if (!field.isRequired && !field.isList && fieldType !== 'Json') {
+                        nullableFields.push(field_name);
+                    }
                 } else {
                     relationFields[field_name] = {
                         model: field.type,
@@ -337,6 +344,7 @@ export class PrismaService {
                 scalarFields,
                 relationFields,
                 noWriteFields,
+                nullableFields,
             };
         }
     }
@@ -454,6 +462,153 @@ export class PrismaService {
                 if (omit.has(field)) this.throwUnreadableFilterField(modelName, field, userRole, 'distinct');
             }
         }
+        for (const [relatedModel, nested] of this.nestedReadArgs(modelName, args)) {
+            this.assertFilterFieldsReadable(relatedModel, userRole, nested);
+        }
+    }
+
+    /**
+     * The read args nested in a selection — each selected relation's args and
+     * each `_count` entry — paired with the model they read, so client
+     * filters are checked/scoped at every level.
+     */
+    private nestedReadArgs(modelName: string, args: any): [string, any][] {
+        const projection = args.select ?? args.include;
+        if (!projection || typeof projection !== 'object') return [];
+        const nested: [string, any][] = [];
+        for (const key of Object.keys(projection)) {
+            const isCount = key === '_count';
+            const entries = isCount ? projection[key]?.select : {[key]: projection[key]};
+            if (!entries || typeof entries !== 'object') continue;
+            for (const field of Object.keys(entries)) {
+                const relation = this.getRelation(modelName, field);
+                if (relation && entries[field] && typeof entries[field] === 'object') nested.push([relation.model, entries[field]]);
+            }
+        }
+        return nested;
+    }
+
+    /**
+     * Rewrite every relation filter in the CLIENT's `where` (top level and in
+     * nested relation selections) so it only takes into account related rows
+     * this role can read. Runs on the client input, before the trusted ABAC
+     * conditions are injected, so those are never rewritten.
+     */
+    private scopeClientFilters(modelName: string, userRole: string, args: any, user: any): any {
+        if (!args || typeof args !== 'object') return args;
+        if (args.where) args.where = this.scopeRelationFilters(modelName, userRole, args.where, user);
+        for (const [relatedModel, nested] of this.nestedReadArgs(modelName, args)) {
+            this.scopeClientFilters(relatedModel, userRole, nested, user);
+        }
+        return args;
+    }
+
+    /**
+     * Rewrite one client `where` clause: each relation filter is narrowed to the
+     * related rows the role can read (`some`/`none`/`is`/`isNot` AND the target's
+     * read conditions; `every` holds over the readable rows only). A relation
+     * into a model with no read rule for the role is rejected.
+     */
+    private scopeRelationFilters(modelName: string, userRole: string, clause: any, user: any): any {
+        if (Array.isArray(clause)) return clause.map((c) => this.scopeRelationFilters(modelName, userRole, c, user));
+        if (!clause || typeof clause !== 'object') return clause;
+
+        const scoped: any = {};
+        for (const key of Object.keys(clause)) {
+            const value = clause[key];
+            if (key === 'AND' || key === 'OR' || key === 'NOT') {
+                scoped[key] = this.scopeRelationFilters(modelName, userRole, value, user);
+                continue;
+            }
+            const relation = this.getRelation(modelName, key);
+            if (!relation || !value || typeof value !== 'object') {
+                scoped[key] = value; // scalar filter, or a to-one presence check (`rel: null`)
+                continue;
+            }
+
+            const conditions = this.relationReadConditions(modelName, key, relation, userRole, user, 'where');
+            scoped[key] = PrismaService.mapRelationFilter(relation, value, (op, filter) => {
+                if (filter === null) return null; // `is: null` / `isNot: null`
+                const inner = this.scopeRelationFilters(relation.model, userRole, filter, user);
+                if (!conditions) return inner;
+                return op === 'every' ? {OR: [inner, {NOT: conditions}]} : {AND: [inner, conditions]};
+            });
+        }
+        return scoped;
+    }
+
+    /**
+     * Applies `fn` to the filter inside each operator of a relation filter
+     * (`some`/`every`/`none`, `is`/`isNot`), or to the to-one shorthand
+     * (`rel: { ... }` ≡ `rel: { is: { ... } }`) as a whole, with no operator.
+     */
+    private static mapRelationFilter(relation: {relation: string}, value: any, fn: (op: string | null, filter: any) => any): any {
+        const hasOperators = value && typeof value === 'object'
+            && (relation.relation === 'hasMany' || 'is' in value || 'isNot' in value);
+        if (!hasOperators) return fn(null, value);
+        return Object.fromEntries(Object.keys(value).map((op) => [op, fn(op, value[op])]));
+    }
+
+    /**
+     * The resolved read conditions a relation's target imposes on this role, or
+     * `undefined` when it imposes none (exposed model or 'ALL'). A target with no
+     * read rule is rejected, naming the relation as the field being filtered or
+     * ordered by.
+     */
+    private relationReadConditions(
+        modelName: string,
+        field: string,
+        relation: {model: string, relation: string},
+        userRole: string,
+        user: any,
+        kind: 'where' | 'orderBy' | 'select',
+    ): any {
+        const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
+        if (exposedModels.includes(relation.model.toLowerCase())) return undefined;
+        const permissions = this.normalizedPermissionsConfig[relation.model.toLowerCase()]?.[userRole] || {};
+        const action = relation.relation === 'belongsTo' ? 'findFirst' : 'findMany';
+        const relatedPermissions = this.selectPermission(permissions, action, relation.model, userRole);
+        if (!relatedPermissions) {
+            if (kind !== 'select') this.throwUnreadableFilterField(modelName, field, userRole, kind);
+            console.debug(`No permissions found for action '${relation.model}.${action}()' on role ${userRole}`)
+            throw new HttpException('Missing permissions on model ' + relation.model, HttpStatus.FORBIDDEN);
+        }
+        if (relatedPermissions === 'ALL') return undefined;
+        return this.nullSafeConditions(relation.model, PrismaService._buildConditions(relatedPermissions.conditions, user));
+    }
+
+    /**
+     * Makes a condition strictly true/false in SQL. A comparison on a nullable
+     * column is NULL (not false) when the column is NULL, and under a negation
+     * (`isNot`, `NOT`, which Prisma inlines for to-one relations) NULL stays NULL
+     * — so the outcome would depend on the rest of the filter. Guarding each
+     * such comparison with `IS NOT NULL` turns NULL into false; where the
+     * condition is used positively the result is unchanged.
+     */
+    private nullSafeConditions(modelName: string, clause: any): any {
+        if (Array.isArray(clause)) return clause.map((c) => this.nullSafeConditions(modelName, c));
+        if (!clause || typeof clause !== 'object') return clause;
+
+        const nullableFields: string[] = this.fieldConfigs[modelName.toLowerCase()].nullableFields;
+        const guards: any[] = [];
+        const safe: any = {};
+        for (const key of Object.keys(clause)) {
+            const value = clause[key];
+            if (key === 'AND' || key === 'OR' || key === 'NOT') {
+                safe[key] = this.nullSafeConditions(modelName, value);
+                continue;
+            }
+            const relation = this.getRelation(modelName, key);
+            if (relation) {
+                safe[key] = PrismaService.mapRelationFilter(relation, value, (_op, filter) => this.nullSafeConditions(relation.model, filter));
+                continue;
+            }
+            if (nullableFields.includes(key) && value !== undefined && !this.isPresenceOnlyPredicate(value)) {
+                guards.push({[key]: {not: null}});
+            }
+            safe[key] = value;
+        }
+        return guards.length ? {AND: [...guards, safe]} : safe;
     }
 
     /** Recursively assert no omitted field is referenced in a where/orderBy clause. */
@@ -562,14 +717,16 @@ export class PrismaService {
             }
         }
 
-        if (args.select) {
-            for (const field of Object.keys(args.select)) {
+        // `include` reaches here only when field omission was bypassed (omission
+        // rewrites it to `select`); relations are filtered the same either way.
+        const projection = args.select ?? args.include;
+        if (projection) {
+            for (const field of Object.keys(projection)) {
                 // If field is relation
                 let relation = this.getRelation(modelName, field);
                 if (!relation) {
                     if (field === '_count') {
-                        // TODO implement filtering on _count
-                        // args.select[field] = this.applyWhereConditions(modelName, userRole, args.select[field], user, action);
+                        projection[field] = this.applyCountConditions(modelName, userRole, projection[field], user);
                     }
                     continue;
                 }
@@ -580,27 +737,46 @@ export class PrismaService {
                     // findFirst permissions for related model
                     const relatedPermissions = this.selectPermission(permissionsConfig[relation.model.toLowerCase()]?.[userRole] || {}, 'findFirst', relation.model, userRole)
 
+                    let conditions: any;
+
                     // If model is exposed, do not apply conditions
                     if (exposedModels.includes(relation.model.toLowerCase())) {
                         this.debug(`Related model '${relation.model}' is exposed via @Permission() decorator. Skipping conditions for action '${String(action)}' on role ${userRole}.`);
-                        continue;
+                    } else {
+                        if (!relatedPermissions) {
+                            console.debug(`No permissions found for action '${relation.model}.${String(action)}()' on role ${userRole}`)
+                            throw new HttpException('Missing permissions on model ' + relation.model, HttpStatus.FORBIDDEN);
+                        }
+
+                        if (relatedPermissions === 'ALL') {
+                            this.debug(`Related model '${relation.model}' has 'ALL' permissions for action '${String(action)}' on role ${userRole}. No conditions to apply.`);
+                        } else {
+                            conditions = PrismaService._buildConditions(relatedPermissions?.conditions, user);
+                        }
                     }
 
-                    if (!relatedPermissions) {
-                        console.debug(`No permissions found for action '${relation.model}.${String(action)}()' on role ${userRole}`)
-                        throw new HttpException('Missing permissions on model ' + relation.model, HttpStatus.FORBIDDEN);
+                    // Relations selected below this one are filtered too: the related
+                    // model's own to-one conditions merge into `conditions` (Prisma
+                    // can't take a `where` on a to-one selection), and its to-many
+                    // relations are filtered in place.
+                    const nested = projection[field];
+                    if (nested && typeof nested === 'object' && (nested.select || nested.include)) {
+                        conditions = this.applyWhereConditions(
+                            relation.model,
+                            userRole,
+                            {select: nested.select, include: nested.include},
+                            user,
+                            'findFirst',
+                        ).where;
                     }
 
-                    if (relatedPermissions === 'ALL') {
-                        this.debug(`Related model '${relation.model}' has 'ALL' permissions for action '${String(action)}' on role ${userRole}. No conditions to apply.`);
-                        continue;
+                    if (conditions) {
+                        belongsToQueue.push({
+                            field,
+                            relation,
+                            conditions,
+                        });
                     }
-
-                    belongsToQueue.push({
-                        field,
-                        relation,
-                        relatedPermissions,
-                    });
                     continue;
                 }
 
@@ -621,60 +797,36 @@ export class PrismaService {
                 })
                  */
 
-                if (args.select[field] === true) {
-                    args.select[field] = {};
+                if (projection[field] === true) {
+                    projection[field] = {};
                 }
 
                 // findMany permissions for related model
-                args.select[field].where = this.applyWhereConditions(relation.model, userRole, args.select[field], user, 'findMany').where;
-                delete args.select[field].select.where;
+                projection[field].where = this.applyWhereConditions(relation.model, userRole, projection[field], user, 'findMany').where;
+                if (projection[field].select) {
+                    delete projection[field].select.where;
+                }
             }
         }
+
+        // Ordering by a related to-one field applies that model's read rules the
+        // same way selecting it does: rows whose related record isn't readable
+        // don't take part in the ordering.
+        belongsToQueue.push(...this.orderByRelationConditions(modelName, userRole, args.orderBy, user));
 
         if (belongsToQueue?.length > 0) {
             this.debug(`Merging belongsTo relation conditions into main ${modelName}.`, 'warn');
         }
 
         for (const entry of belongsToQueue) {
-            const {relatedPermissions, field, relation} = entry;
+            const {conditions, field, relation} = entry;
 
-            this.debug(`Merging conditions for belongsTo relation field '${field}': ${JSON.stringify(relatedPermissions?.conditions)}`, 'info');
-
-            let belongsToConditions = PrismaService._buildConditions(relatedPermissions?.conditions, user);
+            this.debug(`Merging conditions for belongsTo relation field '${field}': ${JSON.stringify(conditions)}`, 'info');
 
             if (!args.where)
                 args.where = {};
 
-            // If relation is optional allow for non-matching records
-            if (relation.isRequired === false) {
-                args.where = {
-                    OR: [
-                        {
-                            ...args.where,
-                            [field]: {
-                                AND: [
-                                    args?.where?.[field] ?? {},
-                                    belongsToConditions
-                                ]
-                            }
-                        },
-                        {
-                            ...args.where,
-                            [field]: {is: null}
-                        }
-                    ]
-                };
-            } else {
-                args.where = {
-                    ...(args.where || {}),
-                    [field]: {
-                        AND: [
-                            args?.where?.[field] ?? {},
-                            belongsToConditions
-                        ]
-                    }
-                };
-            }
+            args.where = PrismaService.mergeToOneConditions(args.where, field, relation, conditions);
         }
 
         // If model is exposed, do not apply conditions
@@ -699,6 +851,96 @@ export class PrismaService {
         }
 
         return args;
+    }
+
+    /**
+     * Merges a to-one relation's read conditions into a `where`. If the relation
+     * is optional, rows where it is null are kept.
+     */
+    private static mergeToOneConditions(where: any, field: string, relation: {isRequired: boolean}, conditions: any): any {
+        if (relation.isRequired === false) {
+            return {
+                OR: [
+                    {
+                        ...where,
+                        [field]: {
+                            AND: [
+                                where[field] ?? {},
+                                conditions
+                            ]
+                        }
+                    },
+                    {
+                        ...where,
+                        [field]: {is: null}
+                    }
+                ]
+            };
+        }
+        return {
+            ...where,
+            [field]: {
+                AND: [
+                    where[field] ?? {},
+                    conditions
+                ]
+            }
+        };
+    }
+
+    /**
+     * The to-one read conditions an `orderBy` brings in: ordering by a related
+     * field (at any depth) requires that related record to be readable, like
+     * selecting it. Ordering by a to-many relation's count is only allowed when
+     * the related model is fully readable (a count can't be scoped).
+     */
+    private orderByRelationConditions(modelName: string, userRole: string, orderBy: any, user: any): any[] {
+        const entries: any[] = [];
+        for (const clause of ([] as any[]).concat(orderBy ?? [])) {
+            if (!clause || typeof clause !== 'object') continue;
+            for (const field of Object.keys(clause)) {
+                const relation = this.getRelation(modelName, field);
+                if (!relation) continue;
+                let conditions = this.relationReadConditions(modelName, field, relation, userRole, user, 'orderBy');
+                if (relation.relation !== 'belongsTo') {
+                    if (conditions) this.throwUnreadableFilterField(modelName, field, userRole, 'orderBy');
+                    continue;
+                }
+                const deeper = this.orderByRelationConditions(relation.model, userRole, clause[field], user)
+                    .reduce((where, e) => PrismaService.mergeToOneConditions(where, e.field, e.relation, e.conditions), {});
+                if (Object.keys(deeper).length) conditions = conditions ? {AND: [conditions, deeper]} : deeper;
+                if (conditions) entries.push({field, relation, conditions});
+            }
+        }
+        return entries;
+    }
+
+    /**
+     * Scopes a `_count` selection: each counted to-many relation only counts the
+     * related rows the role can read. A relation into a model with no read rule
+     * is rejected, as selecting it would be. Left untouched when nothing needs
+     * scoping.
+     */
+    private applyCountConditions(modelName: string, userRole: string, value: any, user: any): any {
+        const relationFields = this.fieldConfigs[modelName.toLowerCase()].relationFields;
+        // `_count: true` counts every to-many relation.
+        const counted = value === true
+            ? Object.fromEntries(Object.keys(relationFields).filter((f) => relationFields[f].relation === 'hasMany').map((f) => [f, true]))
+            : value?.select;
+        if (!counted || typeof counted !== 'object') return value;
+
+        let scoped: any;
+        for (const field of Object.keys(counted)) {
+            const relation = this.getRelation(modelName, field);
+            if (!relation || !counted[field]) continue;
+            const conditions = this.relationReadConditions(modelName, field, relation, userRole, user, 'select');
+            if (!conditions) continue;
+            const entry = typeof counted[field] === 'object' ? counted[field] : {};
+            scoped = scoped ?? {...counted};
+            scoped[field] = {...entry, where: entry.where ? {AND: [entry.where, conditions]} : conditions};
+        }
+        if (!scoped) return value;
+        return {...(value === true ? {} : value), select: scoped};
     }
 
     /**

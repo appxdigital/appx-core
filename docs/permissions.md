@@ -174,7 +174,8 @@ isEmailAvailable(@Query('email') email: string) { /* reads User unfiltered */ }
 ```
 
 - Sets **no action**, so `RbacGuard` demands no permission (a public / `GUEST` route works with no `GUEST` rule for the model).
-- The listed models **skip row and field filtering for that request only** (scoped via async context — it does not make the model globally readable).
+- On writes, an exposed model skips its own `create` rule, but a foreign key it sets is still authorized by the **target's** `connect` rule unless the target is exposed too.
+- The listed models **skip row filtering for that request only** — `@Role` field omission still applies (scoped via async context — it does not make the model globally readable).
 - Case-insensitive: `@ExposeModels('User')` and `@ExposeModels('user')` are equivalent.
 - Combine with `@Permission(...)` if you also want an action check — exposed models from both decorators are merged.
 - This is a deliberate **bypass**. Use it narrowly (e.g. registration pre-checks); prefer real ABAC rules where feasible.

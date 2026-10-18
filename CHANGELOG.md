@@ -14,6 +14,38 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.130] — 2026-10-18
+
+Relations reached by a query now take part only through the related rows the caller can read — in filters, in nested selections at any depth, in `orderBy` and in `_count`.
+
+### Fixed
+
+- **Client relation filters respect the related model's read rules.** A `where` that crosses a relation (`some`/`every`/`none`/`is`/`isNot`, or the to-one shorthand) — at the top level, inside a nested selection or inside a `_count` entry — is evaluated over the related rows the role can read. A relation into a model with **no** read rule for the role is rejected (`403`, `Cannot filter by 'model.relation' …`). Applies to every read and to `updateMany`/`deleteMany`, on every transport (REST, GraphQL, service code).
+- **Relations selected below a to-one relation are filtered.** `include: { project: { include: { owner: true, tasks: true } } }` now applies `owner`'s and `tasks`'s read rules, as the first level already did: a deeper unreadable to-one drops the row (same rule as a first-level to-one), a deeper to-many list is narrowed, and a deeper model with no read rule throws `403`.
+- **`_count` counts readable rows only** (`select: { _count: { select: { tasks: true } } }`, `_count: true`). Counting a relation whose model has no read rule for the role throws `403`.
+- **`orderBy` on a related to-one field** requires that record to be readable, like including it: rows whose related record isn't readable are left out. **`orderBy` a to-many `_count`** requires an unconditional (`'ALL'`) read rule on the related model, or the model to be exposed; otherwise `403`.
+- **A nested selection's `where` / `orderBy` / `distinct` can't reference a `@Role`-hidden field** (`403`), as at the top level.
+- **`BYPASS_OMISSION` no longer disables row filtering on `include`d relations**, and a bare to-many `select: { rel: true }` under it no longer throws a `TypeError`.
+
+### Changed
+
+- `src/prisma/prisma.service.ts` is held at 100% line and branch coverage in CI.
+- Docs: `withExposedModels` / `@ExposeModels` skip row filtering only — `@Role` field omission still applies; the per-call `BYPASS_*` options work on every proxied model method (untyped); exposing a model doesn't skip the target's `connect` rule.
+
+### Migration
+
+> **Behaviour change — a migrating agent MUST flag it to the developer before deploying.** Reads that previously returned data through a relation the role can't read now return less, or `403`. Nothing else changes: queries whose relations are all readable return exactly what they did.
+
+1. **Upgrade and run your test suite / exercise your main read endpoints as each role.** Look for new `403`s and for rows or nested lists that disappeared.
+2. **New `403 Missing permissions on model X` / `Cannot filter by …` / `Cannot order by …`** — the role reaches model `X` (selected below another relation, filtered through, counted, or sorted by) but has no read rule for it. Add a `findMany`/`findFirst` rule for that role on `X`, or expose `X` for that one request (`@ExposeModels('X')` / `withExposedModels(['X'], …)`) when the endpoint authorizes it itself.
+3. **A row disappeared (e.g. `findFirst` now `null` → `404`)** — the query selects a to-one relation, possibly several levels deep (`team → owner → user`), whose record the role's read rule doesn't cover. Widen that model's read rule to cover the records the endpoint legitimately shows (e.g. "users who share a team with me"), or stop selecting the relation.
+4. **A nested list, a `_count` or a filtered result got smaller** — it now covers only related rows the role can read. Same fix: widen the related model's read rule if the endpoint should see those rows.
+5. **`orderBy: { rel: { _count: … } }` now `403`s** when the related model's read rule has conditions. Select the scoped `_count` and sort in code, or expose the model for that request.
+
+> **For AI agents:** do not report this upgrade as complete after bumping the version. Run the project's tests and its main read flows per role, and list for the developer every new `403`, missing row and shrunken list you find, with the read rule that would restore it. Widening a read rule is a security decision — propose it, don't apply it silently.
+
+---
+
 ## [0.1.129] — 2026-08-17
 
 ### Added

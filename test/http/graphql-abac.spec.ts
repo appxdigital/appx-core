@@ -276,6 +276,35 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         expect(JSON.stringify(nested.body.data)).not.toContain('alice@example.com');
     });
 
+    // A relation filter only takes into account related rows the caller can
+    // read. Here bob filters Shared Proj by its owner's refresh tokens — a model
+    // with no USER rule at all — so the filter is rejected, whatever the value.
+    test('relation filter into a model with no read rule is rejected', async () => {
+        await booted.withFreshDb(async (c) => {
+            const alice = await c.user.findFirst({ where: { email: 'alice@example.com' } });
+            await c.userRefreshToken.create({
+                data: { token: 'rt-alice-0123456789', userId: alice.id, expiresAt: new Date(Date.now() + 86_400_000) },
+            });
+        });
+        const probe = (prefix: string) =>
+            gql(
+                `query { project { count(where: { name: { equals: "Shared Proj" }, owner: { is: { refreshTokens: { some: { token: { startsWith: "${prefix}" } } } } } }) } }`,
+                userJwt,
+            );
+        for (const res of [await probe('rt-alice-0'), await probe('rt-alice-9')]) {
+            expect(res.body.errors?.[0]?.message).toMatch(/Cannot filter by 'User.refreshTokens'/);
+            expect(res.body.data ?? null).toBeNull();
+        }
+    });
+
+    test('a to-one nested below a to-one is filtered (unreadable record drops the row)', async () => {
+        // bob's membership is on Shared Proj, owned by alice (unreadable to bob).
+        const res = await gql('query { projectMember { find { role project { name owner { email } } } } }', userJwt);
+        expect(res.body.errors).toBeUndefined();
+        expect(res.body.data.projectMember.find).toEqual([]);
+        expect(JSON.stringify(res.body.data)).not.toContain('alice@example.com');
+    });
+
     // ── filter/sort limited to readable fields ───────────────────────────────
     test('USER cannot filter by a field it cannot read', async () => {
         const res = await gql(

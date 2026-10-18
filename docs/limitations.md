@@ -31,11 +31,11 @@ Let the generated resolvers serve the data (they go through `PrismaService`); a 
 
 ### Including an unreadable to-one relation drops the parent row
 
-`include`/`select` of a `belongsTo` relation whose target the caller can't read removes the **whole parent row** (returns `null` / omits it), rather than nulling just the relation. To-many relations filter in place and keep the parent. Fails closed; intentional. See [data-access.md](./data-access.md#relations-in-conditions-and-includes).
+`include`/`select` of a `belongsTo` relation whose target the caller can't read removes the **whole parent row** (returns `null` / omits it), rather than nulling just the relation — at any depth, so an unreadable `project.owner` drops the root row. Ordering by a related to-one field has the same effect. To-many relations filter in place and keep the parent. Fails closed; intentional. See [data-access.md](./data-access.md#relations-in-conditions-and-includes).
 
-### `_count` pseudo-field filtering is not implemented
+### Ordering by a to-many count needs an unconditional read rule
 
-You can `select: { _count: ... }`, but ABAC conditions are **not** applied inside a `_count` sub-selection. Don't rely on `_count` to reflect only rows the caller may see.
+`orderBy: { tasks: { _count: 'desc' } }` is allowed only when the role reads the related model with `'ALL'` (or it is exposed); with a conditional rule it throws `403`, since the count can't be limited to readable rows. Select `_count` (which is scoped) and sort in code, or expose the model for that request.
 
 ### Nested writes over HTTP CRUD are one level deep
 
@@ -46,10 +46,10 @@ Generated CRUD accepts nested `create`/`connect` **one level deep only** — a `
 ## Sharp edges to know about
 
 - **No per-role field strip.** A field is either writable through the generated DTO or not (`/// @NoWrite` / `OmitType`). There is no way to accept a field for one role and reject it for another on the same CRUD endpoint — model a privileged column as `/// @NoWrite` + a dedicated endpoint. (The old `restrictedFields` option was removed — see [dtos.md](./dtos.md#per-role-differences).)
-- **Per-call bypass options are only on three accessors.** `{ BYPASS_FILTERING, BYPASS_OMISSION }` are available on `prismaService.user` / `.session` / `.userRefreshToken`. For an unfiltered read of another model, use `withExposedModels([...])` or `@ExposeModels(...)`, not a per-call option on `prisma.model.<x>`.
+- **Per-call bypass options are untyped.** `{ BYPASS_FILTERING, BYPASS_OMISSION }` work as the second argument of every proxied model method, but the method types don't declare it. For an unfiltered read of a model, prefer `withExposedModels([...])` or `@ExposeModels(...)`.
 - **Role strings are not type-checked.** `PermissionsConfig` keys are plain strings; a typo (`ADIMN`) silently yields "no permissions" → default-deny for that role. Double-check role spelling against your `Role` enum.
 - **No audit logging of denials.** A refused request returns `403` but emits no structured audit event; per-request diagnostics are opt-in via `prismaService.debugQueries(true)`.
-- **Exposed models are a full bypass.** `@ExposeModels` / `@Permission(a, [models])` / `withExposedModels` disable row *and* field filtering for the listed models within that scope. Keep the scope as narrow as possible.
+- **Exposed models are a full bypass.** `@ExposeModels` / `@Permission(a, [models])` / `withExposedModels` disable row filtering for the listed models within that scope (field omission still applies — add `BYPASS_OMISSION` to read `@Role`-hidden columns). Keep the scope as narrow as possible.
 - **`connect` defaults to one rule per target model; override per relation when needed.** By default every foreign key that points at model `T` is authorized by the single `T.connect` rule for the role. When a specific relation needs a different (stricter) rule — "a class's teacher must be a teacher" — declare a **relation-scoped** `connect` on the source model (`Source[role].relations[field].connect`); it is ANDed with `T.connect`, or stands alone if `T` has none. See [permissions.md](./permissions.md#two-places-to-declare-a-connect-rule). A relation rule can only strengthen, never loosen, the target rule.
 - **A string `User.id` needs its two foreign keys changed with it.** `User.id` may be `String` (uuid/cuid) instead of the scaffold's `Int` — the framework is id-type-agnostic and coerces accordingly (see [authentication.md](./authentication.md#using-a-string-uuid--cuid-userid)). But `Session.userId` and `UserRefreshToken.userId` must be switched to `String` in the same edit; leaving one as `Int` is a schema/relation mismatch Prisma will reject at migrate time. Change all three together.
 - **The config is validated at boot; a bad config stops the app.** A create condition that references a relation, or a required foreign key whose target lacks a `connect` rule for a role that can create, is a startup error (not a runtime one). This is deliberate — the alternative is a silent runtime `403`. The error message names exactly what to fix.

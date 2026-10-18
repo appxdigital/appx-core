@@ -46,6 +46,13 @@ module.exports = {
     // appx_fixture). Parallel workers would race on shared state — see the
     // pollution we hit when and ran simultaneously.
     maxWorkers: 1,
+    // The data-access proxy is the security boundary: `--coverage` runs (CI)
+    // fail unless every line and branch of it is exercised.
+    collectCoverageFrom: ['src/prisma/prisma.service.ts'],
+    coverageReporters: ['text-summary'],
+    coverageThreshold: {
+        './src/prisma/prisma.service.ts': {branches: 100, functions: 100, lines: 100, statements: 100},
+    },
     verbose: false,
     detectOpenHandles: false,
     forceExit: true,

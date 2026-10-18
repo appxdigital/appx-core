@@ -64,7 +64,7 @@ jobs:
 
             # testcontainers uses the Docker daemon preinstalled on the runner.
             - name: Test
-              run: npm test
+              run: npm test -- --coverage
               env:
                   DB_PROVIDER: ${{ matrix.db }}
 
