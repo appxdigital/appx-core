@@ -25,6 +25,7 @@ Model names are **case-insensitive** at the proxy (`prisma.model.project` / `pri
 For each `prisma.model.<model>.<method>(args, options?)`:
 
 1. **Field omission** (reads only) — removes columns the role may not read (`/// @Role(...)`), recursing into nested `select`/`include` at every depth.
+   Columns with a [`fields` rule](./permissions.md#field-visibility-per-row-fields) are then removed from each returned row that doesn't match their `visibleOnlyWhen` condition (also on the row a `create` returns).
 2. **Condition injection** — looks up `PermissionsConfig[model][role][action]`; if `'ALL'`, no filter; if `{ conditions }`, `AND`-merges them into your `where` (so your filter and the permission filter both apply); if nothing (after fallbacks), throws `403`.
 3. **Executes** the (possibly rewritten) query.
 
@@ -91,7 +92,7 @@ prisma.model.project.findMany({ where: { tasks: { some: { assignee: { email: 'al
 
 Use sparingly and deliberately; each disables part of the protection.
 
-- **Per-call options** — `prisma.<accessor>.<method>(args, { BYPASS_FILTERING, BYPASS_OMISSION })`. `BYPASS_FILTERING` skips condition injection (and create-enforcement); `BYPASS_OMISSION` skips field omission (relations are still row-filtered). Accepted as the second argument of every proxied model method, but not declared in the method types.
+- **Per-call options** — `prisma.<accessor>.<method>(args, { BYPASS_FILTERING, BYPASS_OMISSION })`. `BYPASS_FILTERING` skips condition injection (and create-enforcement); `BYPASS_OMISSION` skips field omission and `fields` rules (relations are still row-filtered). Accepted as the second argument of every proxied model method, but not declared in the method types.
 - **`@ExposeModels(...)` / `@Permission(action, [models])`** — expose models for a request so they skip row filtering, scoped to the handler. Field omission (`@Role`) still applies; combine with `BYPASS_OMISSION` to read hidden columns. See [permissions.md](./permissions.md).
 - **`prismaService.withExposedModels(models, async () => { ... })`** — service-level scoped exposure for a block of code (e.g. registration pre-checks). Model names are lowercased/case-insensitive.
 

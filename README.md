@@ -352,6 +352,7 @@ export const PermissionsConfig = {
     USER: {
       findMany: { conditions: { id: PermissionPlaceholder.USER_ID } },
       updateMany: { conditions: { id: PermissionPlaceholder.USER_ID } },
+      fields: { email: { visibleOnlyWhen: { id: PermissionPlaceholder.USER_ID } } },
     },
   },
 };
@@ -361,6 +362,7 @@ export const PermissionsConfig = {
 
 - `'ALL'` – unrestricted access
 - `{ conditions: { ... } }` – ABAC filtering using Prisma-like `where` syntax
+- `fields: { column: { visibleOnlyWhen: { ... } } }` – the column is returned only on rows matching the condition ([details](./docs/permissions.md#field-visibility-per-row-fields))
 
 Example: allow deletion only if related refresh tokens are expired:
 

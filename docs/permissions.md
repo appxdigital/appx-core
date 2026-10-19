@@ -151,6 +151,69 @@ So a minimal USER config often needs just `findMany`, `create`, `update`, `delet
 
   Prefer that over `User.USER.connect: 'ALL'`, which would let the role attach *any* user — much wider than a self-owned create needs.
 
+### Field visibility per row (`fields`)
+
+Use it when a role may read a column, but only on some rows — a user's own email, notes only the owner sees.
+
+```ts
+User: {
+    USER: {
+        findMany: {conditions: {OR: [{id: '$USER_ID'}, {managerId: '$USER_ID'}]}},
+        fields: {
+            email: {visibleOnlyWhen: {id: '$USER_ID'}},   // own row only
+        },
+    },
+},
+```
+
+A USER reading themself and one report gets:
+
+```json
+[
+  { "id": 1, "name": "Alice", "email": "alice@acme.io" },
+  { "id": 2, "name": "Bob" }
+]
+```
+
+The condition can use any column of the row, not only the user's id:
+
+```ts
+Order: {
+    USER: {
+        findMany: {conditions: {OR: [{ownerId: '$USER_ID'}, {assigneeId: '$USER_ID'}]}},
+        fields: {
+            notes: {visibleOnlyWhen: {ownerId: '$USER_ID'}},          // the order's owner
+            internalRef: {visibleOnlyWhen: {status: {in: ['paid', 'shipped']}}},
+        },
+    },
+},
+```
+
+Combined with `@Role`, `@Role` applies first — `visibleOnlyWhen` can only narrow what the role may read, never show a column outside its `@Role` list:
+
+```prisma
+model Invoice {
+  id      Int    @id
+  ownerId Int
+  iban    String /// @Role(ADMIN, USER)
+}
+```
+
+```ts
+Invoice: {
+    USER: {fields: {iban: {visibleOnlyWhen: {ownerId: '$USER_ID'}}}},   // USER: own invoices only
+    // ADMIN: no rule — every row. Any other role: never (@Role).
+},
+```
+
+Effect, for that role:
+
+- The row is returned as its read rule allows; each listed column is **present only on rows matching `visibleOnlyWhen`** and absent (`undefined`) on the others. Columns not listed are unaffected. Applies at every depth (nested relations) and to the row a `create` returns. Exposed models and `BYPASS_OMISSION` skip it.
+- **Filters:** a `where` on the column only matches rows where it is visible (also inside `NOT`, relation filters and nested selections). Presence checks (`email: null`, `{ not: null }`) stay allowed. **`orderBy`, `distinct` and `cursor`** on the column → `403`.
+- **GraphQL:** the column is nullable in the schema and resolves `null` where not visible.
+- The condition may use a column the role can't read itself (e.g. `{ shareEmail: true }` with `shareEmail` hidden by `@Role`) — the check runs on the server, and the column is not returned.
+- **Condition shape:** the model's own columns only, with `equals`, `not`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `AND`/`OR`/`NOT` and `$USER_ID`. A relation, an unknown column or another operator fails boot.
+
 > For the generated request-body DTOs — their structure, and the ways to **remove a writable field** (`OmitType`, `/// @NoWrite`), including how to handle per-role differences — see **[dtos.md](./dtos.md)**. (The old per-role `restrictedFields` strip has been removed — see the migration note there.)
 
 ---

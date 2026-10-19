@@ -19,6 +19,7 @@ This project is built on **`@appxdigital/appx-core`**, a NestJS/Prisma framework
 - Never edit `src/generated/**` — it is regenerated output. Hand-owned code lives in `src/modules/**` (including the DTO subclasses under `src/modules/<model>/dto/`).
 - After a schema change: `appx-core generate` (deploy-safe sync). For new CRUD modules: `appx-core generate models`.
 - Field exposure is controlled in `prisma/schema.prisma` doc-comments: `/// @Role(ADMIN)` (readable only by listed roles), `/// @Role(none)` (never readable), `/// @NoWrite` (not writable via CRUD).
+- A column readable only on some rows (own email, owner-only notes) is a `fields: { column: { visibleOnlyWhen: { ... } } }` rule in `permissions.config.ts` — not a hand-written `@ResolveField` mask. See `permissions.md`.
 
 ## Reads and writes
 

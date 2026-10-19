@@ -13,6 +13,8 @@ export const PermissionsConfig: PermissionsConfigType = {
             findFirst: {
                 conditions: {id: PermissionPlaceholder.USER_ID}, // Can only see its own user
             },
+            // A column returned only on rows matching a condition (docs/permissions.md, "Field visibility per row"):
+            // fields: {email: {visibleOnlyWhen: {id: PermissionPlaceholder.USER_ID}}},
         }
     },
 };
