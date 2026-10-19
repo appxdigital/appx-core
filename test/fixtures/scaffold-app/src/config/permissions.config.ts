@@ -121,6 +121,8 @@ export const PermissionsConfig: PermissionsConfigType = {
       // via Project.connect (access) and the user via User.connect.
       create: 'ALL',
       deleteMany: { conditions: { project: { ownerId: PermissionPlaceholder.USER_ID } } },
+      // A member's role is visible only on the caller's own membership row.
+      fields: { role: { visibleOnlyWhen: { userId: PermissionPlaceholder.USER_ID } } },
     },
   },
 

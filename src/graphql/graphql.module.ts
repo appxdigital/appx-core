@@ -4,6 +4,9 @@ import {GraphQLModule, Query, Resolver} from '@nestjs/graphql';
 import {ApolloDriver, ApolloDriverConfig} from '@nestjs/apollo';
 import {Request, Response} from 'express';
 import {FieldRequiresScanner} from './field-requires.registry';
+import {nullableFieldRuleColumns} from './field-visibility.schema';
+import {PERMISSIONS_CONFIG_TOKEN} from '../common/config/permissions.config.provider';
+import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
 
 /**
  * Always-present root query. GraphQL requires a non-empty `Query` type, but a
@@ -26,24 +29,29 @@ export class AppxCoreRootResolver {
     imports: [
         // DiscoveryService/MetadataScanner power the @FieldRequires bootstrap scan.
         DiscoveryModule,
-        GraphQLModule.forRoot<ApolloDriverConfig>({
+        GraphQLModule.forRootAsync<ApolloDriverConfig>({
             driver: ApolloDriver,
-            context: ({req, res}: {req: Request; res: Response}) => ({req, res}),
-            // Build the schema in memory (code-first). Nothing consumes the SDL
-            // file, and an in-memory schema avoids depending on a writable
-            // `src/generated/` path at boot (CI, read-only deploys, tests).
-            autoSchemaFile: true,
-            sortSchema: true,
-            // Introspection powers the Apollo Sandbox (GET /graphql). It exposes
-            // the schema shape (not data — ABAC still governs every field), so we
-            // keep it ON in development for the Sandbox, and OFF in production as
-            // defense-in-depth (less recon surface). Opt back in for a production
-            // deployment with APPX_GRAPHQL_INTROSPECTION=true. Without this, Apollo
-            // Server v4 disables introspection under NODE_ENV=production and the
-            // Sandbox fails with `INTROSPECTION_DISABLED`.
-            introspection:
-                process.env.NODE_ENV !== 'production' ||
-                process.env.APPX_GRAPHQL_INTROSPECTION === 'true',
+            inject: [PERMISSIONS_CONFIG_TOKEN],
+            useFactory: (permissionsConfig: PermissionsConfigType) => ({
+                context: ({req, res}: {req: Request; res: Response}) => ({req, res}),
+                // Build the schema in memory (code-first). Nothing consumes the SDL
+                // file, and an in-memory schema avoids depending on a writable
+                // `src/generated/` path at boot (CI, read-only deploys, tests).
+                autoSchemaFile: true,
+                sortSchema: true,
+                // Introspection powers the Apollo Sandbox (GET /graphql). It exposes
+                // the schema shape (not data — ABAC still governs every field), so we
+                // keep it ON in development for the Sandbox, and OFF in production as
+                // defense-in-depth (less recon surface). Opt back in for a production
+                // deployment with APPX_GRAPHQL_INTROSPECTION=true. Without this, Apollo
+                // Server v4 disables introspection under NODE_ENV=production and the
+                // Sandbox fails with `INTROSPECTION_DISABLED`.
+                introspection:
+                    process.env.NODE_ENV !== 'production' ||
+                    process.env.APPX_GRAPHQL_INTROSPECTION === 'true',
+                // Columns with a `fields` rule resolve null where not visible.
+                transformSchema: (schema) => nullableFieldRuleColumns(schema, permissionsConfig),
+            }),
         }),
     ],
     providers: [AppxCoreRootResolver, FieldRequiresScanner],
