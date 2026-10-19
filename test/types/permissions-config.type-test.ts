@@ -40,6 +40,26 @@ const badSet: RolePermissions = {
     create: { set: 'ownerId' },
 };
 
+// Row-conditional field visibility.
+const withFields: RolePermissions = {
+    findMany: 'ALL',
+    fields: { email: { visibleOnlyWhen: { id: '$USER_ID' } } },
+    relations: { owner: { connect: 'ALL' } },
+};
+
+const badFieldRule: RolePermissions = {
+    // @ts-expect-error — a field rule is `{ visibleOnlyWhen }`, not a bare value
+    fields: { email: 'ALL' },
+};
+
+const missingVisibleOnlyWhen: RolePermissions = {
+    // @ts-expect-error — `visibleOnlyWhen` is required
+    fields: { email: { conditions: { id: '$USER_ID' } } },
+};
+
+void withFields;
+void badFieldRule;
+void missingVisibleOnlyWhen;
 void withSet;
 void badSet;
 void role;

@@ -119,6 +119,18 @@ export interface RelationConnectRule {
 }
 export type RelationConnectMap = { [relationField: string]: RelationConnectRule };
 
+/**
+ * Shows a column only on rows that match `visibleOnlyWhen`, a condition on the
+ * model's own columns; on other rows the column is not returned. Applies after
+ * `@Role`, so it can only narrow what the role may read.
+ *
+ * @example fields: { email: { visibleOnlyWhen: { id: '$USER_ID' } } }
+ */
+export interface FieldVisibilityRule {
+    visibleOnlyWhen: unknown;
+}
+export type FieldVisibilityMap = { [column: string]: FieldVisibilityRule };
+
 export type RolePermissions<
     M extends ModelKey<RuntimeClient> = ModelKey<RuntimeClient>
 > =
@@ -126,12 +138,14 @@ export type RolePermissions<
         [A in MethodsWithWhere<RuntimeClient, M>]?: 'ALL' | ActionPermission<M, A>;
     } & {
         relations?: RelationConnectMap;
+        fields?: FieldVisibilityMap;
     } & {
     // Catch-all for the dedicated `connect` action and any custom RBAC-only
-    // action labels. `RelationConnectMap` is included so the `relations` key
-    // (checked against this index signature) type-checks — without it, the
-    // index collides with `relations?` above and forces `as any`.
-    [custom: string]: 'ALL' | RelationConnectMap | {
+    // action labels. `RelationConnectMap` and `FieldVisibilityMap` are included
+    // so the `relations` and `fields` keys (checked against this index
+    // signature) type-check — without them, the index collides with those keys
+    // above and forces `as any`.
+    [custom: string]: 'ALL' | RelationConnectMap | FieldVisibilityMap | {
         conditions?: unknown | unknown[];
         set?: Record<string, unknown>;
     };

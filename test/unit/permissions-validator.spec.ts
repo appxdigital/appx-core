@@ -2,7 +2,7 @@
  * Static permissions-config validator (Option A). Pure function — no database.
  * Covers each error/warning combination the boot gate relies on.
  */
-import { validatePermissionsConfig, SchemaRelations } from '../../src/prisma/permissions-validator';
+import { validatePermissionsConfig, SchemaRelations, SchemaColumns } from '../../src/prisma/permissions-validator';
 
 const $UID = '$USER_ID';
 
@@ -290,5 +290,64 @@ describe('validatePermissionsConfig (Option A)', () => {
             relations,
         );
         expect(issues).toEqual([]);
+    });
+
+    describe('fields (row-conditional visibility)', () => {
+        // Scalar columns per model → their @Role list (null when unannotated).
+        const columns: SchemaColumns = {
+            user: { id: null, email: null, role: null, password: ['none'] },
+            project: { id: null, name: null, ownerId: null, secretApiKey: ['ADMIN'] },
+        };
+        const check = (config: any) => validatePermissionsConfig(config, relations, columns);
+
+        test('own-scalar condition on a readable column → valid', () => {
+            expect(check({
+                User: { USER: { findMany: 'ALL', fields: { email: { visibleOnlyWhen: { id: $UID } } } } },
+                Project: { USER: { fields: { name: { visibleOnlyWhen: { OR: [{ ownerId: $UID }, { id: { in: [1, 2] } }] } } } } },
+            })).toEqual([]);
+        });
+
+        test('ERROR: a fields key that is not a column of the model', () => {
+            const issues = check({ User: { USER: { fields: { emial: { visibleOnlyWhen: { id: $UID } } } } } });
+            expect(codes(issues)).toEqual(['unknown-field']);
+            expect(issues[0]).toMatchObject({ level: 'error', model: 'User', role: 'USER' });
+        });
+
+        test('ERROR: a fields key that names a relation', () => {
+            const issues = check({ Project: { USER: { fields: { owner: { visibleOnlyWhen: { id: $UID } } } } } });
+            expect(codes(issues)).toEqual(['unknown-field']);
+        });
+
+        test('ERROR: a field rule without a visibleOnlyWhen condition', () => {
+            expect(codes(check({ User: { USER: { fields: { email: {} } } } }))).toEqual(['invalid-field-rule']);
+            expect(codes(check({ User: { USER: { fields: { email: 'ALL' } } } }))).toEqual(['invalid-field-rule']);
+        });
+
+        test('ERROR: visibleOnlyWhen crosses a relation (also inside AND/OR/NOT)', () => {
+            const issues = check({
+                Project: { USER: { fields: { name: { visibleOnlyWhen: { AND: [{ ownerId: $UID }, { NOT: { owner: { role: 'ADMIN' } } }] } } } } },
+            });
+            expect(codes(issues)).toEqual(['field-condition-not-own-column']);
+            expect(issues[0].message).toContain("'owner'");
+        });
+
+        test('ERROR: visibleOnlyWhen names a column the model does not have', () => {
+            const issues = check({ User: { USER: { fields: { email: { visibleOnlyWhen: { userId: $UID } } } } } });
+            expect(codes(issues)).toEqual(['field-condition-not-own-column']);
+        });
+
+        test('WARNING: the column\'s @Role list excludes the role, so the rule never shows it', () => {
+            const issues = check({
+                Project: { USER: { fields: { secretApiKey: { visibleOnlyWhen: { ownerId: $UID } } } }, ADMIN: { fields: { secretApiKey: { visibleOnlyWhen: { ownerId: $UID } } } } },
+                User: { USER: { fields: { password: { visibleOnlyWhen: { id: $UID } } } } },
+            });
+            expect(codes(issues)).toEqual(['field-never-visible', 'field-never-visible']);
+            expect(issues.every((i) => i.level === 'warning' && i.role === 'USER')).toBe(true);
+        });
+
+        test('fields checks run for roles that cannot create or update', () => {
+            const issues = check({ User: { GUEST: { findMany: 'ALL', fields: { nope: { visibleOnlyWhen: { id: $UID } } } } } });
+            expect(codes(issues)).toEqual(['unknown-field']);
+        });
     });
 });

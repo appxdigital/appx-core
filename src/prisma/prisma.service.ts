@@ -1,7 +1,7 @@
 import {ForbiddenException, HttpException, HttpStatus, Inject, Injectable} from '@nestjs/common';
 import {Prisma, PrismaClient} from '@prisma/client';
 import {PermissionsConfigType, SINGULAR_ACTION} from '../common/config/permissionsConfigTypes';
-import {validatePermissionsConfig, SchemaRelations} from './permissions-validator';
+import {validatePermissionsConfig, SchemaRelations, SchemaColumns} from './permissions-validator';
 import {RequestContext} from "nestjs-request-context";
 import type {PrismaClient as RuntimeClient} from '.prisma/client';
 // @ts-ignore
@@ -82,9 +82,14 @@ export class PrismaService {
      */
     private validatePermissions(): void {
         const relations: SchemaRelations = {};
+        const columns: SchemaColumns = {};
         for (const model of Object.keys(this.fieldConfigs)) {
             const relationFields = this.fieldConfigs[model].relationFields || {};
             const noWrite: string[] = this.fieldConfigs[model].noWriteFields || [];
+            const scalarFields: string[] = this.fieldConfigs[model].scalarFields || [];
+            const fieldConfig = this.fieldConfigs[model].fieldConfig || {};
+            // Each scalar column with its @Role list (null when unannotated), for `fields` rules.
+            columns[model] = Object.fromEntries(scalarFields.map((field) => [field, fieldConfig[field] ?? null]));
             relations[model] = Object.keys(relationFields).map((field) => ({
                 field,
                 model: relationFields[field].model,
@@ -96,7 +101,7 @@ export class PrismaService {
             }));
         }
 
-        const issues = validatePermissionsConfig(this.permissionsConfig, relations);
+        const issues = validatePermissionsConfig(this.permissionsConfig, relations, columns);
         for (const issue of issues.filter((i) => i.level === 'warning')) {
             console.warn('\x1b[33m', `[APPX-CORE PERMISSIONS] ${issue.message}`, '\x1b[0m');
         }

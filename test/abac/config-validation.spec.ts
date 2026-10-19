@@ -40,4 +40,35 @@ describe('permissions config boot validation', () => {
         expect(built.prisma).toBeDefined();
         await built.close();
     });
+
+    test('rejects boot when a fields rule names a column the model does not have', async () => {
+        await expect(
+            buildAbacModule({ User: { USER: { fields: { emial: { visibleOnlyWhen: { id: $UID } } } } } } as any),
+        ).rejects.toThrow(/Invalid permissions configuration[\s\S]*fields\.emial does not name a column of User/i);
+    });
+
+    test('rejects boot when visibleOnlyWhen crosses a relation', async () => {
+        await expect(
+            buildAbacModule({ Project: { USER: { fields: { name: { visibleOnlyWhen: { owner: { id: $UID } } } } } } } as any),
+        ).rejects.toThrow(/Invalid permissions configuration[\s\S]*references 'owner', which is not a column of Project/i);
+    });
+
+    test('constructs with an own-column fields rule; warns when @Role excludes the role', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            const built = await buildAbacModule({
+                User: { USER: { fields: { email: { visibleOnlyWhen: { id: $UID } } } } },
+                Project: { USER: { fields: { secretApiKey: { visibleOnlyWhen: { ownerId: $UID } } } } },
+            } as any);
+            expect(built.prisma).toBeDefined();
+            await built.close();
+            const messages = warn.mock.calls.map((c) => String(c[1]));
+            expect(messages.filter((m) => m.includes('fields.'))).toEqual([
+                expect.stringMatching(/Project\.USER\.fields\.secretApiKey has no effect/),
+            ]);
+        } finally {
+            warn.mockRestore();
+        }
+    });
 });
+

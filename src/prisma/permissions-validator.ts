@@ -29,6 +29,9 @@ export interface RelationMeta {
 /** Relations per model, keyed by the lower-cased model name. */
 export type SchemaRelations = Record<string, RelationMeta[]>;
 
+/** Scalar columns per model (lower-cased model name) → the column's `@Role` list, or null when unannotated. */
+export type SchemaColumns = Record<string, Record<string, string[] | null>>;
+
 export type IssueLevel = 'error' | 'warning';
 
 export type IssueCode =
@@ -38,7 +41,11 @@ export type IssueCode =
     | 'connect-on-unwritable'
     | 'relation-in-set'
     | 'removed-set-user-id-field'
-    | 'unknown-relation';
+    | 'unknown-relation'
+    | 'unknown-field'
+    | 'invalid-field-rule'
+    | 'field-condition-not-own-column'
+    | 'field-never-visible';
 
 export interface ValidationIssue {
     level: IssueLevel;
@@ -48,8 +55,8 @@ export interface ValidationIssue {
     message: string;
 }
 
-/** Collects condition keys that name a relation (skips AND/OR/NOT, which recurse). */
-function findRelationKeys(cond: any, relationFields: Set<string>, found = new Set<string>()): Set<string> {
+/** Collects the condition keys `relationFields` has (skips AND/OR/NOT, which recurse). */
+function findRelationKeys(cond: any, relationFields: Pick<Set<string>, 'has'>, found = new Set<string>()): Set<string> {
     if (!cond || typeof cond !== 'object') return found;
     const objs = Array.isArray(cond) ? cond : [cond];
     for (const obj of objs) {
@@ -77,10 +84,20 @@ function findRelationKeys(cond: any, relationFields: Set<string>, found = new Se
  *    be denied at runtime.
  *  - **warning** `missing-connect-optional` — an *optional* belongsTo FK's target
  *    has no `connect` rule for the role. Only denied when the payload sets it.
+ *
+ * And, per model + role with a `fields` map:
+ *  - **error** `unknown-field` / `invalid-field-rule` — the key is not a column
+ *    of the model, or the rule has no `visibleOnlyWhen` condition.
+ *  - **error** `field-condition-not-own-column` — `visibleOnlyWhen` names a
+ *    relation or a column the model doesn't have (it is evaluated per row,
+ *    against the model's own columns).
+ *  - **warning** `field-never-visible` — the column's `@Role` list excludes the
+ *    role, so the rule can never show it.
  */
 export function validatePermissionsConfig(
     config: PermissionsConfigType,
     relations: SchemaRelations,
+    columns: SchemaColumns = {},
 ): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
 
@@ -111,9 +128,32 @@ export function validatePermissionsConfig(
         const rels = relations[modelKey.toLowerCase()] || [];
         const belongsTo = rels.filter((r) => r.kind === 'belongsTo' && r.referencingColumn);
         const relationFieldNames = new Set(rels.map((r) => r.field));
+        const modelColumns = columns[modelKey.toLowerCase()] || {};
+        const notOwnColumn = { has: (key: string) => !(key in modelColumns) };
 
         for (const role of Object.keys(roles)) {
             const rules = roles[role];
+            const fieldsMap = rules?.fields;
+            if (fieldsMap && typeof fieldsMap === 'object') {
+                for (const column of Object.keys(fieldsMap)) {
+                    const issue = (level: IssueLevel, code: IssueCode, message: string) =>
+                        issues.push({ level, code, model: modelKey, role, message });
+                    const condition = fieldsMap[column]?.visibleOnlyWhen;
+                    if (!(column in modelColumns)) {
+                        issue('error', 'unknown-field', `${modelKey}.${role}.fields.${column} does not name a column of ${modelKey}. Check the field name.`);
+                    } else if (!condition || typeof condition !== 'object') {
+                        issue('error', 'invalid-field-rule', `${modelKey}.${role}.fields.${column} needs a condition: '{ visibleOnlyWhen: { ... } }'.`);
+                    } else {
+                        for (const key of findRelationKeys(condition, notOwnColumn)) {
+                            issue('error', 'field-condition-not-own-column', `${modelKey}.${role}.fields.${column}.visibleOnlyWhen references '${key}', which is not a column of ${modelKey}. The condition can use the model's own columns only.`);
+                        }
+                        const readers = modelColumns[column];
+                        if (readers && !readers.includes(role)) {
+                            issue('warning', 'field-never-visible', `${modelKey}.${role}.fields.${column} has no effect: the column's @Role list excludes ${role}, so it is never returned to that role.`);
+                        }
+                    }
+                }
+            }
             // `setUserIdField` was removed; left in a config it would silently stop
             // forcing the column, so it is rejected with its replacement.
             for (const action of Object.keys(rules || {})) {
