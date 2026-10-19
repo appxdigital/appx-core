@@ -194,3 +194,110 @@ describe('field visibility — read path', () => {
         });
     });
 });
+
+describe('field visibility — filters and sorting', () => {
+    let raw: any;
+    let s: SeededAbac;
+
+    beforeAll(async () => {
+        raw = newRawClient();
+        await raw.$connect();
+        await resetAbac(raw);
+        s = await seedAbac(raw);
+    });
+
+    afterAll(async () => {
+        await resetAbac(raw);
+        await raw.$disconnect();
+    });
+
+    const ownEmail = { User: { USER: { fields: { email: { visibleOnlyWhen: { id: $UID } } } } } };
+    const ids = (rows: any[]) => rows.map((r) => r.id).sort((a, b) => a - b);
+
+    test('a where on the column only matches rows where it is visible', async () => {
+        await withConfig(ownEmail, async (prisma) => {
+            const find = (where: any) => asUser(s.users.alice, () => prisma.model.user.findMany({ where, select: { id: true } }));
+            expect(ids(await find({ email: 'bob@t.io' }))).toEqual([]);
+            expect(ids(await find({ email: { startsWith: 'b' } }))).toEqual([]);
+            expect(ids(await find({ OR: [{ email: 'bob@t.io' }, { email: 'alice@t.io' }] }))).toEqual([s.users.alice.id]);
+            expect(ids(await find({ email: { in: ['alice@t.io', 'bob@t.io'] }, tenantId: s.users.alice.tenantId }))).toEqual([s.users.alice.id]);
+            expect(await asUser(s.users.alice, () => prisma.model.user.findUnique({ where: { email: 'bob@t.io' } }))).toBeNull();
+        });
+    });
+
+    test('a negated where does not tell hidden values apart', async () => {
+        await withConfig(ownEmail, async (prisma) => {
+            const rows: any[] = await asUser(s.users.alice, () => prisma.model.user.findMany({ where: { NOT: { email: 'bob@t.io' } }, select: { id: true } }));
+            expect(ids(rows)).toEqual([s.users.alice.id, s.users.bob.id, s.users.carol.id]);
+        });
+    });
+
+    test('a condition on a nullable column stays strictly true or false under NOT', async () => {
+        // Alice's managerId is NULL: her email is hidden from her under this rule.
+        await withConfig({ User: { USER: { fields: { email: { visibleOnlyWhen: { managerId: $UID } } } } } }, async (prisma) => {
+            const find = (where: any) => asUser(s.users.alice, () => prisma.model.user.findMany({ where, select: { id: true } }));
+            expect(ids(await find({ NOT: { email: 'alice@t.io' } }))).toEqual(ids(await find({ NOT: { email: 'nobody@t.io' } })));
+            expect(ids(await find({ NOT: { email: 'alice@t.io' } }))).toContain(s.users.alice.id);
+        });
+    });
+
+    test('presence checks stay allowed', async () => {
+        // Seeded users have no name; the check is not narrowed to visible rows.
+        await withConfig({ User: { USER: { fields: { name: { visibleOnlyWhen: { id: $UID } } } } } }, async (prisma) => {
+            const rows: any[] = await asUser(s.users.alice, () => prisma.model.user.findMany({ where: { name: null }, select: { id: true } }));
+            expect(ids(rows)).toEqual([s.users.alice.id, s.users.bob.id, s.users.carol.id]);
+            const unset: any[] = await asUser(s.users.alice, () => prisma.model.user.findMany({ where: { name: undefined }, select: { id: true } }));
+            expect(ids(unset)).toEqual([s.users.alice.id, s.users.bob.id, s.users.carol.id]);
+        });
+    });
+
+    test('relation filters and nested selections are scoped the same way', async () => {
+        await withConfig(ownEmail, async (prisma) => {
+            const byOwner = (email: string) =>
+                asUser(s.users.alice, () => prisma.model.project.findMany({ where: { owner: { email } }, select: { id: true } }));
+            expect(ids(await byOwner('bob@t.io'))).toEqual([]);
+            expect(ids(await byOwner('alice@t.io'))).toEqual([s.projects.p1.id, s.projects.p2.id]);
+
+            const me: any = await asUser(s.users.alice, () =>
+                prisma.model.user.findFirst({
+                    where: { id: s.users.alice.id, reports: { some: { email: 'bob@t.io' } } },
+                    select: { id: true },
+                }),
+            );
+            expect(me).toBeNull();
+
+            const withReports: any = await asUser(s.users.alice, () =>
+                prisma.model.user.findFirst({
+                    where: { id: s.users.alice.id },
+                    select: { reports: { where: { email: 'bob@t.io' }, select: { id: true } } },
+                }),
+            );
+            expect(withReports.reports).toEqual([]);
+        });
+    });
+
+    test('orderBy and distinct on the column are rejected (403), also through a relation', async () => {
+        await withConfig(ownEmail, async (prisma) => {
+            await expect(asUser(s.users.alice, () => prisma.model.user.findMany({ orderBy: { email: 'asc' } }))).rejects.toMatchObject({ status: 403 });
+            await expect(asUser(s.users.alice, () => prisma.model.user.findMany({ distinct: ['email'] }))).rejects.toMatchObject({ status: 403 });
+            await expect(
+                asUser(s.users.alice, () => prisma.model.project.findMany({ orderBy: { owner: { email: 'asc' } } })),
+            ).rejects.toMatchObject({ status: 403 });
+        });
+    });
+
+    test('roles without a rule and exposed models filter and sort as before', async () => {
+        await withConfig(ownEmail, async (prisma) => {
+            const admin: any[] = await asUser(s.users.root, () =>
+                prisma.model.user.findMany({ where: { email: 'bob@t.io' }, orderBy: { email: 'asc' }, distinct: ['email'] }),
+            );
+            expect(ids(admin)).toEqual([s.users.bob.id]);
+            const exposed: any[] = await asUser(
+                s.users.alice,
+                () => prisma.model.user.findMany({ where: { email: 'bob@t.io' }, orderBy: { email: 'asc' }, distinct: ['email'] }),
+                ['User'],
+            );
+            expect(ids(exposed)).toEqual([s.users.bob.id]);
+        });
+    });
+});

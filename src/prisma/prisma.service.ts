@@ -463,10 +463,7 @@ export class PrismaService {
      */
     private prepareFieldVisibility(modelName: string, userRole: string, select: any, user: any): FieldVisibilityPlan | undefined {
         if (!select) return undefined;
-        const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
-        const rules = exposedModels.includes(modelName.toLowerCase())
-            ? {}
-            : this.normalizedPermissionsConfig[modelName.toLowerCase()]?.[userRole]?.fields || {};
+        const rules = this.fieldRules(modelName, userRole);
 
         const plan: FieldVisibilityPlan = {model: modelName, conditions: {}, injected: [], relations: {}};
         for (const field of Object.keys(rules)) {
@@ -485,6 +482,13 @@ export class PrismaService {
             if (relationPlan) plan.relations[key] = relationPlan;
         }
         return Object.keys(plan.conditions).length || Object.keys(plan.relations).length ? plan : undefined;
+    }
+
+    /** The role's `fields` rules on a model, keyed by column (none on an exposed model). */
+    private fieldRules(modelName: string, userRole: string): Record<string, {visibleOnlyWhen: any}> {
+        const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
+        if (exposedModels.includes(modelName.toLowerCase())) return {};
+        return this.normalizedPermissionsConfig[modelName.toLowerCase()]?.[userRole]?.fields || {};
     }
 
     /** The columns a (own-column) condition reads, through AND / OR / NOT. */
@@ -546,7 +550,7 @@ export class PrismaService {
         if (args.where) this.assertClauseFieldsReadable(modelName, userRole, args.where, 'where');
         if (args.orderBy) this.assertClauseFieldsReadable(modelName, userRole, args.orderBy, 'orderBy');
         if (args.distinct) {
-            const omit = new Set(this.getFieldsToOmit(modelName, userRole));
+            const omit = new Set([...this.getFieldsToOmit(modelName, userRole), ...Object.keys(this.fieldRules(modelName, userRole))]);
             for (const field of ([] as string[]).concat(args.distinct)) {
                 if (omit.has(field)) this.throwUnreadableFilterField(modelName, field, userRole, 'distinct');
             }
@@ -602,12 +606,19 @@ export class PrismaService {
         if (Array.isArray(clause)) return clause.map((c) => this.scopeRelationFilters(modelName, userRole, c, user));
         if (!clause || typeof clause !== 'object') return clause;
 
+        const rules = this.fieldRules(modelName, userRole);
+        const guards: any[] = [];
         const scoped: any = {};
         for (const key of Object.keys(clause)) {
             const value = clause[key];
             if (key === 'AND' || key === 'OR' || key === 'NOT') {
                 scoped[key] = this.scopeRelationFilters(modelName, userRole, value, user);
                 continue;
+            }
+            // A predicate on a `fields` column only matches rows where it is
+            // visible (presence checks reveal no value and stay as they are).
+            if (rules[key] && value !== undefined && !this.isPresenceOnlyPredicate(value)) {
+                guards.push(this.nullSafeConditions(modelName, PrismaService._buildConditions(rules[key].visibleOnlyWhen, user)));
             }
             const relation = this.getRelation(modelName, key);
             if (!relation || !value || typeof value !== 'object') {
@@ -623,7 +634,7 @@ export class PrismaService {
                 return op === 'every' ? {OR: [inner, {NOT: conditions}]} : {AND: [inner, conditions]};
             });
         }
-        return scoped;
+        return guards.length ? {AND: [...guards, scoped]} : scoped;
     }
 
     /**
@@ -714,6 +725,8 @@ export class PrismaService {
         if (!clause || typeof clause !== 'object') return;
 
         const omit = new Set(this.getFieldsToOmit(modelName, userRole));
+        // `fields` columns are scoped on a where (scopeRelationFilters); an order can't be.
+        if (kind === 'orderBy') Object.keys(this.fieldRules(modelName, userRole)).forEach((field) => omit.add(field));
         for (const key of Object.keys(clause)) {
             const value = clause[key];
 
