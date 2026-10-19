@@ -1605,7 +1605,9 @@ export class PrismaService {
                 }
 
                 if (Object.keys(relatedSelectFields).length > 0) {
-                    selectFields[relationKey] = {select: relatedSelectFields};
+                    // Keep the relation's own arguments (where, orderBy, take, …).
+                    const {select: _select, include: _include, ...relationArgs} = includedArgs;
+                    selectFields[relationKey] = {...relationArgs, select: relatedSelectFields};
                 }
             }
         }
