@@ -21,6 +21,20 @@ export type CorePrismaOptions = {
     BYPASS_FILTERING?: boolean;
 };
 
+/**
+ * Per query node: the `fields` rules to check on each returned row, the
+ * columns selected only to check them, and the same for nested relations.
+ */
+type FieldVisibilityPlan = {
+    model: string;
+    conditions: Record<string, any>;
+    injected: string[];
+    relations: Record<string, FieldVisibilityPlan>;
+};
+
+/** Methods whose returned rows are masked by `fields` rules. */
+const ROW_METHODS = ['findFirst', 'findFirstOrThrow', 'findMany', 'create', 'upsert', 'createManyAndReturn', 'updateManyAndReturn'];
+
 /** Look up a delegate method type without constraining the delegate `D`. */
 type MethodOf<D, K extends string> = K extends keyof D ? D[K] : never;
 
@@ -216,8 +230,16 @@ export class PrismaService {
                                     if (methodKey === 'count' && !!params.select) {
                                         delete params.select;
                                     }
+                                    // Row-conditional field visibility: select what each `fields`
+                                    // rule reads, then remove the column from rows that don't match.
+                                    const visibility = !options?.BYPASS_OMISSION && ROW_METHODS.includes(methodKey.toString())
+                                        ? this.prepareFieldVisibility(String(propKey), userRole, params.select, user)
+                                        : undefined;
                                     this.debug(`Executing ${String(propKey)}.${String(methodKey)}() with params: ${JSON.stringify(params)}`);
                                     const result = await contextModel[methodKey](params);
+                                    if (visibility) {
+                                        await this.maskFieldVisibility(result, visibility);
+                                    }
                                     // Dev-only: warn if a just-created row wouldn't be readable by its
                                     // creator (create conditions broader than find conditions). Skipped
                                     // outside development so no extra query runs on the hot path.
@@ -430,6 +452,65 @@ export class PrismaService {
             );
         }
         return args;
+    }
+
+    /**
+     * Plans `fields` (`visibleOnlyWhen`) masking for a select tree: records the
+     * resolved condition of each selected conditional column, adds the columns
+     * those conditions read to the select (remembering the ones it added), and
+     * recurses into selected relations. Exposed models are skipped. Returns
+     * undefined when nothing in the tree is conditional.
+     */
+    private prepareFieldVisibility(modelName: string, userRole: string, select: any, user: any): FieldVisibilityPlan | undefined {
+        if (!select) return undefined;
+        const exposedModels = (CorePrismaContext.getStore()?.exposedModels || []).map((m: string) => m.toLowerCase());
+        const rules = exposedModels.includes(modelName.toLowerCase())
+            ? {}
+            : this.normalizedPermissionsConfig[modelName.toLowerCase()]?.[userRole]?.fields || {};
+
+        const plan: FieldVisibilityPlan = {model: modelName, conditions: {}, injected: [], relations: {}};
+        for (const field of Object.keys(rules)) {
+            if (select[field] !== true) continue; // not selected, or omitted by @Role
+            plan.conditions[field] = PrismaService._buildConditions(rules[field].visibleOnlyWhen, user);
+            for (const column of this.conditionColumns(plan.conditions[field])) {
+                if (!select[column]) {
+                    select[column] = true;
+                    plan.injected.push(column);
+                }
+            }
+        }
+        for (const key of Object.keys(select)) {
+            const relation = this.getRelation(modelName, key);
+            const relationPlan = relation && this.prepareFieldVisibility(relation.model, userRole, select[key].select, user);
+            if (relationPlan) plan.relations[key] = relationPlan;
+        }
+        return Object.keys(plan.conditions).length || Object.keys(plan.relations).length ? plan : undefined;
+    }
+
+    /** The columns a (own-column) condition reads, through AND / OR / NOT. */
+    private conditionColumns(cond: any): string[] {
+        return [cond].flat().flatMap((c) =>
+            Object.keys(c).flatMap((key) => (['AND', 'OR', 'NOT'].includes(key) ? this.conditionColumns(c[key]) : [key])),
+        );
+    }
+
+    /**
+     * Applies a {@link FieldVisibilityPlan} to a query result: on each row, judges
+     * every rule against the row as read, then removes the columns whose rule
+     * doesn't match and the columns added only for the check.
+     */
+    private async maskFieldVisibility(rows: any, plan: FieldVisibilityPlan): Promise<void> {
+        for (const row of [rows].flat()) {
+            if (!row) continue;
+            const hidden: string[] = [];
+            for (const field of Object.keys(plan.conditions)) {
+                if (!(await this.matchesCreateConditions(plan.conditions[field], row, plan.model))) hidden.push(field);
+            }
+            for (const field of [...hidden, ...plan.injected]) delete row[field];
+            for (const key of Object.keys(plan.relations)) {
+                await this.maskFieldVisibility(row[key], plan.relations[key]);
+            }
+        }
     }
 
     get normalizedPermissionsConfig() {
@@ -1273,6 +1354,7 @@ export class PrismaService {
      * authorized by the target's `connect` rule) and is skipped here; the config
      * validator rejects such clauses at boot. `trustedFk` (the back-reference to a
      * same-request nesting parent) is likewise skipped — its value doesn't exist yet.
+     * Also judges `fields` (`visibleOnlyWhen`) rules against a returned row.
      */
     private async matchesCreateConditions(cond: any, row: any, modelName: string, trustedFk?: string): Promise<boolean> {
         for (const key of Object.keys(cond)) {

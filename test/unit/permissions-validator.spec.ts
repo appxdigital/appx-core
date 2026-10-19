@@ -336,6 +336,14 @@ describe('validatePermissionsConfig (Option A)', () => {
             expect(codes(issues)).toEqual(['field-condition-not-own-column']);
         });
 
+        test('ERROR: visibleOnlyWhen uses an operator a per-row check cannot evaluate', () => {
+            const issues = check({
+                User: { USER: { fields: { email: { visibleOnlyWhen: { OR: [{ id: { in: [1], gt: 0 } }, { role: { contains: 'AD' } }, { id: [1] }] } } } } },
+            });
+            expect(codes(issues)).toEqual(['unsupported-field-operator', 'unsupported-field-operator']);
+            expect(issues.map((i) => i.message).join()).toMatch(/'contains'[\s\S]*'0'/);
+        });
+
         test('WARNING: the column\'s @Role list excludes the role, so the rule never shows it', () => {
             const issues = check({
                 Project: { USER: { fields: { secretApiKey: { visibleOnlyWhen: { ownerId: $UID } } } }, ADMIN: { fields: { secretApiKey: { visibleOnlyWhen: { ownerId: $UID } } } } },

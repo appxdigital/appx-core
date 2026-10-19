@@ -45,6 +45,7 @@ export type IssueCode =
     | 'unknown-field'
     | 'invalid-field-rule'
     | 'field-condition-not-own-column'
+    | 'unsupported-field-operator'
     | 'field-never-visible';
 
 export interface ValidationIssue {
@@ -72,6 +73,23 @@ function findRelationKeys(cond: any, relationFields: Pick<Set<string>, 'has'>, f
     return found;
 }
 
+/** Operators a `fields` condition can use (judged per row, in memory). */
+const FIELD_OPERATORS = new Set(['equals', 'not', 'in', 'notIn', 'lt', 'lte', 'gt', 'gte']);
+
+/** Collects the operators on `columns` clauses outside {@link FIELD_OPERATORS} (recurses AND/OR/NOT). */
+function findUnsupportedOperators(cond: any, columns: Record<string, unknown>, found = new Set<string>()): Set<string> {
+    for (const obj of [cond].flat()) {
+        for (const key of Object.keys(obj)) {
+            const value = obj[key];
+            if (key === 'AND' || key === 'OR' || key === 'NOT') findUnsupportedOperators(value, columns, found);
+            else if (key in columns && value && typeof value === 'object' && !(value instanceof Date)) {
+                for (const op of Object.keys(value)) if (!FIELD_OPERATORS.has(op)) found.add(op);
+            }
+        }
+    }
+    return found;
+}
+
 /**
  * Validates the permissions config against the schema relations.
  *
@@ -91,6 +109,8 @@ function findRelationKeys(cond: any, relationFields: Pick<Set<string>, 'has'>, f
  *  - **error** `field-condition-not-own-column` — `visibleOnlyWhen` names a
  *    relation or a column the model doesn't have (it is evaluated per row,
  *    against the model's own columns).
+ *  - **error** `unsupported-field-operator` — an operator other than
+ *    equals/not/in/notIn/lt/lte/gt/gte.
  *  - **warning** `field-never-visible` — the column's `@Role` list excludes the
  *    role, so the rule can never show it.
  */
@@ -146,6 +166,9 @@ export function validatePermissionsConfig(
                     } else {
                         for (const key of findRelationKeys(condition, notOwnColumn)) {
                             issue('error', 'field-condition-not-own-column', `${modelKey}.${role}.fields.${column}.visibleOnlyWhen references '${key}', which is not a column of ${modelKey}. The condition can use the model's own columns only.`);
+                        }
+                        for (const op of findUnsupportedOperators(condition, modelColumns)) {
+                            issue('error', 'unsupported-field-operator', `${modelKey}.${role}.fields.${column}.visibleOnlyWhen uses '${op}', which a per-row check does not support. Use equals, not, in, notIn, lt, lte, gt or gte.`);
                         }
                         const readers = modelColumns[column];
                         if (readers && !readers.includes(role)) {
