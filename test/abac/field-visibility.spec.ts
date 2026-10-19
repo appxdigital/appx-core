@@ -101,9 +101,8 @@ describe('field visibility — read path', () => {
     test('no row, and a relation selected as false, are left as is', async () => {
         await withConfig(ownEmail, async (prisma) => {
             expect(await asUser(s.users.alice, () => prisma.model.user.findFirst({ where: { id: s.users.dave.id } }))).toBeNull();
-            // Filtering doesn't accept a relation selected as `false`; omission and masking do.
             const me: any = await asUser(s.users.alice, () =>
-                (prisma.model.user.findFirst as any)({ where: { id: s.users.alice.id }, select: { email: true, reports: false } }, { BYPASS_FILTERING: true }),
+                prisma.model.user.findFirst({ where: { id: s.users.alice.id }, select: { email: true, reports: false } }),
             );
             expect(me).toEqual({ email: 'alice@t.io' });
         });

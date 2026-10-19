@@ -836,6 +836,7 @@ export class PrismaService {
                     }
                     continue;
                 }
+                if (projection[field] === false) continue; // not selected, so not read
 
                 if (relation.relation === 'belongsTo') {
                     this.debug(`Found 1:1 / *:1 (belongsTo) relation to model '${relation.model}' from model '${modelName}' via field '${field}'. Filter will be applied to main conditions...`);
