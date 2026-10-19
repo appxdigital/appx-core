@@ -4,9 +4,10 @@ import {GraphQLModule, Query, Resolver} from '@nestjs/graphql';
 import {ApolloDriver, ApolloDriverConfig} from '@nestjs/apollo';
 import {Request, Response} from 'express';
 import {FieldRequiresScanner} from './field-requires.registry';
-import {nullableFieldRuleColumns} from './field-visibility.schema';
+import {nullableHiddenColumns} from './hidden-columns.schema';
 import {PERMISSIONS_CONFIG_TOKEN} from '../common/config/permissions.config.provider';
 import {PermissionsConfigType} from '../common/config/permissionsConfigTypes';
+import {PrismaService} from '../prisma/prisma.service';
 
 /**
  * Always-present root query. GraphQL requires a non-empty `Query` type, but a
@@ -31,8 +32,8 @@ export class AppxCoreRootResolver {
         DiscoveryModule,
         GraphQLModule.forRootAsync<ApolloDriverConfig>({
             driver: ApolloDriver,
-            inject: [PERMISSIONS_CONFIG_TOKEN],
-            useFactory: (permissionsConfig: PermissionsConfigType) => ({
+            inject: [PERMISSIONS_CONFIG_TOKEN, PrismaService],
+            useFactory: (permissionsConfig: PermissionsConfigType, prisma: PrismaService) => ({
                 context: ({req, res}: {req: Request; res: Response}) => ({req, res}),
                 // Build the schema in memory (code-first). Nothing consumes the SDL
                 // file, and an in-memory schema avoids depending on a writable
@@ -49,8 +50,8 @@ export class AppxCoreRootResolver {
                 introspection:
                     process.env.NODE_ENV !== 'production' ||
                     process.env.APPX_GRAPHQL_INTROSPECTION === 'true',
-                // Columns with a `fields` rule resolve null where not visible.
-                transformSchema: (schema) => nullableFieldRuleColumns(schema, permissionsConfig),
+                // Columns hidden by `@Role` or a `fields` rule resolve null where omitted.
+                transformSchema: (schema) => nullableHiddenColumns(schema, permissionsConfig, prisma),
             }),
         }),
     ],

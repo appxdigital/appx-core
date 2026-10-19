@@ -767,6 +767,15 @@ describe('PrismaService — branch coverage', () => {
         });
     });
 
+    describe('getRoleRestrictedFields', () => {
+        test('known and unknown models', async () => {
+            await withConfig({}, async (prisma) => {
+                expect(prisma.getRoleRestrictedFields('Project')).toEqual(['secretApiKey', 'budget']);
+                expect(prisma.getRoleRestrictedFields('Nope')).toEqual([]);
+            });
+        });
+    });
+
     describe('getFieldsToOmit', () => {
         test('defensive guard: unknown model omits nothing', async () => {
             await withConfig({}, async (prisma) => {

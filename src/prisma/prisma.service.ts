@@ -1507,6 +1507,17 @@ export class PrismaService {
     }
 
     /**
+     * The columns of a model with a `/// @Role(...)` annotation — hidden from at
+     * least one role. Used by the GraphQL module to resolve them `null` when omitted.
+     *
+     * @param modelName - The model name (any casing; matched case-insensitively).
+     * @returns The annotated field names, or `[]` if the model is unknown.
+     */
+    getRoleRestrictedFields(modelName: string): string[] {
+        return Object.keys(this.fieldConfigs[modelName.toLowerCase()]?.fieldConfig ?? {});
+    }
+
+    /**
      * Retrieves the list of fields to omit based on the user's role.
      * It checks the field configurations stored in `fieldConfigs` and compares them against the role.
      *

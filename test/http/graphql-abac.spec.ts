@@ -61,7 +61,7 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
             await c.user.update({ where: { email: 'admin@example.com' }, data: { role: 'ADMIN' } });
             const bob = await c.user.findFirst({ where: { email: 'bob@example.com' } });
             const alice = await c.user.create({ data: { email: 'alice@example.com', password: 'x', role: 'USER' } });
-            await c.project.create({ data: { name: 'Bob Proj', ownerId: bob.id, secretApiKey: 'BOB_SECRET' } });
+            await c.project.create({ data: { name: 'Bob Proj', ownerId: bob.id, secretApiKey: 'BOB_SECRET', budget: 500 } });
             const aliceProj = await c.project.create({ data: { name: 'Alice Proj', ownerId: alice.id, secretApiKey: 'ALICE_SECRET' } });
             // Owned by alice, but bob is a MEMBER: bob can access the project record
             // (membership) yet not its owner alice (User read is self-only).
@@ -227,6 +227,21 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
 
         const asAdmin = await gql(q, adminJwt);
         expect(asAdmin.body.data.project.get.secretApiKey).toBe('BOB_SECRET');
+    });
+
+    test('a required, defaulted role-gated field (budget @Role(ADMIN)) is nullable and null for USER, not its default', async () => {
+        const type = await gql('query { __type(name: "Project") { fields { name type { kind } } } }', userJwt);
+        const kinds = Object.fromEntries(type.body.data.__type.fields.map((f: any) => [f.name, f.type.kind]));
+        expect(kinds.budget).toBe('SCALAR');
+        expect(kinds.name).toBe('NON_NULL');
+
+        const q = `query { project { get(where: { name: { equals: "Bob Proj" } }) { name budget } } }`;
+        const asUser = await gql(q, userJwt);
+        expect(asUser.body.errors).toBeUndefined();
+        expect(asUser.body.data.project.get.budget).toBeNull();
+
+        const asAdmin = await gql(q, adminJwt);
+        expect(asAdmin.body.data.project.get.budget).toBe(500);
     });
 
     test('nested restricted field (owner.password @Role(none)) is omitted, sibling present', async () => {
