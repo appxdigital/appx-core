@@ -14,7 +14,7 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
-## [0.1.133] — 2026-10-19
+## [0.1.132] — 2026-10-19
 
 ### Added
 
@@ -33,6 +33,8 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ### Fixed
 
+- **The row a `create` returns follows field omission.** Columns whose `/// @Role` list doesn't include the caller's role are no longer returned by `create` — including in nested `include`/`select` relations (e.g. a related user's `password`, `@Role(none)`), as on reads. `BYPASS_OMISSION` still returns every column.
+- **Over GraphQL, a column the role can't read (`/// @Role`) resolves `null`** — it is nullable in the schema; before, a required column errored and a column with a `@default` returned that default.
 - **A `cursor` naming a column the role can't read is rejected (`403`)**, as `where` / `orderBy` already were — a cursor matches a row by value. Includes compound-unique cursors.
 - **`include: { relation: { where, orderBy, take, … } }` applies those arguments.** They were dropped when field omission rewrote `include` to `select`, returning every readable related row. They are now checked and scoped like the same arguments under `select`.
 - **A relation selected as `false` no longer fails the read** (`Cannot create property 'where' on boolean 'false'`).
@@ -42,19 +44,9 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 Drop-in, except for queries that relied on the fixed behaviour:
 
 - A `cursor` on a column outside the caller's `@Role` list now returns `403` — page by `id` (or another readable unique column).
+- A project whose code relied on a `create` result containing a column outside the caller's `@Role` list now gets it absent — read it with `BYPASS_OMISSION` where the code is entitled to it. `POST /auth/register` runs as `GUEST`: a `User` column restricted to other roles (beyond the scaffold's `password`) is no longer in its response.
+- GraphQL clients: `@Role`-annotated columns are now nullable in the schema — regenerate client types if they rely on non-null.
 - An `include` with `where` / `orderBy` / `take` now returns the filtered relation instead of all readable rows; a nested `where` on a column the role can't read now returns `403`, as it already did under `select`.
-
----
-
-## [0.1.132] — 2026-10-19
-
-### Fixed
-
-- **The row a `create` returns follows field omission.** Columns whose `/// @Role` list doesn't include the caller's role are no longer returned by `create` — including in nested `include`/`select` relations (e.g. a related user's `password`, `@Role(none)`), as on reads. `BYPASS_OMISSION` still returns every column.
-
-### Migration
-
-Drop-in for the scaffold schema. A project whose code relied on a `create` result containing a column outside the caller's `@Role` list now gets it absent — read it with `BYPASS_OMISSION` where the code is entitled to it. `POST /auth/register` runs as `GUEST`: a `User` column restricted to other roles (beyond the scaffold's `password`) is no longer in its response.
 
 ---
 
