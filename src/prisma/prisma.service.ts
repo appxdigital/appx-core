@@ -208,7 +208,7 @@ export class PrismaService {
                                             // create/connect, or a raw foreign key).
                                             await this.enforceNestedWrites(String(propKey), params.data, user, userRole);
                                         } else {
-                                            // Reject a client where/orderBy/distinct that references a
+                                            // Reject a client where/orderBy/distinct/cursor that references a
                                             // field this role can't read (input counterpart to output
                                             // field omission). Runs on the client input, BEFORE the
                                             // trusted ABAC conditions are injected below.
@@ -538,10 +538,10 @@ export class PrismaService {
      * @throws ForbiddenException if no valid `where` conditions are present after applying permissions.
      */
     /**
-     * Reject a client `where` / `orderBy` / `distinct` that references a field
-     * this role cannot read (per `@Role` / `getFieldsToOmit`) — the input-side
-     * counterpart to `applyFieldOmission` on output, so a field the caller can't
-     * read can't be used to filter or sort either. Recurses through relations and
+     * Reject a client `where` / `orderBy` / `distinct` / `cursor` that references
+     * a field this role cannot read (per `@Role` / `getFieldsToOmit`) — the
+     * input-side counterpart to `applyFieldOmission` on output, so a field the
+     * caller can't read can't be used to filter, sort or page either. Recurses through relations and
      * AND/OR/NOT. Runs on the CLIENT args, before the trusted author-defined
      * conditions are injected, so it never blocks the framework's own conditions.
      */
@@ -549,6 +549,7 @@ export class PrismaService {
         if (!args || typeof args !== 'object') return;
         if (args.where) this.assertClauseFieldsReadable(modelName, userRole, args.where, 'where');
         if (args.orderBy) this.assertClauseFieldsReadable(modelName, userRole, args.orderBy, 'orderBy');
+        if (args.cursor) this.assertClauseFieldsReadable(modelName, userRole, args.cursor, 'cursor');
         if (args.distinct) {
             const omit = new Set([...this.getFieldsToOmit(modelName, userRole), ...Object.keys(this.fieldRules(modelName, userRole))]);
             for (const field of ([] as string[]).concat(args.distinct)) {
@@ -716,7 +717,7 @@ export class PrismaService {
         modelName: string,
         userRole: string,
         clause: any,
-        kind: 'where' | 'orderBy',
+        kind: 'where' | 'orderBy' | 'cursor',
     ): void {
         if (Array.isArray(clause)) {
             for (const c of clause) this.assertClauseFieldsReadable(modelName, userRole, c, kind);
@@ -725,8 +726,8 @@ export class PrismaService {
         if (!clause || typeof clause !== 'object') return;
 
         const omit = new Set(this.getFieldsToOmit(modelName, userRole));
-        // `fields` columns are scoped on a where (scopeRelationFilters); an order can't be.
-        if (kind === 'orderBy') Object.keys(this.fieldRules(modelName, userRole)).forEach((field) => omit.add(field));
+        // `fields` columns are scoped on a where (scopeRelationFilters); an order or a cursor can't be.
+        if (kind !== 'where') Object.keys(this.fieldRules(modelName, userRole)).forEach((field) => omit.add(field));
         for (const key of Object.keys(clause)) {
             const value = clause[key];
 
@@ -756,6 +757,9 @@ export class PrismaService {
                 } else {
                     this.assertClauseFieldsReadable(relation.model, userRole, value, kind);
                 }
+            } else if (kind === 'cursor' && value && typeof value === 'object' && !this.getScalarFields(modelName).includes(key)) {
+                // Compound unique key (`a_b: { a, b }`) — its entries are this model's columns.
+                this.assertClauseFieldsReadable(modelName, userRole, value, kind);
             }
             // Otherwise: a readable scalar field. Its value is an operator object
             // (where) or 'asc'/'desc' (orderBy) — not a field map, so no recursion.
@@ -779,7 +783,7 @@ export class PrismaService {
 
     private throwUnreadableFilterField(modelName: string, field: string, userRole: string, kind: string): never {
         throw new HttpException(
-            `Cannot ${kind === 'orderBy' ? 'order by' : 'filter by'} '${modelName}.${field}' — not readable by role ${userRole}.`,
+            `Cannot ${kind === 'orderBy' ? 'order by' : kind === 'cursor' ? 'page by' : 'filter by'} '${modelName}.${field}' — not readable by role ${userRole}.`,
             HttpStatus.FORBIDDEN,
         );
     }
