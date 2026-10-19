@@ -173,8 +173,8 @@ export class PrismaService {
                                     };
                                     methodKey = redirect[methodKey.toString()] ?? methodKey;
 
-                                    // delete, deleteMany, update and updateMany methods should not apply field omission because they are not selecting fields
-                                    if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'create', 'createMany'].includes(methodKey.toString())) {
+                                    // delete, deleteMany, update, updateMany and createMany return no rows, so there is nothing to omit
+                                    if (!options?.BYPASS_OMISSION && !['delete', 'deleteMany', 'update', 'updateMany', 'createMany'].includes(methodKey.toString())) {
                                         params = this.applyFieldOmission(String(propKey), userRole, params);
                                     } else {
                                         this.debug(`Skipping field omission for ${String(propKey)}.${String(methodKey)}()`);

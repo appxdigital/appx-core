@@ -14,6 +14,18 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.1.132] — 2026-10-19
+
+### Fixed
+
+- **The row a `create` returns follows field omission.** Columns whose `/// @Role` list doesn't include the caller's role are no longer returned by `create` — including in nested `include`/`select` relations (e.g. a related user's `password`, `@Role(none)`), as on reads. `BYPASS_OMISSION` still returns every column.
+
+### Migration
+
+Drop-in for the scaffold schema. A project whose code relied on a `create` result containing a column outside the caller's `@Role` list now gets it absent — read it with `BYPASS_OMISSION` where the code is entitled to it. `POST /auth/register` runs as `GUEST`: a `User` column restricted to other roles (beyond the scaffold's `password`) is no longer in its response.
+
+---
+
 ## [0.1.131] — 2026-10-19
 
 ### Changed
