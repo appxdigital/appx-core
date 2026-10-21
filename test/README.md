@@ -78,7 +78,6 @@ test/
 │   ├── fixture-app.ts              # buildFramework, ensureFixtureInstalled, writeFixtureEnv, push + generate + build
 │   └── fixture-bootstrap.ts        # bootFixture(): boot the fixture's AppModule in-process for supertest
 ├── prisma-proxy.spec.ts            # ABAC engine tests — 14 cases
-├── admin/                          # AdminJS backoffice (admin/ package) e2e — plain-Node subprocess (helpers/admin-boot.cjs)
 ├── http/                           # HTTP-level regression tests against the booted fixture
 │   ├── register-validation.spec.ts
 │   ├── generated-crud-validation.spec.ts

@@ -31,7 +31,6 @@ Built and maintained by **AppX** (appx-digital.com).
   - [What you get out of the box](#what-you-get-out-of-the-box)
 - [Core Concepts](#core-concepts)
   - [Project Structure](#project-structure)
-  - [Admin Backoffice](#admin-backoffice)
   - [Authentication](#authentication)
   - [Authorization Model](#authorization-model)
 - [Permissions](#permissions)
@@ -58,7 +57,7 @@ Built and maintained by **AppX** (appx-digital.com).
 
 ## Why AppX Core
 
-Modern applications often fail not because teams cannot build endpoints, but because they ship access control too late, build inconsistent admin tooling, and recreate the same authentication and backoffice plumbing across projects.
+Modern applications often fail not because teams cannot build endpoints, but because they ship access control too late and recreate the same authentication plumbing across projects.
 
 AppX Core puts **security and data-access control first**, while keeping development fast:
 
@@ -295,10 +294,6 @@ Most customization happens in:
 
 - `src/config/permissions.config.ts` – granular ABAC rules
 - `prisma/schema.prisma` – your data model source of truth
-
-### Admin Backoffice
-
-An AdminJS backoffice is available as a separate package, [`@appxdigital/appx-core-admin`](./admin/README.md). Its lists and edits go through the same permissions.
 
 ### Authentication
 

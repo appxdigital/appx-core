@@ -104,10 +104,6 @@ jobs:
             - name: Build
               run: npm run build
 
-            # The AdminJS backoffice end-to-end test runs admin/dist.
-            - name: Build admin
-              run: npm run build:admin
-
             # The optional CLI `create` end-to-end test shells out to a db client
             # to CREATE DATABASE on the container; install it so that path runs.
             - name: Install database client
