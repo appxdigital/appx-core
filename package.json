@@ -7,7 +7,8 @@
     "scripts": {
         "build": "tsc",
         "build:cli": "node scripts/sync-cli-core-version.mjs && npm --prefix cli ci",
-        "build:all": "npm run build && npm run build:cli",
+        "build:admin": "tsc -p admin/tsconfig.json",
+        "build:all": "npm run build && npm run build:admin && npm run build:cli",
         "db-pull": "npx prisma db pull && prisma-case-format --table-case pascal --field-case camel --enum-case pascal --file prisma/schema.prisma",
         "test": "jest",
         "test:mysql": "DB_PROVIDER=mysql jest",
@@ -16,7 +17,9 @@
         "release:beta": "node scripts/release.mjs lib prerelease beta",
         "release:production": "node scripts/release.mjs lib patch",
         "release:cli:beta": "node scripts/release.mjs cli prerelease beta",
-        "release:cli:production": "node scripts/release.mjs cli patch"
+        "release:cli:production": "node scripts/release.mjs cli patch",
+        "release:admin:beta": "node scripts/release.mjs admin prerelease beta",
+        "release:admin:production": "node scripts/release.mjs admin patch"
     },
     "keywords": [],
     "author": "",

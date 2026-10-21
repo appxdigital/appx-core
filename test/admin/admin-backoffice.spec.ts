@@ -1,7 +1,8 @@
 /**
- * AdminJS backoffice, end to end. The fixture app + `AppxCoreAdminModule` run
- * in a plain-Node subprocess (test/helpers/admin-boot.cjs — AdminJS is ESM and
- * can't load in jest's VM); requests go over HTTP.
+ * AdminJS backoffice (`@appxdigital/appx-core-admin`), end to end. The fixture
+ * app + `AppxCoreAdminModule` run in a plain-Node subprocess
+ * (test/helpers/admin-boot.cjs — AdminJS is ESM and can't load in jest's VM);
+ * requests go over HTTP.
  *
  * Pins: only `adminRoles` can log in; resource lists go through the ABAC proxy
  * as the logged-in admin (field omission applies — `@Role(none)` password is
@@ -57,6 +58,8 @@ describe('AdminJS backoffice', () => {
             env: {
                 ...process.env,
                 DATABASE_URL: process.env.APPX_FIXTURE_DB_URL,
+                // The admin package's `@appxdigital/appx-core` peer: the fixture's link to this repo.
+                NODE_PATH: path.join(FIXTURE_DIR, 'node_modules'),
                 ADMIN_JS_SKIP_BUNDLE: 'true',
                 SESSION_SECRET: 'admin-test-secret-admin-test-secret-0123',
                 SESSION_COOKIE_NAME: 'admin_test',

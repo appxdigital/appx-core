@@ -1,0 +1,143 @@
+name: Release admin
+
+# Publishes @appxdigital/appx-core-admin (admin/). Driven ONLY by pushing an
+# `admin-v*` git tag; the package is versioned independently of the library
+# (`v*`, release.yml) and the CLI (`cli-v*`, release-cli.yml). The tag's shape
+# decides the npm dist-tag:
+#   admin-v1.2.3-alpha.0 -> dist-tag `alpha`   (published, not gated)
+#   admin-v1.2.3-beta.0  -> dist-tag `beta`    (published, not gated)
+#   admin-v1.2.3-rc.0    -> dist-tag `next`    (published, not gated)
+#   admin-v1.2.3         -> dist-tag `latest`  (production; PAUSES for approval)
+#
+# Same posture as the library: production waits on the `production` GitHub
+# Environment's required reviewer, and auth is OIDC trusted publishing (no
+# NPM_TOKEN). Requires a one-time Trusted Publisher config on npmjs.com for
+# @appxdigital/appx-core-admin pointing at this repo + release-admin.yml.
+# See RELEASING.md.
+#
+# The package compiles against the library's types (admin/tsconfig.json maps
+# `@appxdigital/appx-core` to the library build), so each job builds the
+# library first. Its end-to-end test runs in the library's CI.
+
+on:
+    push:
+        tags: ['admin-v*']
+
+concurrency:
+    group: release-admin-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    verify:
+        name: verify (tag, build)
+        runs-on: ubuntu-latest
+        outputs:
+            version: ${{ steps.channel.outputs.version }}
+            channel: ${{ steps.channel.outputs.channel }}
+        steps:
+            - uses: actions/checkout@v5
+
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Upgrade npm
+              run: npm install -g npm@11
+
+            - name: Assert tag matches admin/package.json version
+              run: |
+                  TAG="${GITHUB_REF_NAME#admin-v}"
+                  PKG="$(node -p "require('./admin/package.json').version")"
+                  if [ "$TAG" != "$PKG" ]; then
+                      echo "::error::Tag ${GITHUB_REF_NAME} (=${TAG}) does not match admin/package.json version ${PKG}."
+                      echo "Set admin/package.json to the release version before tagging (see RELEASING.md)."
+                      exit 1
+                  fi
+                  echo "Version OK: ${PKG}"
+
+            - name: Determine dist-tag (channel)
+              id: channel
+              run: |
+                  V="${GITHUB_REF_NAME#admin-v}"
+                  if echo "$V" | grep -q -- '-alpha'; then
+                      CH=alpha
+                  elif echo "$V" | grep -q -- '-beta'; then
+                      CH=beta
+                  elif echo "$V" | grep -q -- '-'; then
+                      CH=next
+                  else
+                      CH=latest
+                  fi
+                  echo "version=$V" >> "$GITHUB_OUTPUT"
+                  echo "channel=$CH" >> "$GITHUB_OUTPUT"
+                  echo "Publishing admin ${V} to dist-tag '${CH}'."
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build
+              run: npm run build && npm run build:admin
+
+    publish-prerelease:
+        name: publish ${{ needs.verify.outputs.channel }}
+        needs: verify
+        if: needs.verify.outputs.channel != 'latest'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write # OIDC token for npm trusted publishing
+        steps:
+            - uses: actions/checkout@v5
+
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: 22
+                  cache: npm
+                  registry-url: 'https://registry.npmjs.org'
+
+            # Also gives OIDC trusted publishing the recent npm it requires.
+            - name: Upgrade npm
+              run: npm install -g npm@11
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build
+              run: npm run build && npm run build:admin
+
+            - name: Publish (${{ needs.verify.outputs.channel }})
+              run: npm publish --tag "${{ needs.verify.outputs.channel }}" --provenance --access public
+              working-directory: admin
+
+    publish-production:
+        name: publish latest (gated)
+        needs: verify
+        if: needs.verify.outputs.channel == 'latest'
+        runs-on: ubuntu-latest
+        environment: production # required-reviewer gate; approve in the Actions UI
+        permissions:
+            contents: read
+            id-token: write # OIDC token for npm trusted publishing
+        steps:
+            - uses: actions/checkout@v5
+
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: 22
+                  cache: npm
+                  registry-url: 'https://registry.npmjs.org'
+
+            # Also gives OIDC trusted publishing the recent npm it requires.
+            - name: Upgrade npm
+              run: npm install -g npm@11
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build
+              run: npm run build && npm run build:admin
+
+            - name: Publish (latest)
+              run: npm publish --tag latest --provenance --access public
+              working-directory: admin

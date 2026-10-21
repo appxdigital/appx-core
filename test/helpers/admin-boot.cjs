@@ -1,5 +1,6 @@
 /**
- * Boot the scaffold-app fixture with the AdminJS backoffice, in plain Node.
+ * Boot the scaffold-app fixture with the AdminJS backoffice
+ * (`@appxdigital/appx-core-admin`, built at admin/dist), in plain Node.
  *
  * AdminJS is pure ESM and can't be loaded inside jest's VM, so
  * test/admin/*.spec.ts spawns this script (cwd = the fixture dir) and talks to
@@ -25,7 +26,7 @@ const {AppModule} = require(path.join(FIXTURE_DIR, 'dist', 'app.module.js'));
 const {AdminConfig} = require(path.join(FIXTURE_DIR, 'dist', 'config', 'admin.config.js'));
 const {PermissionsConfig} = require(path.join(FIXTURE_DIR, 'dist', 'config', 'permissions.config.js'));
 const core = require(path.join(FIXTURE_DIR, 'node_modules', '@appxdigital', 'appx-core'));
-const {AppxCoreAdminModule} = core;
+const {AppxCoreAdminModule} = require(path.join(__dirname, '..', '..', 'admin', 'dist'));
 const session = require('express-session');
 const passport = require('passport');
 

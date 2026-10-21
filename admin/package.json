@@ -1,0 +1,43 @@
+{
+    "name": "@appxdigital/appx-core-admin",
+    "version": "0.1.0",
+    "description": "AdminJS backoffice for @appxdigital/appx-core",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc -p tsconfig.json"
+    },
+    "license": "ISC",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/appxdigital/appx-core.git",
+        "directory": "admin"
+    },
+    "homepage": "https://github.com/appxdigital/appx-core/tree/main/admin#readme",
+    "bugs": {
+        "url": "https://github.com/appxdigital/appx-core/issues"
+    },
+    "dependencies": {
+        "@adminjs/express": "~6.1.1",
+        "@adminjs/import-export": "~3.0.0",
+        "@adminjs/nestjs": "~7.0.0",
+        "@adminjs/passwords": "~4.0.0",
+        "@adminjs/prisma": "~5.0.4",
+        "adminjs": "~7.8.17",
+        "express-formidable": "~1.2.0"
+    },
+    "peerDependencies": {
+        "@appxdigital/appx-core": ">=0.1.132 <0.3.0",
+        "@nestjs/common": "~11.0.0",
+        "@nestjs/core": "~11.0.0",
+        "@prisma/client": "~6.5.0",
+        "argon2": "~0.41.1",
+        "express": "^5.1.0",
+        "express-session": "^1.18.1",
+        "nestjs-request-context": "~4.0.0"
+    },
+    "files": [
+        "dist",
+        "CHANGELOG.md"
+    ]
+}

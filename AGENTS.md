@@ -48,6 +48,7 @@ appx-core-package/
 │   │   ├── enums/role.enum.ts        # DefaultRole (not currently enforced as a type)
 │   │   └── utils/                    # context-transformer, error-handler
 │   └── tasks/session-cleanup.service.ts
+├── admin/                            # @appxdigital/appx-core-admin — AdminJS backoffice (own package, `admin-v*` tags)
 ├── cli/
 │   ├── cli.js                        # Commander entry: `create`, `generate`, `setup:fileupload`
 │   ├── scaffold/                     # Template tree copied by `create`

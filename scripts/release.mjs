@@ -6,13 +6,14 @@
  * separate, manual step:  git push origin HEAD --follow-tags
  *
  * Usage:
- *   node scripts/release.mjs <lib|cli> <patch|minor|major|prerelease|X.Y.Z> [preid]
+ *   node scripts/release.mjs <lib|cli|admin> <patch|minor|major|prerelease|X.Y.Z> [preid]
  *
  * Examples:
  *   node scripts/release.mjs lib prerelease beta   # 0.1.121 -> 0.1.122-beta.0 (dist-tag beta)
  *   node scripts/release.mjs lib 0.1.121-beta.0    # explicit version
  *   node scripts/release.mjs lib patch             # 0.1.121-beta.3 -> 0.1.121 (production, gated)
  *   node scripts/release.mjs cli prerelease beta   # cli, tag cli-v...
+ *   node scripts/release.mjs admin patch           # admin, tag admin-v...
  */
 import {execSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
@@ -20,12 +21,13 @@ import {readFileSync} from 'node:fs';
 const TARGETS = {
     lib: {dir: '.', pkg: 'package.json', prefix: 'v', label: 'release'},
     cli: {dir: 'cli', pkg: 'cli/package.json', prefix: 'cli-v', label: 'release cli'},
+    admin: {dir: 'admin', pkg: 'admin/package.json', prefix: 'admin-v', label: 'release admin'},
 };
 
 const [, , target, bump, preid] = process.argv;
 const t = TARGETS[target];
 if (!t || !bump) {
-    console.error('Usage: node scripts/release.mjs <lib|cli> <patch|minor|major|prerelease|X.Y.Z> [preid]');
+    console.error('Usage: node scripts/release.mjs <lib|cli|admin> <patch|minor|major|prerelease|X.Y.Z> [preid]');
     process.exit(1);
 }
 
