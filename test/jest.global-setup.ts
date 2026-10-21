@@ -68,29 +68,10 @@ export default async function globalSetup(): Promise<void> {
         // app.module.ts is REWRITTEN by the generator each run; revert to the
         // pristine scaffold template before generating so updateAppModule's
         // regex-based import insertion has a clean starting point.
-        let pristineAppModule = fs.readFileSync(
+        const pristineAppModule = fs.readFileSync(
             path.join(__dirname, '..', 'cli', 'scaffold', 'src', 'app.module.ts'),
             'utf8',
         );
-        // finding: framework's appx-core-admin.module.ts has a
-        // top-level `import {BaseRecord} from 'adminjs'`. BaseRecord is used
-        // as a *value* (line ~105) so TS can't elide it — the compiled output
-        // does `require('adminjs')` eagerly. AdminJS is pure ESM. This works
-        // on Node ≥20.19 (require(esm) enabled by default) but fails inside
-        // jest's VM, which doesn't honour that flag. Real fix: convert to
-        // dynamic import. Test workaround: strip AppxCoreAdminModule from the
-        // fixture's app.module.ts so HTTP tests can boot. Admin behaviour is
-        // covered separately in test/backoffice/* once the import bug is fixed.
-        // Strip three things atomically:
-        //   (a) `AppxCoreAdminModule.forRoot(AdminConfig, PermissionsConfig),`
-        //       — the call expression in the imports array (with trailing comma)
-        //   (b) destructured `AppxCoreAdminModule` from the @appxdigital/appx-core import
-        //   (c) the `import { AdminConfig } from './config/admin.config'` line
-        pristineAppModule = pristineAppModule
-            .replace(/AppxCoreAdminModule\.forRoot\([^)]*\),?\s*/g, '')
-            .replace(/AppxCoreAdminModule\s*,\s*/g, '')
-            .replace(/,\s*AppxCoreAdminModule(?=\s*[,}])/g, '')
-            .replace(/import\s*\{[^}]*AdminConfig[^}]*\}\s*from\s*['"]\.\/config\/admin\.config['"];?\s*\n?/g, '');
         fs.writeFileSync(
             path.join(__dirname, 'fixtures', 'scaffold-app', 'src', 'app.module.ts'),
             pristineAppModule,

@@ -454,7 +454,7 @@ async function createNonInteractive(options) {
 }
 
 async function createProject(answers, fileUploadConfigData) {
-    const {projectName, showOutput, backoffice} = answers;
+    const {projectName, showOutput} = answers;
 
     console.log(`Creating project: ${projectName}`);
 
@@ -483,7 +483,7 @@ async function createProject(answers, fileUploadConfigData) {
     }
 
     if (!showOutput) {
-        const phases = backoffice ? 8 : 7;
+        const phases = 7;
         progressBar = new cliProgress.SingleBar(
             {
                 format: `\x1b[36m{bar}\x1b[0m {percentage}% | ETA: {remainingETA}s | {value}/{total}`,

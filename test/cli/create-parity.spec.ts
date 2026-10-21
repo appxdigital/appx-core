@@ -51,7 +51,6 @@ const SKIP_EXACT = new Set([
     // Fixture diverges from raw scaffold by design — enrichments for runtime tests
     'prisma/schema.prisma',                  // fixture adds Tenant/Project/etc.
     'src/config/permissions.config.ts',      // fixture has richer ABAC config
-    'src/config/admin.config.ts',            // fixture exposes more AdminJS resources
 
     // Hand-written by build-fixture.mjs (not from @nestjs/cli/schematics)
     'tsconfig.json',

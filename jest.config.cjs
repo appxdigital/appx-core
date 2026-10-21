@@ -27,15 +27,6 @@ module.exports = {
         // would otherwise break test runs that successfully compile in prod.
         '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.test.json', diagnostics: false }],
     },
-    // The framework eagerly require()s adminjs and @adminjs/prisma at module
-    // load time. Both are pure ESM and jest's VM can't load them (works in
-    // plain Node thanks to require(esm) since 20.19, but jest doesn't honour
-    // it). Map both to local CJS stubs so the framework barrel can be required.
-    // See for the underlying source bug.
-    moduleNameMapper: {
-        '^adminjs$': '<rootDir>/test/mocks/adminjs.cjs',
-        '^@adminjs/prisma/lib/Property$': '<rootDir>/test/mocks/adminjs-prisma-property.cjs',
-    },
     globalSetup: '<rootDir>/test/jest.global-setup.ts',
     globalTeardown: '<rootDir>/test/jest.global-teardown.ts',
     // Deterministic order; keeps the heavy create-parity E2E last so it can't

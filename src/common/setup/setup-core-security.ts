@@ -51,7 +51,7 @@ export interface CoreSecurityOptions {
      * Security headers via Helmet: `Content-Security-Policy`,
      * `X-Content-Type-Options`, `Strict-Transport-Security`, frame-ancestors, etc.
      * Default: enabled with Helmet's defaults. Pass an options object to tune
-     * (e.g. a custom CSP for the AdminJS UI), or `false` to skip.
+     * (e.g. a custom CSP), or `false` to skip.
      */
     helmet?: Record<string, any> | false;
 }

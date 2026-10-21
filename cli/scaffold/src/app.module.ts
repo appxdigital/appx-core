@@ -2,11 +2,10 @@ import {MiddlewareConsumer, Module, NestModule, RequestMethod} from '@nestjs/com
 import {AppController} from './app.controller';
 import {AppService} from './app.service';
 import {ConfigModule} from '@nestjs/config';
-import {AppxCoreAdminModule, AppxCoreModule, AuthModule, coreEnvFilePath, GraphqlModule, PrismaInterceptor, UserPopulationGuard} from '@appxdigital/appx-core';
+import {AppxCoreModule, AuthModule, coreEnvFilePath, GraphqlModule, PrismaInterceptor, UserPopulationGuard} from '@appxdigital/appx-core';
 import {APP_GUARD, APP_INTERCEPTOR} from '@nestjs/core';
 import {RequestContextMiddleware, RequestContextModule} from 'nestjs-request-context'
 import {PermissionsConfig} from './config/permissions.config';
-import {AdminConfig} from './config/admin.config';
 import {PrismaModule} from './prisma/prisma.module';
 
 @Module({
@@ -18,11 +17,10 @@ import {PrismaModule} from './prisma/prisma.module';
             envFilePath: coreEnvFilePath(),
         }),
         // Provides PrismaClient + PrismaService (@Global). Everything that talks
-        // to the database depends on it — AuthModule, the admin module, and every
+        // to the database depends on it — AuthModule and every
         // generated CRUD module — so it must be registered here.
         PrismaModule,
         AppxCoreModule.forRoot(PermissionsConfig),
-        AppxCoreAdminModule.forRoot(AdminConfig, PermissionsConfig),
         RequestContextModule,
         AuthModule.forRoot(),
         // Read-only GraphQL at POST /graphql (Apollo Sandbox on GET). The server
