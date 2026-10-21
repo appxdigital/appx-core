@@ -14,6 +14,43 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.2.0] — 2026-10-21
+
+### Removed
+
+- **The AdminJS backoffice is no longer part of `@appxdigital/appx-core`.** It is now the separate package [`@appxdigital/appx-core-admin`](./admin/README.md), unchanged: same `AppxCoreAdminModule.forRoot(AdminConfig, PermissionsConfig)`, same `/admin`. The library no longer exports `AppxCoreAdminModule` / `AdminConfigType` and no longer installs AdminJS (`@adminjs/*` peers and the `@adminjs/nestjs` dependency are gone). New projects (`appx-core create`) don't include the backoffice.
+
+### Migration
+
+**Projects that use the backoffice** (`AppxCoreAdminModule` in `src/app.module.ts`):
+
+```bash
+npm install @appxdigital/appx-core@0.2.0 @appxdigital/appx-core-admin
+```
+
+In `src/app.module.ts` and `src/config/admin.config.ts`, import `AppxCoreAdminModule` and `AdminConfigType` from `@appxdigital/appx-core-admin` instead of `@appxdigital/appx-core`:
+
+```ts
+import {AppxCoreModule, AuthModule /* … */} from '@appxdigital/appx-core';
+import {AppxCoreAdminModule} from '@appxdigital/appx-core-admin';
+```
+
+```ts
+import {AdminConfigType} from '@appxdigital/appx-core-admin';
+```
+
+Nothing else changes (config, `/admin`, login).
+
+**Projects that don't use it:**
+
+```bash
+npm install @appxdigital/appx-core@0.2.0
+```
+
+Remove from `src/app.module.ts` the `AppxCoreAdminModule.forRoot(AdminConfig, PermissionsConfig),` line, `AppxCoreAdminModule` from the `@appxdigital/appx-core` import and the `import {AdminConfig} from './config/admin.config';` line. Delete `src/config/admin.config.ts` and `src/backoffice/`. If `package.json` lists `adminjs` or `@adminjs/*` packages directly, remove them.
+
+---
+
 ## [0.1.132] — 2026-10-19
 
 ### Added

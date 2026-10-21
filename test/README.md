@@ -59,9 +59,6 @@ test/
 ├── jest.global-teardown.ts         # stops the container
 ├── setup/
 │   └── build-fixture.mjs           # one-time scaffold materialization (run if cli/scaffold/ changes)
-├── mocks/
-│   ├── adminjs.cjs                 # CJS stub for ESM-only adminjs
-│   └── adminjs-prisma-property.cjs
 ├── fixtures/
 │   ├── prisma/schema.prisma.template     # proxy harness schema (rendered per run)
 │   ├── permissions.ts                    # PermissionsConfig fixture for proxy ABAC tests
@@ -69,7 +66,7 @@ test/
 │   └── scaffold-app/                     # ⭐ real consumer project (committed)
 │       ├── src/
 │       │   ├── main.ts, app.module.ts, app.controller.ts, app.service.ts
-│       │   ├── config/{permissions,admin}.config.ts
+│       │   ├── config/permissions.config.ts
 │       │   └── prisma/prisma.module.ts
 │       ├── prisma/schema.prisma
 │       ├── package.json                  # @appxdigital/appx-core → file:../../..
@@ -81,6 +78,7 @@ test/
 │   ├── fixture-app.ts              # buildFramework, ensureFixtureInstalled, writeFixtureEnv, push + generate + build
 │   └── fixture-bootstrap.ts        # bootFixture(): boot the fixture's AppModule in-process for supertest
 ├── prisma-proxy.spec.ts            # ABAC engine tests — 14 cases
+├── admin/                          # AdminJS backoffice (admin/ package) e2e — plain-Node subprocess (helpers/admin-boot.cjs)
 ├── http/                           # HTTP-level regression tests against the booted fixture
 │   ├── register-validation.spec.ts
 │   ├── generated-crud-validation.spec.ts

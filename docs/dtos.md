@@ -93,7 +93,7 @@ model Task {
 
 ### Per-role differences
 
-There is **no per-role field strip** — a field is either writable through the generated DTO or it isn't. If one role may write a field and another may not (e.g. only `ADMIN` sets `role`), the field is a **privileged** one: mark it `/// @NoWrite` so generic CRUD never accepts it from anyone, and set it out-of-band — a dedicated admin endpoint/service (with its own guard), AdminJS, or a direct data-access call. Trying to express "writable for role A, not role B" through one shared CRUD DTO isn't possible; model it as a separate endpoint instead.
+There is **no per-role field strip** — a field is either writable through the generated DTO or it isn't. If one role may write a field and another may not (e.g. only `ADMIN` sets `role`), the field is a **privileged** one: mark it `/// @NoWrite` so generic CRUD never accepts it from anyone, and set it out-of-band — a dedicated admin endpoint/service (with its own guard), the admin backoffice, or a direct data-access call. Trying to express "writable for role A, not role B" through one shared CRUD DTO isn't possible; model it as a separate endpoint instead.
 
 > **Migrating off `restrictedFields`.** Earlier versions had a `restrictedFields: ['x']` option on a permission action that stripped keys from the body per role. It has been **removed**. Replace it: for a field no client should write, use `/// @NoWrite` (or `/// @Role(none)`); for one endpoint, use `OmitType`; for a value the server owns (like an owner id), use `set` on the permission rule; for a genuinely per-role write difference, use a dedicated endpoint as above.
 

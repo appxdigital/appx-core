@@ -6,7 +6,7 @@ All notable changes to `@appxdigital/appx-core-admin` are documented here.
 
 ### Added
 
-- **The AdminJS backoffice as its own package**, moved from `@appxdigital/appx-core` unchanged: `AppxCoreAdminModule.forRoot(AdminConfig, PermissionsConfig)` and `AdminConfigType`. Works with `@appxdigital/appx-core` 0.1.132 and later.
+- **The AdminJS backoffice as its own package**, moved from `@appxdigital/appx-core` unchanged: `AppxCoreAdminModule.forRoot(AdminConfig, PermissionsConfig)` and `AdminConfigType`. Works with `@appxdigital/appx-core` 0.1.132 and later; required from 0.2.0, which no longer includes the backoffice.
 
 ### Migration
 

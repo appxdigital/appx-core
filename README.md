@@ -8,7 +8,7 @@
 [![Release](https://github.com/appxdigital/appx-core/actions/workflows/release.yml/badge.svg)](https://github.com/appxdigital/appx-core/actions/workflows/release.yml)
 [![Release CLI](https://github.com/appxdigital/appx-core/actions/workflows/release-cli.yml/badge.svg)](https://github.com/appxdigital/appx-core/actions/workflows/release-cli.yml)
 
-**AppX Core** is a production-oriented backend foundation that accelerates the delivery of secure, data-access-controlled APIs with an integrated admin backoffice. It scaffolds a native **NestJS** application and extends it with opinionated building blocks for authentication, authorization (ABAC-first), CRUD acceleration, and administration through **AdminJS**.
+**AppX Core** is a production-oriented backend foundation that accelerates the delivery of secure, data-access-controlled APIs. It scaffolds a native **NestJS** application and extends it with opinionated building blocks for authentication, authorization (ABAC-first) and CRUD acceleration.
 
 Built and maintained by **AppX** (appx-digital.com).
 
@@ -66,7 +66,6 @@ AppX Core puts **security and data-access control first**, while keeping develop
 - Define data in **Prisma** once.
 - Generate a robust baseline for CRUD and service structure.
 - Enforce permissions where it matters: **at the data layer** (ABAC).
-- Operate and administrate through a standard **AdminJS** backoffice.
 
 ---
 
@@ -75,7 +74,6 @@ AppX Core puts **security and data-access control first**, while keeping develop
 - **NestJS-native scaffold** (standard structure, editable modules)
 - **Prisma ORM integration** with opinionated permissions enforcement
 - **ABAC-first permission filtering** (attribute-based access control)
-- **AdminJS backoffice** exposed at `/admin` with configurable access and models
 - **Authentication out-of-the-box**
   - Cookie/session auth
   - JWT auth (recommended)
@@ -104,7 +102,6 @@ AppX Core is designed as a **base layer** on top of NestJS:
   - authentication modules
   - permissions system (ABAC)
   - generation pipeline based on Prisma schema
-  - AdminJS integration
 
 ---
 
@@ -275,7 +272,6 @@ npm run start:dev
 
 ### What you get out of the box
 
-- Admin backoffice at **`/admin`** (after you include models in `src/config/admin.config.ts`)
 - Auth endpoints with no prefix:
   - `POST /auth/register`
   - `POST /auth/login`
@@ -298,13 +294,11 @@ AppX Core generates a standard NestJS structure. You will typically see:
 Most customization happens in:
 
 - `src/config/permissions.config.ts` – granular ABAC rules
-- `src/config/admin.config.ts` – AdminJS configuration and model registration
 - `prisma/schema.prisma` – your data model source of truth
 
 ### Admin Backoffice
 
-- AdminJS is exposed at **`/admin`**
-- Models must be included/configured in `admin.config.ts` to appear in the UI.
+An AdminJS backoffice is available as a separate package, [`@appxdigital/appx-core-admin`](./admin/README.md). Its lists and edits go through the same permissions.
 
 ### Authentication
 
@@ -459,8 +453,6 @@ For each generated model/controller (subject to permissions):
 - `POST /[model_name]`
 - `PUT /[model_name]/:id`
 - `DELETE /[model_name]/:id`
-
-To show a model in the admin backoffice, register it in `src/config/admin.config.ts`.
 
 ### Request validation (generated DTOs)
 
@@ -632,9 +624,6 @@ Every new project ships a ready-to-run suite: `npm test` starts a disposable dat
 ---
 
 ## FAQ
-
-**Are CRUD endpoints only for AdminJS?**  
-No. They can be used for any API consumer. Permissions are enforced consistently.
 
 **Do I need to treat generated modules as read-only?**  
 No. Generated NestJS modules are **editable** and intended to be extended.

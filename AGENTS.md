@@ -8,7 +8,7 @@ This file orients AI coding agents (Claude, Cursor, Aider, Copilot Workspaces, e
 
 ## 1. What this package is, in one paragraph
 
-`@appxdigital/appx-core` is a NestJS-on-Prisma framework that bakes **attribute-based access control (ABAC)** into the data layer via a Prisma client proxy, ships an **AdminJS backoffice**, and exposes a CLI (`@appxdigital/appx-core-cli`) that **scaffolds** a NestJS project and **generates** CRUD modules from a Prisma schema. The selling proposition is that downstream apps stop hand-rolling auth/permissions/admin plumbing and instead declare row-level and field-level rules in a single `permissions.config.ts`, which is then enforced automatically on every Prisma call.
+`@appxdigital/appx-core` is a NestJS-on-Prisma framework that bakes **attribute-based access control (ABAC)** into the data layer via a Prisma client proxy and exposes a CLI (`@appxdigital/appx-core-cli`) that **scaffolds** a NestJS project and **generates** CRUD modules from a Prisma schema. The selling proposition is that downstream apps stop hand-rolling auth/permissions plumbing and instead declare row-level and field-level rules in a single `permissions.config.ts`, which is then enforced automatically on every Prisma call.
 
 ---
 
@@ -27,8 +27,6 @@ appx-core-package/
 │   │   ├── user/                     # Default User model wiring
 │   │   ├── file/                     # File upload module (S3 / GCS / local)
 │   │   └── common.module.ts          # Re-exports RbacGuard + UserPopulationGuard
-│   ├── backoffice/
-│   │   └── appx-core-admin.module.ts # AdminJS @ /admin (dynamic ESM imports)
 │   ├── graphql/
 │   │   ├── graphql.module.ts         # Apollo driver
 │   │   └── generic.resolver.ts       # Namespaced read API (find / get / count)
@@ -54,7 +52,7 @@ appx-core-package/
 │   ├── scaffold/                     # Template tree copied by `create`
 │   │   ├── .env.template             # {{KEY}} placeholders, replaced via regex
 │   │   ├── prisma/schema.prisma.template
-│   │   └── src/                      # main.ts, app.module.ts, config/, prisma/, backoffice/
+│   │   └── src/                      # main.ts, app.module.ts, config/, prisma/
 │   └── utils/fileUploadConfig.js     # Interactive prompts for `setup:fileupload`
 ├── dist/                             # Build output (gitignored — npm pack ships this)
 └── README.md                         # User-facing docs
@@ -115,7 +113,7 @@ await this.prisma.user.findFirst(
 );
 ```
 
-Used by `AuthService`, `SessionSerializer`, `CorePrismaSessionStore`, and AdminJS. **These bypasses are a footgun** — they are how authentication itself works (you can't look up the user *before* you know who the user is) but they also disable all ABAC. Use them sparingly and never in user-facing service code.
+Used by `AuthService`, `SessionSerializer`, `CorePrismaSessionStore`, and the admin package. **These bypasses are a footgun** — they are how authentication itself works (you can't look up the user *before* you know who the user is) but they also disable all ABAC. Use them sparingly and never in user-facing service code.
 
 ### 3.5 Action fallback chain
 
@@ -209,7 +207,7 @@ These are intentional or known limitations and should be respected when changing
 3. **GraphQL is read-only by design.** The namespaced per-model API (`<model> { find get count }`, built by `CoreGraphqlResolver` in `src/graphql/generic.resolver.ts`) exposes no mutations; writes go through REST.
 4. **`RbacGuard` only checks existence**, not conditions. The proxy enforces conditions on reads/updates/deletes. There is **no defence-in-depth at the controller layer** — if you bypass the proxy (e.g., raw SQL, direct client access), you bypass ABAC entirely.
 5. **Permission config is keyed by role string, with no type safety.** `DefaultRole` enum exists but isn't enforced; configs use bare strings like `'ADMIN'` / `'USER'` / `'GUEST'`. Typos in a role string silently fall through to "no permissions defined" → 403.
-6. **AdminJS uses its own auth path** (`appx-core-admin.module.ts:141-176`) and globally exposes the `User` model during login via `withExposedModels(['User'])`. It does **not** reuse main auth sessions.
+6. **The admin package (`admin/`, AdminJS) uses its own login** and exposes the `User` model during it via `withExposedModels(['User'])`. It shares the app session from `main.ts` (the admin user is stored on it) and needs that session middleware to run before it.
 7. **Session cookies** are built via `buildCoreSessionOptions` in the scaffold's `main.ts` (`httpOnly`, `secure` in production, `sameSite`, `maxAge` from TTL). A session secret is required — the helper throws if it is missing or `< 32` chars.
 8. **CORS** is read from `CORS_ORIGIN` (via `setupCoreSecurity`) in the scaffold; set it to your real origin in production. `origin: '*'` combined with `credentials: true` throws at boot.
 9. **The global `ValidationPipe` whitelist** is applied by `setupCoreSecurity` (`{ transform, whitelist, forbidNonWhitelisted }`). Combined with the generated per-model DTOs, unknown body fields are rejected (`400`). Keep DTO classes declaring every accepted field with class-validator decorators.
