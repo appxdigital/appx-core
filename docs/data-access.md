@@ -113,7 +113,19 @@ Framework flows that must write without a permission (registration, sessions, to
 
 ## Transactions
 
-Set `USE_TRANSACTION=true` (env) to wrap each request handler in a Prisma `$transaction`; per-endpoint control via the transaction metadata. The framework commits the transaction **before** sending the HTTP response, so a read-after-write in a dependent request can't miss the write. Inside a transaction the proxy uses the request's transaction client automatically.
+Set `USE_TRANSACTION=true` (env) to wrap each request handler in a Prisma `$transaction`. The framework commits the transaction **before** sending the HTTP response, so a read-after-write in a dependent request can't miss the write. Inside a transaction the proxy uses the request's transaction client automatically.
+
+To run one endpoint without a transaction while `USE_TRANSACTION=true`, mark it `@UseTransaction(false)`:
+
+```ts
+import {UseTransaction} from '@appxdigital/appx-core';
+
+@Post('import')
+@UseTransaction(false)
+import() { /* each write commits on its own */ }
+```
+
+The endpoint runs on the normal client: each write commits immediately and a later error does not roll back earlier writes. `@UseTransaction()` does the reverse — wraps that endpoint in a transaction while `USE_TRANSACTION=false`. It applies to the method it decorates, not to a whole controller.
 
 ---
 

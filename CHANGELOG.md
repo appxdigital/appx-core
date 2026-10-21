@@ -14,6 +14,15 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.2.1] — 2026-10-21
+
+### Added
+- `UseTransaction` is exported from the package. `@UseTransaction(false)` on an endpoint runs it without a transaction when `USE_TRANSACTION=true`; `@UseTransaction()` wraps one endpoint in a transaction when it is `false`. Documented in `docs/data-access.md` (Transactions).
+
+Drop-in upgrade — no migration needed.
+
+---
+
 ## [0.2.0] — 2026-10-21
 
 ### Removed
