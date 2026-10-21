@@ -9,6 +9,8 @@
  * never returned, the ADMIN-only `secretApiKey` is).
  */
 import { ChildProcess, spawn } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import request from 'supertest';
 import * as argon2 from 'argon2';
@@ -18,6 +20,8 @@ describe('AdminJS backoffice', () => {
     let child: ChildProcess;
     let base: string;
     let output = '';
+    // AdminJS writes its component bundle entry here; kept out of the fixture.
+    const adminTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'appx-admin-'));
 
     const withDb = async <T,>(fn: (c: any) => Promise<T>): Promise<T> => {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -61,6 +65,7 @@ describe('AdminJS backoffice', () => {
                 // The admin package's `@appxdigital/appx-core` peer: the fixture's link to this repo.
                 NODE_PATH: path.join(FIXTURE_DIR, 'node_modules'),
                 ADMIN_JS_SKIP_BUNDLE: 'true',
+                ADMIN_JS_TMP_DIR: adminTmp,
                 SESSION_SECRET: 'admin-test-secret-admin-test-secret-0123',
                 SESSION_COOKIE_NAME: 'admin_test',
             },
@@ -79,6 +84,7 @@ describe('AdminJS backoffice', () => {
 
     afterAll(async () => {
         child?.kill();
+        fs.rmSync(adminTmp, { recursive: true, force: true });
         await withDb(cleanDb);
     });
 
