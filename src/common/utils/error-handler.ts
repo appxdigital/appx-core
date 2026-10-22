@@ -1,5 +1,4 @@
 import {BadRequestException, ConflictException, ForbiddenException, HttpException, InternalServerErrorException, Logger, NotFoundException} from '@nestjs/common';
-import {MulterError} from 'multer';
 
 const logger = new Logger();
 
@@ -8,8 +7,8 @@ export function handleError(error: any): never {
     if (error instanceof HttpException)
         throw error;
 
-    // Multer errors
-    if (error instanceof MulterError) {
+    // Multer errors (matched by name: multer is not a dependency of the package)
+    if (error?.name === 'MulterError') {
         switch (error.code) {
             case 'LIMIT_FILE_SIZE':
                 throw new BadRequestException('Uploaded file exceeds the maximum allowed size.');

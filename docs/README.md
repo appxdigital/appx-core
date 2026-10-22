@@ -11,7 +11,6 @@ Authoritative usage documentation for `@appxdigital/appx-core`. **This folder is
 - **[authentication.md](./authentication.md)** — the built-in `/auth` surface, and **how to override framework internals** (extend the exported `AuthController`/`AuthService`/`RegisterDto`/Passport strategies and register your own at the same prefix via `AuthModule.forRoot({ controller: false })`) — e.g. adding `name` to registration.
 - **[graphql.md](./graphql.md)** — the **read-only** GraphQL API generated from your schema: queries, nested selections, and how ABAC filters them.
 - **[testing.md](./testing.md)** — the test suite every new project ships with: `npm test` on a throwaway DB container, the HTTP harness (`api(actor)`, `registerActor`, raw `prisma`), and the route-sweep backstop.
-- **[storage.md](./storage.md)** — file uploads & object storage: the `setup:fileupload` wizard, per-endpoint size/MIME/role rules, and the S3 / GCS / local providers.
 - **[limitations.md](./limitations.md)** — **known limitations and features that are NOT ready for use** (e.g. `aggregate`). Read this before relying on any method not covered in the guides above.
 
 ## The one-paragraph mental model

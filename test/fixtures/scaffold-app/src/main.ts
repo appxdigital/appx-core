@@ -9,7 +9,6 @@ import {
   PrismaService,
   setupCoreSecurity,
 } from '@appxdigital/appx-core';
-import morgan from 'morgan';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,9 +20,6 @@ async function bootstrap() {
   const cookiename = configService.get<string>('SESSION_COOKIE_NAME');
   const corsOrigin =
     configService.get<string>('CORS_ORIGIN') ?? 'http://localhost:3000';
-
-  // Application request logging
-  app.use(morgan('[:date[iso]] :remote-addr :method :url :status :response-time ms - :res[content-length]'));
 
   app.use(
     session(

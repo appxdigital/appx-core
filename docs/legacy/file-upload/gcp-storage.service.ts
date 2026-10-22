@@ -1,6 +1,6 @@
 import {Injectable, Inject} from '@nestjs/common';
-import {Storage} from '@google-cloud/storage';
-import {StorageService} from '../interfaces/storage-service.interface';
+import type {Storage} from '@google-cloud/storage';
+import {StorageService} from './storage-service.interface';
 import {ConfigService} from '@nestjs/config';
 import * as path from 'path';
 
@@ -18,6 +18,9 @@ export class GcpStorageService implements StorageService {
             throw new Error('Missing GCP configuration values.');
         }
 
+        // Lazy require: @google-cloud/storage is installed by the project, only for the gcp provider.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const {Storage} = require('@google-cloud/storage');
         this.storage = new Storage({
             projectId,
             keyFilename: path.resolve(keyFilePath),

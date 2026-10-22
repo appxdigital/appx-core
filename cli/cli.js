@@ -21,7 +21,6 @@ import pg from "pg";
 import mysql from "mysql2/promise";
 
 // Utils and data
-import {gatherFileUploadSettings, insertFileUploadConfiguration} from './utils/fileUploadConfig.js';
 import autoUpdate from './auto-update.cjs';
 import packageJson from './package.json' with {type: 'json'};
 import coreVersionInfo from './core-version.json' with {type: 'json'};
@@ -73,8 +72,7 @@ const phaseDurations = {
     createPrismaMigration: 5,
     generateCoreModels: 10,
     gitInit: 1,
-    migrateDatabase: 5,
-    fileUploadSetup: 5
+    migrateDatabase: 5
 };
 
 const calculateTotalETA = () => {
@@ -171,8 +169,9 @@ generateCommand
         coreGenerateModels(names, options);
     });
 
-program.command('setup:fileupload')
-    .description('Add file upload configuration to the project')
+// Deprecated: kept for existing projects, hidden from --help.
+program.command('setup:fileupload', {hidden: true})
+    .description('Add file upload configuration to the project (deprecated)')
     .action(() => {
         // run file inside node_modules/appx-core/dist/config/setup-fileupload.js
         const generatePath = path.join(process.cwd(), 'node_modules', '@appxdigital/appx-core', 'dist', 'config', 'setup-fileupload.js');
@@ -363,7 +362,6 @@ async function promptDbUntilValid() {
 }
 
 async function promptUser() {
-    let fileUploadConfigData = {};
     try {
         const baseAnswers = await inquirer.prompt([
             {
@@ -383,22 +381,12 @@ async function promptUser() {
                 message: "Show installation output?",
                 default: false,
             },
-            {
-                type: "confirm",
-                name: "configureFileUpload",
-                message: "Configure file upload?",
-                default: false,
-            },
         ]);
 
         const answers = {...baseAnswers, ...dbAnswers, ...rest};
 
-        if (answers.configureFileUpload) {
-            fileUploadConfigData = await gatherFileUploadSettings();
-        }
-
         remainingETA = calculateTotalETA();
-        createProject(answers, fileUploadConfigData);
+        createProject(answers);
     } catch (error) {
         console.error('Error prompting user:', error);
     }
@@ -409,8 +397,7 @@ async function promptUser() {
  * wizard answer has a flag; anything not given takes the wizard's default. No
  * inquirer prompt is ever opened, so a missing value can never hang the run.
  * The database check still runs, but failure exits with the reason instead of
- * looping back into a prompt. File upload isn't configured on this path — run
- * `appx-core setup:fileupload` inside the project afterwards.
+ * looping back into a prompt.
  */
 async function createNonInteractive(options) {
     const dbProvider = options.dbProvider ?? 'mysql';
@@ -433,7 +420,6 @@ async function createNonInteractive(options) {
         dbPassword: options.dbPassword ?? '',
         dbName: options.dbName ?? 'generic',
         showOutput: !!options.showOutput,
-        configureFileUpload: false,
     };
 
     // Same gate as the wizard (empty, reachable database) — but fail fast with
@@ -450,10 +436,10 @@ async function createNonInteractive(options) {
     }
 
     remainingETA = calculateTotalETA();
-    await createProject(answers, {});
+    await createProject(answers);
 }
 
-async function createProject(answers, fileUploadConfigData) {
+async function createProject(answers) {
     const {projectName, showOutput} = answers;
 
     console.log(`Creating project: ${projectName}`);
@@ -556,11 +542,6 @@ async function createProject(answers, fileUploadConfigData) {
         coreGenerate(answers?.showOutput);
         incrementProgress(answers?.showOutput, "generateCoreModels");
 
-        if (fileUploadConfigData.provider) {
-            await insertFileUploadConfiguration(fileUploadConfigData, projectPath);
-            incrementProgress(showOutput, "fileUploadSetup");
-        }
-
         // Format code
         executeCommand('npx --yes prettier --write .', answers?.showOutput);
 
@@ -632,8 +613,7 @@ function createPackageJson(projectPath, projectName) {
             "start:prod": "cross-env NODE_ENV=production node dist/main",
             "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
             "test": "vitest run",
-            "test:watch": "vitest",
-            "db-pull": "npm run db-pull --prefix ./node_modules/appx-core"
+            "test:watch": "vitest"
         },
         dependencies: {
             "@appxdigital/appx-core": coreDependencySpec(),

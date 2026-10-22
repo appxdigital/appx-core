@@ -18,14 +18,13 @@ This file orients AI coding agents (Claude, Cursor, Aider, Copilot Workspaces, e
 appx-core-package/
 ├── src/                              # The published framework (compiled to dist/)
 │   ├── index.ts                      # Public package surface — only export from here
-│   ├── appx-core.module.ts           # AppxCoreModule.forRoot(permissionsConfig, fileUploadConfig)
+│   ├── appx-core.module.ts           # AppxCoreModule.forRoot(permissionsConfig)
 │   ├── prisma/
 │   │   └── prisma.service.ts         # ⭐ THE proxy. ABAC engine lives here.
 │   ├── modules/
 │   │   ├── core/                     # CoreController / CoreService — generated CRUD extends these
 │   │   ├── auth/                     # Cookie + JWT auth, session store, strategies
 │   │   ├── user/                     # Default User model wiring
-│   │   ├── file/                     # File upload module (S3 / GCS / local)
 │   │   └── common.module.ts          # Re-exports RbacGuard + UserPopulationGuard
 │   ├── graphql/
 │   │   ├── graphql.module.ts         # Apollo driver
@@ -35,24 +34,21 @@ appx-core-package/
 │   │   ├── generate-modules.ts
 │   │   ├── generate-controllers.ts
 │   │   ├── generate-services.ts
-│   │   ├── generate-resolvers.ts
-│   │   └── setup-fileupload.ts
+│   │   └── generate-resolvers.ts
 │   ├── common/
 │   │   ├── decorators/               # @Permission, @GuardMethod, @UseTransaction, @AuthField
 │   │   ├── guards/                   # RbacGuard, RolesGuard, UserPopulationGuard
 │   │   ├── interceptors/             # PrismaInterceptor (sets CorePrismaContext + tx)
 │   │   ├── config/                   # PermissionsConfigType, PermissionPlaceholder, etc.
-│   │   ├── providers/                # AWS / GCP / local storage backends
 │   │   ├── enums/role.enum.ts        # DefaultRole (not currently enforced as a type)
 │   │   └── utils/                    # context-transformer, error-handler
 │   └── tasks/session-cleanup.service.ts
 ├── cli/
-│   ├── cli.js                        # Commander entry: `create`, `generate`, `setup:fileupload`
+│   ├── cli.js                        # Commander entry: `create`, `generate`
 │   ├── scaffold/                     # Template tree copied by `create`
 │   │   ├── .env.template             # {{KEY}} placeholders, replaced via regex
 │   │   ├── prisma/schema.prisma.template
 │   │   └── src/                      # main.ts, app.module.ts, config/, prisma/
-│   └── utils/fileUploadConfig.js     # Interactive prompts for `setup:fileupload`
 ├── dist/                             # Build output (gitignored — npm pack ships this)
 └── README.md                         # User-facing docs
 ```
@@ -149,13 +145,12 @@ Password hashing: **argon2**. Refresh tokens are stored in `UserRefreshToken` an
 
 ## 5. CLI (`cli/`)
 
-Three commands exposed by `cli/cli.js`:
+Commands exposed by `cli/cli.js`:
 
 | Command | What it does |
 |---|---|
 | `appx-core create` | Interactive prompt → copies `cli/scaffold/` to target dir, replaces `{{KEY}}` placeholders, runs `npm install`. Generates `JWT_SECRET` / `SESSION_SECRET` via `crypto.randomBytes(32).toString('hex')` (not the README's `"change-me"` literal — those are illustrative). Holds the scaffold's test tooling below vite 8 (`vitest ~4.0.18`, `unplugin-swc 1.5.10`) so npm 10 can resolve it; the framework depends on `ts-morph ^25` and `@opentelemetry/api ^1.9` so npm 10 writes lockfiles its own `npm ci` accepts (CI job `create on npm 10` guards both). Installs `@appxdigital/appx-core` from the public registry; `APPX_CORE_SPEC` (test hook) overrides the spec so the CLI E2Es install the local build. |
 | `appx-core generate` | Delegates to `dist/config/generate-all.js`. Pipeline: `prisma generate` → `generate-modules.ts` → `generate-resolvers.ts` → `generate-services.ts` → `generate-dtos.ts` → `generate-controllers.ts`. Driven by `src/generated/` (output of `prisma-nestjs-graphql`) + the Prisma DMMF (for DTO field metadata). |
-| `appx-core setup:fileupload` | Interactive prompts in `cli/utils/fileUploadConfig.js`. Appends to `.env`, writes `src/config/file-upload.config.ts`. |
 
 ### `generate` details
 
@@ -176,9 +171,8 @@ Three commands exposed by `cli/cli.js`:
 
 | Task | Command |
 |---|---|
-| Build | `npm run build` (just `tsc`) |
-| Publish (manual) | `npm run npm:publish` (rimraf → build → `npm publish --access=public`) |
-| Pull schema from a running DB | `npm run db-pull` |
+| Build | `npm run build` (`tsc`, then `scripts/copy-frozen.mjs` copies the frozen compiled `.js`/`.d.ts` files under `src/` to `dist/`; never edit those files) |
+| Publish | `v*` tag → `release.yml` (see `RELEASING.md`) |
 | Run tests | `npm test` (see `test/README.md` once the suite is in place) |
 
 The package itself **has no runtime** — it's a library + a CLI. To test changes, scaffold a consumer app via the CLI (or use `test/fixtures/`) and `npm link` this package in.

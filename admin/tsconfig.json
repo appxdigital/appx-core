@@ -1,13 +1,18 @@
 {
-    "extends": "../tsconfig.json",
     "compilerOptions": {
+        "target": "ES2020",
+        "module": "CommonJS",
         "outDir": "./dist",
         "rootDir": "./src",
-        "baseUrl": ".",
-        // Built inside this repo: resolve the core peer to the core build.
-        "paths": {
-            "@appxdigital/appx-core": ["../dist/index.d.ts"]
-        }
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "forceConsistentCasingInFileNames": true,
+        "moduleResolution": "node",
+        "declaration": true,
+        "declarationMap": true
     },
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]

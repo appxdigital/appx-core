@@ -1,5 +1,5 @@
 import {Injectable, BadRequestException} from '@nestjs/common';
-import {StorageService} from '../interfaces/storage-service.interface';
+import {StorageService} from './storage-service.interface';
 import * as fs from 'fs';
 import * as path from 'path';
 

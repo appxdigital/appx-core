@@ -14,6 +14,48 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.2.2] — 2026-10-22
+
+### Deprecated
+
+- **File upload** (`AppxCoreModule.forRoot(permissions, fileUploadConfig)`, `FileUploadService`, the `/upload/*` endpoints, `appx-core setup:fileupload`) is kept for existing projects and is no longer part of new ones: `appx-core create` no longer offers it, `setup:fileupload` is hidden from `--help`, and the exports are marked `@deprecated`. Behaviour is unchanged. It is frozen — it receives no further changes. To change it, move it into your project: the TypeScript source and the steps are in [`docs/storage.md`](./docs/storage.md#moving-file-upload-into-your-project).
+
+### Changed
+
+- The storage packages (`@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`, `@aws-sdk/types`, `@google-cloud/storage`, `multer`) are **no longer peer dependencies** of the package; they are loaded only when file upload is used. Projects that don't use file upload no longer install them.
+- Dependencies the framework doesn't use are removed: `morgan` (used only by the project's own `main.ts`; new projects no longer include request logging), `prisma-case-format` and `@opentelemetry/api` (only for the `db-pull` script, which never worked in projects), `@types/bcrypt`, and the duplicate `express` entry (it stays a peer dependency).
+
+### Removed
+
+- The `db-pull` script, from the package and from new projects. In existing projects it points at a path that doesn't exist; use `npx prisma db pull`.
+
+### Migration
+
+Every project — `main.ts` imports `morgan`, which no longer comes with the framework. Either keep request logging:
+
+```bash
+npm i morgan@^1.10.1
+```
+
+or delete the `import morgan from 'morgan';` line and the `app.use(morgan(...))` call from `src/main.ts`.
+
+Optionally delete the `"db-pull"` line from the project's `package.json` scripts.
+
+File upload — projects that **don't** use it: nothing more to do.
+
+Projects that **do** (`fileUploadConfig` passed to `AppxCoreModule.forRoot`, or `FileUploadService` injected) — add the packages for your provider to the project's own dependencies, or they are removed on the next install:
+
+```bash
+# aws
+npm i multer@~1.4.5-lts.1 @aws-sdk/client-s3@~3.850.0
+# gcp
+npm i multer@~1.4.5-lts.1 @google-cloud/storage@~7.14.0
+# local
+npm i multer@~1.4.5-lts.1
+```
+
+---
+
 ## [0.2.1] — 2026-10-21
 
 ### Added

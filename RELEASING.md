@@ -1,15 +1,13 @@
 # Releasing
 
-This repo publishes **three independent packages**, each versioned on its own:
+This repo publishes **two independent packages**, each versioned on its own:
 
 - **`@appxdigital/appx-core`** — the runtime library (root `package.json`),
   released via **`v*`** tags (`release.yml`).
 - **`@appxdigital/appx-core-cli`** — the `appx-core` CLI (`cli/package.json`),
   released via **`cli-v*`** tags (`release-cli.yml`).
-- **`@appxdigital/appx-core-admin`** — the AdminJS backoffice (`admin/package.json`),
-  released via **`admin-v*`** tags (`release-admin.yml`).
 
-All follow the same posture: publishing is deliberate — **it only happens when
+Both follow the same posture: publishing is deliberate — **it only happens when
 you push a git tag** — and production (`latest`) pauses for a human approval
 before it goes live.
 
@@ -31,8 +29,6 @@ CLI (`cli-v*` tags) — identical channels for `@appxdigital/appx-core-cli`:
 | `cli-v1.2.3-beta.N`  | `beta`       | `…/appx-core-cli@beta`          | no              |
 | `cli-v1.2.3`         | `latest`     | `…/appx-core-cli` (default)     | **yes** — approval |
 
-Admin (`admin-v*` tags) — identical channels for `@appxdigital/appx-core-admin`.
-
 Prereleases are excluded from `^1.2.x` range resolution, so a project on a caret
 range never pulls one by accident — testers opt in via the tag or an exact
 version. Merging to `main` **never** publishes; it only runs CI (library build +
@@ -50,16 +46,10 @@ tests on mysql and postgres, plus a CLI smoke check).
 ## One-time setup (before the first publish)
 
 1. **npm Trusted Publisher (OIDC) — one per package.** On npmjs.com → the
-   package → *Settings* → *Trusted Publisher* → GitHub Actions. Add **three**,
-   all owner `appxdigital`, repo `appx-core`:
+   package → *Settings* → *Trusted Publisher* → GitHub Actions. Add **two**,
+   both owner `appxdigital`, repo `appx-core`:
    - `@appxdigital/appx-core` → workflow `release.yml`
    - `@appxdigital/appx-core-cli` → workflow `release-cli.yml`
-   - `@appxdigital/appx-core-admin` → workflow `release-admin.yml`
-
-   npm only offers this setting once the package exists, so a new package's
-   first version is published by hand from its directory (after
-   `npm run build && npm run build:admin` for the admin package):
-   `npm publish --access public`.
 
    This lets CI mint a short-lived publish token per run — **no `NPM_TOKEN`
    secret is stored anywhere**, and every publish carries supply-chain
@@ -86,8 +76,6 @@ There are two per package — a **test build** and a **production release**:
 | `npm run release:production`    | promote library to everyone           | `vX.Y.Z`        | `latest` (gated)  |
 | `npm run release:cli:beta`      | CLI test build (`…-beta.N`)           | `cli-v…-beta.N` | `beta` channel    |
 | `npm run release:cli:production`| promote CLI to everyone               | `cli-vX.Y.Z`    | `latest` (gated)  |
-| `npm run release:admin:beta`    | admin test build (`…-beta.N`)         | `admin-v…-beta.N` | `beta` channel  |
-| `npm run release:admin:production` | promote admin to everyone          | `admin-vX.Y.Z`  | `latest` (gated)  |
 
 `release:beta` publishes only to people who opt in with `@beta`; `release:production`
 is what everyone gets by default, and it pauses for your approval before going
@@ -173,7 +161,7 @@ git push origin main --follow-tags
 
 ## Manual fallback
 
-If CI is unavailable, you can still publish by hand: `rimraf dist && npm run
+If CI is unavailable, you can still publish by hand: `rm -rf dist && npm run
 build && npm publish --tag <dist-tag> --access public` for the library, and
 `cd cli && npm publish --tag <dist-tag> --access public` for the CLI. This
 bypasses the tests, the approval gate, and provenance, so prefer the tag-driven

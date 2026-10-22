@@ -1,5 +1,9 @@
 # File Uploads & Object Storage
 
+> **Deprecated and frozen.** File upload is kept so existing projects keep working; it is no longer part of new projects and receives no further changes. It needs the storage packages installed in your project: `npm i multer` plus `@aws-sdk/client-s3` (`aws`) or `@google-cloud/storage` (`gcp`).
+>
+> To change it, or if a future upgrade breaks it, move it into your project — see [Moving file upload into your project](#moving-file-upload-into-your-project).
+
 Accept file uploads over HTTP and store them in Amazon S3, Google Cloud Storage, or the local filesystem. One setup command wires the module; each upload endpoint declares its own size limit, MIME allowlist, and role access.
 
 ---
@@ -87,3 +91,30 @@ async importReport(file: Express.Multer.File) {
     // stored: the provider result (see Response above)
 }
 ```
+
+---
+
+## Moving file upload into your project
+
+The TypeScript source is in [`docs/legacy/file-upload/`](./legacy/file-upload/). Your copy works the same and is yours to change.
+
+1. Copy the folder to `src/file-upload/` in your project.
+2. Install the packages for your provider: `npm i multer` plus `@aws-sdk/client-s3` (`aws`) or `@google-cloud/storage` (`gcp`); `npm i -D @types/multer`.
+3. In `src/app.module.ts`, register the module yourself and stop passing the config to the framework:
+
+```ts
+import {FileUploadModule} from './file-upload';
+import {fileUploadConfig} from './config/file-upload.config';
+
+@Module({
+    imports: [
+        AppxCoreModule.forRoot(PermissionsConfig),
+        FileUploadModule.register(fileUploadConfig),
+        // …
+    ],
+})
+```
+
+4. Change every other import of `FileUploadModuleOptions`, `FileUploadService`, `FileUploadInterceptor` or `StorageService` from `'@appxdigital/appx-core'` to your `./file-upload` folder (relative path).
+
+The endpoints, config file, environment variables and responses stay the same.

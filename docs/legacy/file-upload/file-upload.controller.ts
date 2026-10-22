@@ -1,5 +1,5 @@
 import {Controller, Post, UseInterceptors, Req, BadRequestException, ForbiddenException, ExecutionContext} from '@nestjs/common';
-import {FileUploadInterceptor} from '../../common/interceptors/file.interceptor';
+import {FileUploadInterceptor} from './file-upload.interceptor';
 import {FileUploadService} from './file-upload.service';
 import {Request as ExpressRequest} from 'express';
 

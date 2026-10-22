@@ -158,7 +158,7 @@ appx-core create --yes \
   --db-user root --db-password secret --db-name my_app_db
 ```
 
-Flags: `--name`, `--db-provider mysql|postgresql`, `--db-host`, `--db-port`, `--db-user`, `--db-password`, `--db-name`, `--show-output`. File upload isn't configured on this path — run `appx-core setup:fileupload` inside the project afterwards (see [docs/storage.md](./docs/storage.md)).
+Flags: `--name`, `--db-provider mysql|postgresql`, `--db-host`, `--db-port`, `--db-user`, `--db-password`, `--db-name`, `--show-output`.
 
 ### 3) Configure Environment
 

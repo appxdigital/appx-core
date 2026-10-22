@@ -1,7 +1,7 @@
 import {Inject, Injectable, BadRequestException, ForbiddenException} from '@nestjs/common';
-import {FileUploadModuleOptions, EndpointConfig} from '../../common/interfaces/file-upload.interface';
-import {StorageService} from '../../common/interfaces/storage-service.interface';
-import {STORAGE_SERVICE, FILE_UPLOAD_OPTIONS} from "../../common/contants";
+import {FileUploadModuleOptions, EndpointConfig} from './file-upload.interface';
+import {StorageService} from './storage-service.interface';
+import {STORAGE_SERVICE, FILE_UPLOAD_OPTIONS} from "./constants";
 
 @Injectable()
 export class FileUploadService {

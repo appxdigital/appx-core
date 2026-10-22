@@ -1,7 +1,7 @@
 import {Injectable} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
-import {S3Client, PutObjectCommand, S3ClientConfig} from '@aws-sdk/client-s3';
-import {StorageService} from "../interfaces/storage-service.interface";
+import type {S3Client, S3ClientConfig} from '@aws-sdk/client-s3';
+import {StorageService} from "./storage-service.interface";
 
 @Injectable()
 export class AwsStorageService implements StorageService {
@@ -23,6 +23,9 @@ export class AwsStorageService implements StorageService {
             };
         }
 
+        // Lazy require: @aws-sdk/client-s3 is installed by the project, only for the aws provider.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const {S3Client} = require('@aws-sdk/client-s3');
         this.s3 = new S3Client(s3Config);
         this.bucketName = this.configService.get<string>('AWS_BUCKET_NAME');
     }
@@ -32,6 +35,8 @@ export class AwsStorageService implements StorageService {
             throw new Error('AWS_BUCKET_NAME is not defined.');
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const {PutObjectCommand} = require('@aws-sdk/client-s3');
         const command = new PutObjectCommand({
             Bucket: this.bucketName,
             Key: file.originalname,

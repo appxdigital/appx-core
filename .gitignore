@@ -4,6 +4,7 @@ dist
 appx_core-*.tgz
 .gitignore
 node_modules
+admin/package-lock.json
 
 # Test runtime artifacts (generated schema + Prisma client per run)
 test/fixtures/.runtime/

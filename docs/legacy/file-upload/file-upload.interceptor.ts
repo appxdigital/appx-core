@@ -7,8 +7,8 @@ import {
     ForbiddenException,
 } from '@nestjs/common';
 import {Observable} from 'rxjs';
-import {FileUploadService} from '../../modules/file/file-upload.service';
-import multer from 'multer';
+import {FileUploadService} from './file-upload.service';
+import type multer from 'multer';
 import {RequestContext} from 'nestjs-request-context';
 
 @Injectable()
@@ -31,6 +31,9 @@ export class FileUploadInterceptor implements NestInterceptor {
             this.fileUploadService.validateUserRole(endpoint, userRole);
         }
 
+        // Lazy require: multer is installed by the project, only when file upload is used.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const multer: typeof import('multer') = require('multer');
         const multerOptions: multer.Options = {
             storage: multer.memoryStorage(),
             limits: {fileSize: config.maxSize},

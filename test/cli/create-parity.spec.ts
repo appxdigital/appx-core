@@ -186,14 +186,12 @@ describe('§5 — cli/cli.js create produces the committed fixture (parity)', ()
         //   6. dbPassword   (password)
         //   7. dbName       (input)
         //   8. showOutput   (confirm)
-        //   9. configureFileUpload (confirm)
         const dbProviderAnswer = creds.provider === 'postgresql' ? 'postgresql' : '';
         const answers = [
             PROJECT_NAME,
             dbProviderAnswer,
             creds.host, creds.port, creds.user, creds.password, creds.dbName,
             'y',  // showOutput=yes (avoids the progress bar fighting our stdout)
-            'n',  // configureFileUpload=no
         ];
 
         // Don't close stdin — inquirer treats EOF as "user cancelled" and aborts

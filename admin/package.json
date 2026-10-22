@@ -26,6 +26,9 @@
         "adminjs": "~7.8.17",
         "express-formidable": "~1.2.0"
     },
+    "devDependencies": {
+        "typescript": "~5.1.3"
+    },
     "peerDependencies": {
         "@appxdigital/appx-core": ">=0.1.132 <0.3.0",
         "@nestjs/common": "~11.0.0",

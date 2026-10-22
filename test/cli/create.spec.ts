@@ -242,7 +242,7 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
 
         // 3. Spawn create. Feed answers in order:
         //    projectName, dbProvider, dbHost, dbPort, dbUser, dbPassword, dbName,
-        //    showOutput, configureFileUpload
+        //    showOutput
         const proc = spawn('node', [CLI_PATH, 'create'], {
             cwd: tmpdir,
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -260,7 +260,6 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
             dbPassword,              // dbPassword
             dbName,                  // dbName
             'y',                     // showOutput=yes (avoids progress bar that fights stdout)
-            '',                      // configureFileUpload=no
         ];
 
         // Write answers sequentially, with small delays so inquirer can re-render.
@@ -299,7 +298,7 @@ describe('cli/cli.js create — subprocess end-to-end', () => {
         expect(jwtSecret).toMatch(/^[a-f0-9]{64}$/);
         expect(sessionSecret).not.toBe(jwtSecret);
 
-        // 6. Assert: package.json depends on @appxdigital/appx-core only (here
+        // 6. Assert: package.json depends on @appxdigital/appx-core (here
         // the build under test, via APPX_CORE_SPEC; the release pin is checked
         // by the contract test on cli/core-version.json).
         const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));

@@ -9,6 +9,9 @@ import {FileUploadModuleOptions} from './common/interfaces/file-upload.interface
 @Global()
 @Module({})
 export class AppxCoreModule {
+    static forRoot(config?: PermissionsConfigType): DynamicModule;
+    /** @deprecated File upload is kept for existing projects only (docs/storage.md). */
+    static forRoot(config: PermissionsConfigType | undefined, fileUploadConfig: FileUploadModuleOptions | undefined): DynamicModule;
     static forRoot(config?: PermissionsConfigType, fileUploadConfig?: FileUploadModuleOptions): DynamicModule {
         const customPermissionsProvider: Provider = {
             provide: 'CUSTOM_PERMISSIONS_CONFIG',
