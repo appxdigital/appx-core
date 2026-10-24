@@ -126,7 +126,7 @@ async function writePackageJson() {
             // (the fixture otherwise borrows root's copies via directory
             // walk-up, which keeps type identities unified for tsc).
         },
-        engines: { node: '>=20.0.0' },
+        engines: { node: '>=22.0.0' },
     };
     await fs.writeFile(
         path.join(FIXTURE_DEST, 'package.json'),

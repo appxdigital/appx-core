@@ -108,7 +108,7 @@ AppX Core is designed as a **base layer** on top of NestJS:
 
 ### Prerequisites
 
-- **Node.js 20+**
+- **Node.js 22+**
 - A running database (**MySQL** or **PostgreSQL** tested/validated)
 
 ### 1) Install the CLI

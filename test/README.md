@@ -5,7 +5,7 @@ End-to-end tests for `@appxdigital/appx-core`. The harness deliberately does not
 ## Prerequisites
 
 - **Docker daemon** running locally. The first run pulls `mysql:8.0` (~250MB) or `postgres:16-alpine` (~80MB).
-- Node.js 20+ (≥20.19 recommended).
+- Node.js 22+.
 - For the optional CLI `create` end-to-end test: a `mysql` (or `psql`) client on PATH so the test can `CREATE DATABASE` on the running container. Skipped automatically when absent.
 
 ## Commands

@@ -14,6 +14,23 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 ---
 
+## [0.2.3] — 2026-10-24
+
+### Changed
+
+- **Node.js 22 or later is required** (`engines.node` is now `>=22.0.0`; Node 20 is no longer supported). New projects created with `appx-core create` declare the same.
+- The `engines.npm` requirement is removed; any npm version bundled with Node 22 or later works.
+
+### Migration
+
+Projects on Node 20 — upgrade the runtime (local, CI, Docker image, hosting) to Node 22 or later, then in the project's `package.json`:
+
+```json
+"engines": { "node": ">=22.0.0" }
+```
+
+---
+
 ## [0.2.2] — 2026-10-22
 
 ### Deprecated

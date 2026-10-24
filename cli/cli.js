@@ -636,7 +636,7 @@ function createPackageJson(projectPath, projectName) {
             "vitest": "~4.0.18",
         },
         engines: {
-            "node": ">=20.0.0"
+            "node": ">=22.0.0"
         }
     };
 
