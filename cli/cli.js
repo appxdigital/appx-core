@@ -609,7 +609,7 @@ function createPackageJson(projectPath, projectName) {
         scripts: {
             "build": "nest build",
             "start": "cross-env NODE_ENV=development nest start",
-            "start:dev": "cross-env NODE_ENV=development nest start --watch",
+            "start:dev": "cross-env NODE_ENV=development nest start --watch -b swc --type-check",
             "start:prod": "cross-env NODE_ENV=production node dist/main",
             "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
             "test": "vitest run",
@@ -622,6 +622,7 @@ function createPackageJson(projectPath, projectName) {
             "@nestjs/cli": "~11.0.0",
             "cross-env": "~10.1.0",
             "@nestjs/testing": "^11.1.28",
+            "@swc/cli": "^0.8.1",
             "@swc/core": "^1.15.47",
             "@testcontainers/mysql": "^10.28.0",
             "@testcontainers/postgresql": "^10.28.0",
