@@ -402,6 +402,19 @@ describe('GraphQL read API is ABAC-enforced (project { find get count })', () =>
         expect(JSON.stringify(res.body.errors)).not.toMatch(/PrismaClientValidationError|invocation|prisma\./i);
     });
 
+    test('a variable of the wrong type is a 400 with an error, no data', async () => {
+        const res = await request(booted.server)
+            .post('/graphql')
+            .set('Authorization', `Bearer ${userJwt}`)
+            .send({
+                query: 'query ($name: String!) { project { get(where: { name: { equals: $name } }) { name } } }',
+                variables: { name: 42 },
+            });
+        expect(res.status).toBe(400);
+        expect(res.body.errors).toBeDefined();
+        expect(res.body.data).toBeUndefined();
+    });
+
     // ── anonymous ────────────────────────────────────────────────────────────
     test('GUEST (no token) cannot read — errors, no data leak', async () => {
         const res = await gql('query { project { find { id name } } }');
