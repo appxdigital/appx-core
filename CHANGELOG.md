@@ -20,6 +20,7 @@ This project follows the `MAJOR.MINOR.PATCH` scheme in `package.json`.
 
 - **Node.js 22 or later is required** (`engines.node` is now `>=22.0.0`; Node 20 is no longer supported). New projects created with `appx-core create` declare the same.
 - The `engines.npm` requirement is removed; any npm version bundled with Node 22 or later works.
+- **Apollo Server 5** (Apollo Server 4 is end-of-life): `@apollo/server` `^5.0.0`, `@nestjs/apollo` `~13.4.5`, `@nestjs/graphql` `~13.4.5`. Still on NestJS 11. A GraphQL request whose variables don't match their declared types (wrong type, missing required variable) now returns **HTTP 400** with `errors` and no `data`, instead of 200. `npm install` prints an `ERESOLVE overriding peer dependency` warning for `@apollo/server-plugin-landing-page-graphql-playground` (bundled by `@nestjs/apollo`, unused); it is harmless.
 
 ### Migration
 
@@ -28,6 +29,14 @@ Projects on Node 20 — upgrade the runtime (local, CI, Docker image, hosting) t
 ```json
 "engines": { "node": ">=22.0.0" }
 ```
+
+Projects that list `@apollo/server`, `@nestjs/apollo` or `@nestjs/graphql` in their own `package.json` — bump them, or `npm install` fails:
+
+```bash
+npm i @apollo/server@^5.0.0 @nestjs/apollo@~13.4.5 @nestjs/graphql@~13.4.5
+```
+
+Frontends — a GraphQL request with invalid variables now fails with HTTP 400 instead of returning 200 with `errors`. Check that the client's error handling covers an HTTP error on that path (with Apollo Client it arrives as a network error, not in `result.errors`).
 
 ---
 

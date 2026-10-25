@@ -45,7 +45,7 @@ export class AppxCoreRootResolver {
                 // keep it ON in development for the Sandbox, and OFF in production as
                 // defense-in-depth (less recon surface). Opt back in for a production
                 // deployment with APPX_GRAPHQL_INTROSPECTION=true. Without this, Apollo
-                // Server v4 disables introspection under NODE_ENV=production and the
+                // Server disables introspection under NODE_ENV=production and the
                 // Sandbox fails with `INTROSPECTION_DISABLED`.
                 introspection:
                     process.env.NODE_ENV !== 'production' ||
