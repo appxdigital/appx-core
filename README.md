@@ -457,17 +457,19 @@ For each generated model/controller (subject to permissions):
 - **Subclass** — `src/modules/<model>/dto/<action>-<model>.dto.ts`. Generated **once** and yours to keep. Add custom validation here; it is never overwritten:
 
   ```ts
-  import { IsEmail, Length } from 'class-validator';
-  import { CreateUserGeneratedDto } from '../../../generated/dto/user/create-user.generated.dto';
+  import { IsIn, Length } from 'class-validator';
+  import { CreateTaskGeneratedDto } from '../../../generated/dto/task/create-task.generated.dto';
 
-  export class CreateUserDto extends CreateUserGeneratedDto {
-    @IsEmail()
-    email!: string;          // tighten the base @IsString()
+  export class CreateTaskDto extends CreateTaskGeneratedDto {
+    @Length(2, 120)
+    title!: string;          // tighten the base @IsString()
 
-    @Length(2, 60)
-    name?: string;
+    @IsIn(['open', 'done'])
+    status?: string;
   }
   ```
+
+  `User` gets no generated DTOs (it has no generated CRUD; `/auth/*` covers it). To validate extra user fields at registration, extend `RegisterDto` — see [docs/authentication.md](./docs/authentication.md#recipe-1--add-a-field-to-registration-eg-name).
 
 **What's writable.** A field appears in the DTO unless it is the primary key (`@id`), a server-managed timestamp (`@default(now())` / `@updatedAt`), or annotated non-writable. To exclude a field from all generated CRUD writes, annotate it in `schema.prisma` with a doc-comment:
 

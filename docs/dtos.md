@@ -104,19 +104,21 @@ There is **no per-role field strip** — a field is either writable through the 
 Add decorated properties (or re-declare an existing one with stricter rules) on the subclass:
 
 ```ts
-import { IsEmail, MaxLength } from 'class-validator';
-import { CreateUserGeneratedDto } from '../../../generated/dto/user/create-user.generated.dto';
+import { IsIn, MaxLength } from 'class-validator';
+import { CreateTaskGeneratedDto } from '../../../generated/dto/task/create-task.generated.dto';
 
-export class CreateUserDto extends CreateUserGeneratedDto {
-  @IsEmail()
-  declare email: string;
-
+export class CreateTaskDto extends CreateTaskGeneratedDto {
   @MaxLength(120)
-  declare name?: string;
+  declare title: string;
+
+  @IsIn(['open', 'done'])
+  declare status?: string;
 }
 ```
 
 You can combine this with `OmitType`/`PickType` — extend the transformed base, then add rules.
+
+`User` gets no generated DTOs (it has no generated CRUD; `/auth/*` covers it). To validate extra user fields at registration, extend `RegisterDto` — see [Authentication, Recipe 1](./authentication.md#recipe-1--add-a-field-to-registration-eg-name).
 
 ---
 
